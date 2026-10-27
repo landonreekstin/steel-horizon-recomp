@@ -1218,6 +1218,38 @@ static void test_vision(const class_table *ct)
     CHECK(w.ships[seeker].z > 300, "AI went looking (moved %.0f toward the enemy)", w.ships[seeker].z);
 }
 
+/* Standalone: our own data alone gives a full set of classes that fight. */
+static void test_standalone(void)
+{
+    static class_table st;
+    const char *paths[] = {"engine/data/standalone.json", "../data/standalone.json", "data/standalone.json"};
+    int ok = -1;
+    for (int k = 0; k < 3 && ok; k++) ok = classes_load_standalone(paths[k], &st);
+    CHECK(!ok && st.count >= 24, "standalone data: %d classes", st.count);
+    if (ok) return;
+    const char *needed[] = {"AmericanBattleship", "AmericanCruiser", "AmericanDestroyer", "AmericanAircraftCarrier",
+                            "AmericanSubmarine", "AmericanTorpedoBoat", "JapaneseBattleship", "JapaneseCruiser",
+                            "JapaneseDestroyer", "JapaneseAircraftCarrier", "JapaneseSubmarine", "JapaneseTorpedoBoat",
+                            "GermanDestroyer", "BritishBattleship", "GermanBattleship"};
+    for (size_t k = 0; k < sizeof needed / sizeof *needed; k++) CHECK(class_find(&st, needed[k]), "standalone has %s", needed[k]);
+    const ship_class *iowa = class_find(&st, "AmericanBattleship"), *yamato = class_find(&st, "JapaneseBattleship");
+    const ship_class *fletcher = class_find(&st, "AmericanDestroyer");
+    if (!iowa || !yamato || !fletcher) return;
+    CHECK(fabsf(iowa->half_length - 270 * 0.72f / 2) < 1 && iowa->mount_count >= 6 && fletcher->mount_count >= 7,
+          "Iowa %.0f long, %d mounts; Fletcher %d mounts", 2 * iowa->half_length, iowa->mount_count, fletcher->mount_count);
+    int torp = 0;
+    for (int m = 0; m < fletcher->mount_count; m++) torp += fletcher->mounts[m].bat == BAT_TORPEDO;
+    CHECK(torp == 2 && iowa->comp_count == 10 && count_modules(iowa, MOD_MAGAZINE) >= 2, "Fletcher tubes %d, Iowa layout", torp);
+    world w;
+    world_init(&w);
+    world_spawn(&w, iowa, 0, 0, 0, 0);
+    world_spawn(&w, yamato, 1, 2000, 2000, PI_F);
+    w.ships[0].ai = w.ships[1].ai = 1;
+    run(&w, 300);
+    CHECK(w.shots > 20 && (w.ships[0].hp < iowa->max_health || w.ships[1].hp < yamato->max_health),
+          "Iowa and Yamato fight: %d shells", w.shots);
+}
+
 int main(int argc, char **argv)
 {
     const char *assets = argc > 1 ? argv[1] : "assets";
@@ -1245,6 +1277,7 @@ int main(int argc, char **argv)
     test_fleet(&ct);
     test_genship(&ct);
     test_vision(&ct);
+    test_standalone();
     printf("%d failures\n", failures);
     return failures != 0;
 }

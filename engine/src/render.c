@@ -378,8 +378,21 @@ static gpu_model *get_model(renderer *r, const char *rel)
 
 /* Carrier planes: US/British use AL_AS, German/Japanese AX_AS, Shadow SH_AS
  * (the original's CPlane constructors); 01 intact, 02/03 damaged where present. */
+static gpu_model *gen_upload(renderer *r, const char *key, gen_model *g, const ship_class *mounts_of);
+
 static const gpu_model *plane_model(renderer *r, const char *nation, int stage)
 {
+    if (r->generated) {                              /* generated, in the nation's colours */
+        char key[64];
+        snprintf(key, sizeof key, "@plane:%s", nation);
+        const gpu_model *m = get_model(r, key);
+        if (m) return m;
+        gen_model g;
+        genship_plane(nation, &g);
+        m = gen_upload(r, key, &g, NULL);
+        genship_free(&g);
+        return m;
+    }
     const char *f = !strcmp(nation, "American") || !strcmp(nation, "British") ? "AL"
                   : !strcmp(nation, "Shadow") ? "SH" : "AX";
     for (int st = f[1] == 'L' && stage > 2 ? 2 : stage; st >= 1; st--) {   /* AL has 01/02 only */

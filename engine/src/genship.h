@@ -25,6 +25,8 @@ typedef struct {
 void genship_build(const ship_class *c, gen_model *out);
 /* The main battery's turret with its barrels, +Z forward, origin at the turret ring. */
 void genship_gun(const ship_class *c, gen_model *out);
+/* A carrier aircraft in the nation's colours (+Z nose; the renderer draws it at 2x). */
+void genship_plane(const char *nation, gen_model *out);
 void genship_free(gen_model *m);
 
 #endif

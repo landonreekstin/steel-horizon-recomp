@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "asset.h"
+#include "json.h"
 #include "data.h"
 #include "math3d.h"
 
@@ -262,4 +263,101 @@ int classes_load_layouts(class_table *t, const char *files_dir)
         build_damage_layout(c);
     }
     return failed;
+}
+
+/* ---- standalone classes ----------------------------------------------------------- */
+
+static void add_weapon(ship_class *c, jnode *guns, const char *name, weapon_kind kind, int group)
+{
+    if (!name || c->weapon_count == MAX_CLASS_WEAPONS) return;
+    class_weapon *w = &c->weapons[c->weapon_count++];
+    memset(w, 0, sizeof *w);
+    w->kind = kind;
+    snprintf(w->name, sizeof w->name, "%s", name);
+    w->mount_group = group;
+    for (jnode *g = guns ? guns->child : NULL; g; g = g->next) {
+        const char *gn = json_str(g, "name");
+        if (gn && !strcmp(gn, name)) {
+            w->damage = (float)json_num(g, "damage", 0);
+            w->max_range = (float)json_num(g, "range", 0);
+            w->fire_rate = (float)json_num(g, "rate", 3);
+        }
+    }
+    const char *t = strstr(w->name, " T");
+    w->ammo = w->damage <= 0 ? AMMO_NONE : strstr(w->name, " DC") ? AMMO_DC
+            : t && (t[2] == 0 || t[2] == ' ') ? AMMO_TORPEDO : AMMO_SHELL;
+}
+
+int classes_load_standalone(const char *path, class_table *out)
+{
+    memset(out, 0, sizeof *out);
+    jnode *doc = json_load_file(path);
+    if (!doc) { fprintf(stderr, "standalone data not found at %s\n", path); return -1; }
+    float scale = (float)json_num(doc, "scale", 0.72);
+    jnode *guns = json_get(doc, "guns"), *classes = json_get(doc, "classes");
+    for (jnode *j = classes ? classes->child : NULL; j && out->count < MAX_CLASSES; j = j->next) {
+        ship_class *c = &out->classes[out->count++];
+        snprintf(c->name, sizeof c->name, "%s", json_str(j, "name") ? json_str(j, "name") : "?");
+        snprintf(c->nation, sizeof c->nation, "%s", json_str(j, "nation") ? json_str(j, "nation") : "");
+        snprintf(c->code, sizeof c->code, "%s", json_str(j, "code") ? json_str(j, "code") : "");
+        c->hull_type = (int)json_num(j, "hull", 6);
+        c->submerged = (int)json_num(j, "submerged", 0);
+        c->max_health = (float)json_num(j, "hp", 600);
+        c->speed = (float)json_num(j, "speed", 30);
+        c->turn_rate = (float)json_num(j, "turn", 2);
+        c->aa_damage = (float)json_num(j, "aa", 0);
+        c->size_mod = 100;
+        c->exposure_mod = 70;
+        c->half_length = (float)json_num(j, "length", 100) * scale / 2;
+        c->half_beam = (float)json_num(j, "beam", 10) * scale / 2;
+        for (int k = 0; k < 3; k++) snprintf(c->model[k], sizeof c->model[k], "@gen");
+        /* Weapons: the main battery fore and aft, secondaries a side, torpedoes, racks, AA. */
+        const char *main_gun = json_str(j, "main");
+        int nf = (int)json_num(j, "fore", 0), na = (int)json_num(j, "aft", 0);
+        if (main_gun) { add_weapon(c, guns, main_gun, WK_SURFACE, 1); add_weapon(c, guns, main_gun, WK_SURFACE, 2); }
+        int wmain_f = 0, wmain_a = 1;
+        int wsec = -1, wtorp = -1, wdc = -1;
+        if (json_str(j, "secondary")) {
+            wsec = c->weapon_count;
+            add_weapon(c, guns, json_str(j, "secondary"), WK_SURFACE, 3);
+        }
+        if (json_str(j, "torpedo")) {
+            wtorp = c->weapon_count;
+            add_weapon(c, guns, json_str(j, "torpedo"), WK_SURFACE, 5);
+        }
+        if (json_str(j, "dc")) {
+            wdc = c->weapon_count;
+            add_weapon(c, guns, json_str(j, "dc"), WK_SUBMERGED, 7);
+        }
+        if (c->aa_damage > 0) add_weapon(c, guns, "AA", WK_AIR, 1);
+        float L = c->half_length, B = c->half_beam, deck = B * 0.6f;
+        int carrier = c->hull_type == 1;
+        /* Superfiring turrets fore and aft (carriers' guns sit in the gallery, undrawn). */
+        for (int k = 0; main_gun && k < nf; k++) {
+            char nm[16];
+            snprintf(nm, sizeof nm, carrier ? "" : "F%d", k + 1);
+            add_mount(c, nm, carrier ? B : 0, deck + (float)k * 3, L * (0.62f - 0.15f * (float)k), 0, 150 * DEG, wmain_f);
+        }
+        for (int k = 0; main_gun && k < na; k++) {
+            char nm[16];
+            snprintf(nm, sizeof nm, carrier ? "" : "R%d", k + 1);
+            add_mount(c, nm, carrier ? -B : 0, deck + (float)(na - 1 - k) * 3, -L * (0.68f - 0.15f * (float)(na - 1 - k)),
+                      PI_F, 150 * DEG, wmain_a);
+        }
+        if (wsec >= 0) {
+            add_mount(c, "", -B, deck, 0, -PI_F / 2, 80 * DEG, wsec);
+            add_mount(c, "", B, deck, 0, PI_F / 2, 80 * DEG, wsec);
+        }
+        if (wtorp >= 0) {
+            if (c->submerged) add_mount(c, "", 0, 0, L * 0.8f, 0, 25 * DEG, wtorp);
+            else {
+                add_mount(c, "", -B * 0.5f, 4, -0.1f * L, -PI_F / 2, 60 * DEG, wtorp);
+                add_mount(c, "", B * 0.5f, 4, -0.1f * L, PI_F / 2, 60 * DEG, wtorp);
+            }
+        }
+        if (wdc >= 0) add_mount(c, "", 0, 2, -L * 0.9f, PI_F, PI_F, wdc);
+        build_damage_layout(c);
+    }
+    json_free(doc);
+    return out->count ? 0 : -1;
 }

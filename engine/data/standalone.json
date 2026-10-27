@@ -1,0 +1,56 @@
+{
+  "about": "Standalone ship data (no game files). Each class is modelled on a real WWII ship: length and beam in metres, speed in knots and main battery layout are public historical figures; hit points, gun damage, ranges and reload times are this game's own balance values, not the original game's. World units = metres x scale.",
+  "scale": 0.72,
+  "guns": [
+    {"name": "18 Inch", "damage": 108, "range": 3400, "rate": 7.5},
+    {"name": "16 Inch", "damage": 96, "range": 3400, "rate": 7},
+    {"name": "15 Inch", "damage": 90, "range": 3300, "rate": 7},
+    {"name": "14 Inch", "damage": 84, "range": 3200, "rate": 7},
+    {"name": "12 Inch", "damage": 72, "range": 3000, "rate": 6},
+    {"name": "11 Inch", "damage": 66, "range": 2900, "rate": 6},
+    {"name": "8 Inch", "damage": 48, "range": 2700, "rate": 5},
+    {"name": "6 Inch", "damage": 36, "range": 2300, "rate": 3},
+    {"name": "5.25 Inch", "damage": 32, "range": 2200, "rate": 3},
+    {"name": "5 Inch", "damage": 30, "range": 2100, "rate": 3},
+    {"name": "4.7 Inch", "damage": 28, "range": 2000, "rate": 3},
+    {"name": "4.5 Inch", "damage": 27, "range": 2000, "rate": 3},
+    {"name": "4 Inch", "damage": 24, "range": 1900, "rate": 2.5},
+    {"name": "3 Inch", "damage": 18, "range": 1600, "rate": 2.5},
+    {"name": "24 Inch T", "damage": 230, "range": 3600, "rate": 6},
+    {"name": "21 Inch T", "damage": 190, "range": 3200, "rate": 6},
+    {"name": "18 Inch T", "damage": 140, "range": 2400, "rate": 6},
+    {"name": "600 lbs DC", "damage": 80, "range": 1600, "rate": 6},
+    {"name": "300 lbs DC", "damage": 30, "range": 1300, "rate": 7}
+  ],
+  "classes": [
+    {"name": "AmericanBattleship", "nation": "American", "code": "BB", "hull": 3, "after": "Iowa", "length": 270, "beam": 33, "speed": 33, "turn": 3, "hp": 1600, "aa": 70, "main": "16 Inch", "fore": 2, "aft": 1, "secondary": "5 Inch", "dc": "300 lbs DC"},
+    {"name": "AmericanBattlecruiser", "nation": "American", "code": "CB", "hull": 2, "after": "Alaska", "length": 246, "beam": 28, "speed": 33, "turn": 3, "hp": 1250, "aa": 70, "main": "12 Inch", "fore": 2, "aft": 1, "secondary": "5 Inch", "dc": "300 lbs DC"},
+    {"name": "AmericanCruiser", "nation": "American", "code": "CA", "hull": 5, "after": "Baltimore", "length": 205, "beam": 21.6, "speed": 33, "turn": 2.5, "hp": 1050, "aa": 100, "main": "8 Inch", "fore": 2, "aft": 1, "secondary": "5 Inch", "dc": "300 lbs DC"},
+    {"name": "AmericanDestroyer", "nation": "American", "code": "DD", "hull": 6, "after": "Fletcher", "length": 115, "beam": 12, "speed": 36, "turn": 2, "hp": 680, "aa": 30, "main": "5 Inch", "fore": 2, "aft": 3, "torpedo": "21 Inch T", "dc": "600 lbs DC"},
+    {"name": "AmericanDestroyerEscort", "nation": "American", "code": "DE", "hull": 7, "after": "Buckley", "length": 93, "beam": 11.3, "speed": 24, "turn": 1.5, "hp": 560, "aa": 25, "main": "3 Inch", "fore": 2, "aft": 1, "torpedo": "21 Inch T", "dc": "600 lbs DC"},
+    {"name": "AmericanAircraftCarrier", "nation": "American", "code": "CV", "hull": 1, "after": "Essex", "length": 267, "beam": 28.3, "speed": 33, "turn": 3, "hp": 1350, "aa": 80, "main": "5 Inch", "fore": 2, "aft": 2, "dc": "300 lbs DC"},
+    {"name": "AmericanSubmarine", "nation": "American", "code": "SS", "hull": 12, "after": "Gato", "length": 95, "beam": 8.3, "speed": 20, "turn": 1.5, "hp": 450, "aa": 0, "torpedo": "21 Inch T", "submerged": 1},
+    {"name": "AmericanTorpedoBoat", "nation": "American", "code": "PT", "hull": 13, "after": "Elco 80 ft PT boat", "length": 24, "beam": 6.3, "speed": 41, "turn": 1, "hp": 250, "aa": 10, "main": "3 Inch", "fore": 1, "aft": 0, "torpedo": "21 Inch T"},
+
+    {"name": "JapaneseBattleship", "nation": "Japanese", "code": "BB", "hull": 3, "after": "Yamato", "length": 263, "beam": 38.9, "speed": 27, "turn": 3.5, "hp": 1850, "aa": 60, "main": "18 Inch", "fore": 2, "aft": 1, "secondary": "6 Inch", "dc": "300 lbs DC"},
+    {"name": "JapaneseCruiser", "nation": "Japanese", "code": "CA", "hull": 5, "after": "Takao", "length": 204, "beam": 20.7, "speed": 35, "turn": 2.5, "hp": 980, "aa": 70, "main": "8 Inch", "fore": 3, "aft": 2, "torpedo": "24 Inch T", "dc": "300 lbs DC"},
+    {"name": "JapaneseDestroyer", "nation": "Japanese", "code": "DD", "hull": 6, "after": "Kagero", "length": 118.5, "beam": 10.8, "speed": 35, "turn": 2, "hp": 660, "aa": 20, "main": "5 Inch", "fore": 1, "aft": 2, "torpedo": "24 Inch T", "dc": "600 lbs DC"},
+    {"name": "JapaneseAircraftCarrier", "nation": "Japanese", "code": "CV", "hull": 1, "after": "Shokaku", "length": 257.5, "beam": 26, "speed": 34, "turn": 3, "hp": 1300, "aa": 70, "main": "5 Inch", "fore": 2, "aft": 2, "dc": "300 lbs DC"},
+    {"name": "JapaneseSubmarine", "nation": "Japanese", "code": "SS", "hull": 12, "after": "I-15 (type B1)", "length": 108.7, "beam": 9.3, "speed": 23, "turn": 1.5, "hp": 470, "aa": 0, "torpedo": "21 Inch T", "submerged": 1},
+    {"name": "JapaneseTorpedoBoat", "nation": "Japanese", "code": "PT", "hull": 13, "after": "Gyoraitei T-1", "length": 18, "beam": 4.3, "speed": 33, "turn": 1, "hp": 220, "aa": 8, "main": "3 Inch", "fore": 1, "aft": 0, "torpedo": "18 Inch T"},
+
+    {"name": "BritishBattleship", "nation": "British", "code": "BB", "hull": 3, "after": "King George V", "length": 227, "beam": 34, "speed": 28, "turn": 3, "hp": 1550, "aa": 70, "main": "14 Inch", "fore": 2, "aft": 1, "secondary": "5.25 Inch", "dc": "300 lbs DC"},
+    {"name": "BritishCruiser", "nation": "British", "code": "CA", "hull": 5, "after": "County (London)", "length": 192, "beam": 20.1, "speed": 32, "turn": 2.5, "hp": 920, "aa": 60, "main": "8 Inch", "fore": 2, "aft": 2, "torpedo": "21 Inch T", "dc": "300 lbs DC"},
+    {"name": "BritishDestroyer", "nation": "British", "code": "DD", "hull": 6, "after": "J class", "length": 109, "beam": 10.9, "speed": 36, "turn": 2, "hp": 640, "aa": 20, "main": "4.7 Inch", "fore": 2, "aft": 1, "torpedo": "21 Inch T", "dc": "600 lbs DC"},
+    {"name": "BritishAircraftCarrier", "nation": "British", "code": "CV", "hull": 1, "after": "Illustrious", "length": 230, "beam": 29, "speed": 30, "turn": 3, "hp": 1400, "aa": 75, "main": "4.5 Inch", "fore": 2, "aft": 2, "dc": "300 lbs DC"},
+    {"name": "BritishSubmarine", "nation": "British", "code": "SS", "hull": 12, "after": "T class", "length": 84, "beam": 7.8, "speed": 15, "turn": 1.5, "hp": 430, "aa": 0, "torpedo": "21 Inch T", "submerged": 1},
+    {"name": "BritishTorpedoBoat", "nation": "British", "code": "PT", "hull": 13, "after": "Vosper MTB", "length": 22, "beam": 6, "speed": 39, "turn": 1, "hp": 240, "aa": 10, "main": "3 Inch", "fore": 1, "aft": 0, "torpedo": "21 Inch T"},
+
+    {"name": "GermanBattleship", "nation": "German", "code": "BB", "hull": 3, "after": "Bismarck", "length": 251, "beam": 36, "speed": 30, "turn": 3, "hp": 1650, "aa": 60, "main": "15 Inch", "fore": 2, "aft": 2, "secondary": "6 Inch", "dc": "300 lbs DC"},
+    {"name": "GermanBattlecruiser", "nation": "German", "code": "CB", "hull": 2, "after": "Scharnhorst", "length": 235, "beam": 30, "speed": 31, "turn": 3, "hp": 1350, "aa": 60, "main": "11 Inch", "fore": 2, "aft": 1, "secondary": "6 Inch", "dc": "300 lbs DC"},
+    {"name": "GermanCruiser", "nation": "German", "code": "CA", "hull": 5, "after": "Admiral Hipper", "length": 203, "beam": 21.3, "speed": 32, "turn": 2.5, "hp": 1000, "aa": 70, "main": "8 Inch", "fore": 2, "aft": 2, "torpedo": "21 Inch T", "dc": "300 lbs DC"},
+    {"name": "GermanDestroyer", "nation": "German", "code": "DD", "hull": 6, "after": "Type 1934 (Z1)", "length": 119, "beam": 11.3, "speed": 38, "turn": 2, "hp": 680, "aa": 20, "main": "5 Inch", "fore": 2, "aft": 3, "torpedo": "21 Inch T", "dc": "600 lbs DC"},
+    {"name": "GermanSubmarine", "nation": "German", "code": "SS", "hull": 12, "after": "Type VIIC", "length": 67, "beam": 6.2, "speed": 17.7, "turn": 1.5, "hp": 400, "aa": 0, "torpedo": "21 Inch T", "submerged": 1},
+    {"name": "GermanTorpedoBoat", "nation": "German", "code": "PT", "hull": 13, "after": "S-boat (S-38)", "length": 35, "beam": 5.3, "speed": 43, "turn": 1, "hp": 270, "aa": 12, "main": "3 Inch", "fore": 1, "aft": 0, "torpedo": "21 Inch T"}
+  ]
+}

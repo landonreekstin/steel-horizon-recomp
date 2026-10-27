@@ -79,6 +79,10 @@ int classes_load(const char *data_dir, class_table *out);
 int classes_load_layouts(class_table *t, const char *files_dir);
 /* Adds "<nation>Shipyard": a shore base armed with copies of the donor class's main
  * and secondary guns. Returns it, or NULL if the table is full. */
+/* Standalone mode: classes from our own data (engine/data/standalone.json), with no
+ * game files: weapons, mounts and damage layout built from the table; models are
+ * generated (genship.c). Returns 0 on success. */
+int classes_load_standalone(const char *path, class_table *out);
 const ship_class *classes_add_shipyard(class_table *t, const char *nation, const ship_class *gun_donor);
 float class_cost(const ship_class *c);       /* build points */
 float build_time(const ship_class *c);       /* seconds on the slipway */

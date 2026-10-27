@@ -176,7 +176,8 @@ void ai_step(world *w)
                 gz /= (float)n;
             }
             if (can_recon(s)) order_recon(w, i, gx, gz);
-            if (is_carrier(s)) continue;                 /* carriers wait for the scouts */
+            /* Carriers close to strike distance of the guess, then wait for the scouts. */
+            if (is_carrier(s) && hypotf(gx - s->x, gz - s->z) < 9000) { order_stop(w, &i, 1); continue; }
             float to = atan2f(gx - s->x, gz - s->z);
             order_move(w, &i, 1, s->x + sinf(to) * 800, s->z + cosf(to) * 800, 0);
             continue;

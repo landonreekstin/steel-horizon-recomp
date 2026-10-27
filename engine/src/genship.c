@@ -241,6 +241,24 @@ void genship_gun(const ship_class *c, gen_model *out)
     }
 }
 
+void genship_plane(const char *nation, gen_model *out)
+{
+    memset(out, 0, sizeof *out);
+    out->count = 2;
+    const float *paint = !strcmp(nation, "Japanese") ? (const float[3]){0.38f, 0.44f, 0.3f}
+                       : !strcmp(nation, "British") ? (const float[3]){0.44f, 0.46f, 0.38f}
+                       : !strcmp(nation, "German") ? (const float[3]){0.5f, 0.52f, 0.55f} : (const float[3]){0.42f, 0.48f, 0.58f};
+    memcpy(out->part[0].color, paint, sizeof(float) * 3);
+    memcpy(out->part[1].color, COLOURS[P_DARK], sizeof COLOURS[P_DARK]);
+    gen_part *b = &out->part[0];
+    box(b, -0.6f, -0.5f, -4.0f, 0.6f, 0.6f, 3.2f);       /* fuselage */
+    box(b, -5.0f, -0.1f, -0.4f, 5.0f, 0.15f, 1.4f);      /* wings */
+    box(b, -2.0f, 0.0f, -4.0f, 2.0f, 0.12f, -3.2f);      /* tailplane */
+    box(b, -0.08f, 0.1f, -4.0f, 0.08f, 1.7f, -3.1f);     /* fin */
+    box(&out->part[1], -0.75f, -0.6f, 3.2f, 0.75f, 0.7f, 4.0f);   /* cowling */
+    box(&out->part[1], -0.35f, 0.6f, -0.6f, 0.35f, 1.0f, 1.2f);   /* canopy */
+}
+
 void genship_free(gen_model *m)
 {
     for (int p = 0; p < GEN_PARTS; p++) { free(m->part[p].v); free(m->part[p].idx); }

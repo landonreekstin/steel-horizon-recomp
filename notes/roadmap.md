@@ -30,8 +30,10 @@ Full plan: `~/.claude/plans/i-want-to-recompile-snoopy-pearl.md`. Status per pha
   counts, optional shipyards), host/join screens and lobby; minimap; hover accuracy
   readout; original sound effects and voice lines.
 - Generated ship models (`--models generated`, or the main menu's toggle): the first
-  step toward not needing the ISO; still to do: ship data independent of ships.json,
-  and models from real ship plans per class (Iowa, Yamato, Fletcher, ...).
+  step toward not needing the ISO.
+- Standalone mode (`--standalone`, or automatic without game data): our own ship table
+  of 26 historical classes, generated models and aircraft; the game runs with no game
+  files at all. Still to do: per-class models from real ship plans, our own sounds.
 
 ## Next
 

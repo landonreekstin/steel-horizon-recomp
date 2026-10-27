@@ -565,7 +565,7 @@ int main(int argc, char **argv)
 {
     const char *assets = "assets", *shot = NULL, *scenario = "m01";
     unsigned long long seed = 1;
-    int mute = 0, sound = 0, scenario_given = 0, generated = 0, no_fog = 0;
+    int mute = 0, sound = 0, scenario_given = 0, generated = 0, no_fog = 0, standalone = 0;
     int ai_both = 0, host_port = -1, mp_players = 2, teams[MAX_PLAYERS] = {0}, teams_given = 0, bot = 0;
     long desync_at = -1;
     const char *join_addr = NULL, *player_name = "Admiral";
@@ -586,6 +586,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--bot")) bot = 1;
         else if (!strcmp(argv[i], "--mute")) mute = 1;
         else if (!strcmp(argv[i], "--no-fog")) no_fog = 1;
+        else if (!strcmp(argv[i], "--standalone")) standalone = 1;   /* no game files at all */
         else if (!strcmp(argv[i], "--sound")) sound = 1;   /* sound in --screenshot runs too */
         else if (!strcmp(argv[i], "--models") && i + 1 < argc) generated = !strcmp(argv[++i], "generated");
         else if (!strcmp(argv[i], "--desync-test") && i + 1 < argc) desync_at = atol(argv[++i]);
@@ -614,10 +615,29 @@ int main(int argc, char **argv)
     g.player = 0;
     g.side = 0;
     char path[512];
-    snprintf(path, sizeof path, "%s/data", assets);
-    if (classes_load(path, &g.classes)) return 1;
+    /* Ship data: the game's (extracted from the user's ISO), or our own standalone
+     * table when asked or when the game data isn't there. */
+    snprintf(path, sizeof path, "%s/data/ships.json", assets);
+    FILE *probe = fopen(path, "rb");
+    if (probe) fclose(probe);
+    else if (!standalone) { printf("no game data under %s: standalone mode\n", assets); standalone = 1; }
+    if (standalone) {
+        char data[1024];
+        char *base = SDL_GetBasePath();                  /* engine/build/ -> engine/data/ */
+        snprintf(data, sizeof data, "%s../data/standalone.json", base ? base : "");
+        SDL_free(base);
+        FILE *f = fopen(data, "rb");
+        if (f) fclose(f);
+        else snprintf(data, sizeof data, "engine/data/standalone.json");
+        if (classes_load_standalone(data, &g.classes)) return 1;
+        generated = 1;
+    } else {
+        snprintf(path, sizeof path, "%s/data", assets);
+        if (classes_load(path, &g.classes)) return 1;
+        snprintf(path, sizeof path, "%s/files", assets);
+        classes_load_layouts(&g.classes, path);
+    }
     snprintf(path, sizeof path, "%s/files", assets);
-    classes_load_layouts(&g.classes, path);
     /* No mode on the command line: the front end chooses (and opens the window). */
     SDL_Window *win = NULL;
     SDL_GLContext ctx = NULL;
@@ -635,7 +655,7 @@ int main(int argc, char **argv)
         scenario = mc.scenario;
         g.custom = mc.custom;
         player_name = mc.name;
-        generated = mc.generated;
+        generated = mc.generated || standalone;
         if (mr == MENU_HOST) {
             host_port = mc.port;
             mp_players = mc.players;

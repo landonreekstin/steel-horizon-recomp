@@ -85,7 +85,7 @@ int order_recon(world *w, int i, float x, float z)
     a->z = a->prev_z = s->z;
     a->y = a->prev_y = 20;
     a->heading = a->prev_heading = atan2f(x - s->x, z - s->z);
-    a->fuel = 300;
+    a->fuel = 600;
     a->timer = 0;
     a->gun_reload = 0;
     a->vy = 0;

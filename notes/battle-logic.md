@@ -257,4 +257,15 @@ each kill planes (fighters more); Japan won all 4 after the fighter fix.
   minimap. On by default (offline `--no-fog` turns it off; online games always fog).
 - Recon (V, toward the cursor): cruisers, battleships, battlecruisers and carriers
   launch one plane per 3 minutes; it flies out, circles the point at 350, spots, and
-  comes back to be hoisted aboard (300 s endurance, 400 HP, unarmed).
+  comes back to be hoisted aboard (600 s endurance, 400 HP, unarmed).
+
+## Standalone mode (`--standalone`, automatic without game data)
+- `engine/data/standalone.json`: our own ship table, committed (no game data in it):
+  26 classes for the US, Japan, Britain and Germany, each modelled on a real ship
+  (Iowa, Yamato, KGV, Bismarck, Alaska, Scharnhorst, Baltimore, Takao, County, Hipper,
+  Fletcher, Kagero, J class, Z1, Buckley, Essex, Shokaku, Illustrious, Gato, I-15,
+  T class, Type VIIC, Elco PT, T-1, Vosper MTB, S-boat) with historical length, beam,
+  speed and main-battery layout; hit points, gun damage (6 × calibre in inches),
+  ranges and reloads are this game's own numbers. 0.72 world units per metre.
+- Destroyers carry their historical torpedo tubes here (the original game's didn't).
+- Models are generated (ships, turrets, aircraft), sound is silent without the bank.
