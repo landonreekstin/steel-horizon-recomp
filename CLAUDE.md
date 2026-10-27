@@ -96,3 +96,11 @@ engine/build/shrts --assets assets --join HOSTADDR:47800 --name Friend
 python3 -I tests/test_multiplayer.py     # lockstep check: host + 2 clients, same checksum
 engine/build/shrts --assets assets --scenario fleet --ai-both --headless 900   # balance run
 ```
+
+## Game-dev skills
+
+`.claude/skills/` holds 14 engine-agnostic discipline skills vendored from
+awesome-gamedev-agent-skills (game-ai, game-feel, game-ui-ux, camera-systems,
+shader-programming, audio-design, performance-optimization, ...; see its README). Load
+the matching one before design work in `engine/`; their engine examples are concepts to
+port to C, not APIs to use.
