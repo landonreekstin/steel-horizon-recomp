@@ -25,6 +25,7 @@ typedef struct {
     char nation[2][16];
     uint8_t count[2][CUSTOM_HULLS];
     uint8_t yards;             /* 1: each side gets a shipyard (assault rules) */
+    uint8_t islands;           /* 1: an archipelago between the fleets */
 } custom_spec;
 
 typedef struct {

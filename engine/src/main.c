@@ -102,7 +102,7 @@ static int setup_scenario(game *g, const char *name)
         err |= spawn(g, "GermanDestroyer", 1, 5056, 3031, ddh) < 0;
         err |= spawn(g, "GermanDestroyer", 1, 4456, 3029, ddh) < 0;
         g->cam.target = v3(5050, 0, 4900);
-    } else if (!strcmp(name, "fleet")) {
+    } else if (!strcmp(name, "fleet") || !strcmp(name, "archipelago")) {
         const char *us[] = {"AmericanBattleship", "AmericanBattleship", "AmericanCruiser", "AmericanCruiser",
                             "AmericanDestroyer", "AmericanDestroyer", "AmericanTorpedoBoat", "AmericanSubmarine"};
         const char *jp[] = {"JapaneseBattleship", "JapaneseCruiser", "JapaneseCruiser", "JapaneseDestroyer",
@@ -113,6 +113,7 @@ static int setup_scenario(game *g, const char *name)
             err |= spawn(g, jp[k], 1, off + 200, k < 4 ? 5000 : 5500, PI_F) < 0;
         }
         g->cam.target = v3(0, 0, 1200);
+        if (!strcmp(name, "archipelago")) islands_generate(&g->w, 7, 10, -4500, 1200, 4500, 4300);
     } else if (!strcmp(name, "carriers")) {
         /* Two carrier groups 11,000 apart: a carrier behind a BB and two DDs each. */
         const char *us[] = {"AmericanAircraftCarrier", "AmericanBattleship", "AmericanDestroyer", "AmericanDestroyer"};
@@ -178,6 +179,7 @@ static int setup_scenario(game *g, const char *name)
                     err |= spawn(g, cls, sd, x, z, sd ? PI_F : 0) < 0;
                 }
         }
+        if (cs->islands) islands_generate(&g->w, 11, 12, -5000, 1000, 5000, 5000);
         if (cs->yards) {
             g->w.mode = MODE_ASSAULT;
             g->w.time_limit = 60 * 60;
@@ -194,7 +196,7 @@ static int setup_scenario(game *g, const char *name)
         }
         g->cam.target = v3(0, 0, 1200);
     } else {
-        fprintf(stderr, "unknown scenario %s (m01, fleet, carriers, assault, attack, defend, custom)\n", name);
+        fprintf(stderr, "unknown scenario %s (m01, fleet, archipelago, carriers, assault, attack, defend, custom)\n", name);
         return -1;
     }
     if (err) return -1;

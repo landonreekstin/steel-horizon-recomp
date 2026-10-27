@@ -114,6 +114,7 @@ static int frame_end(SDL_Window *win, renderer *r, int sw, int sh)
 static const char *SCEN[][2] = {
     {"m01", "Mission 01: four US battleships against four German destroyers"},
     {"fleet", "Fleet action: US and Japanese task forces, 8 ships each"},
+    {"archipelago", "Archipelago: the fleet action among islands"},
     {"carriers", "Carrier battle: two carrier groups 11,000 apart"},
     {"assault", "Shipyard assault: a yard each, first to destroy the other's"},
     {"attack", "Attack: destroy the Japanese shipyard within 30 minutes"},
@@ -197,7 +198,7 @@ menu_result menu_run(SDL_Window *win, renderer *r, const class_table *ct, menu_c
         case CUSTOM: {
             title((float)sw, "CUSTOM BATTLE", "choose each side's navy and ships");
             float colw = 380, x0 = cx - colw - 20;
-            ui_rect(x0 - 20, 120, cx + colw + 40, 610, BG[0], BG[1], BG[2], BG[3]);
+            ui_rect(x0 - 20, 120, cx + colw + 40, 640, BG[0], BG[1], BG[2], BG[3]);
             for (int sd = 0; sd < 2; sd++) {
                 float x = sd ? cx + 20 : x0, y = 135;
                 ui_text(x, y + 6, sd ? "Enemy" : "Your fleet", 1, 0.85f, 0.5f, 1);
@@ -224,6 +225,8 @@ menu_result menu_run(SDL_Window *win, renderer *r, const class_table *ct, menu_c
             char yl[48];
             snprintf(yl, sizeof yl, "Shipyards: %s", cfg->custom.yards ? "yes (assault)" : "no");
             if (btn(&in, x0, 545, 300, yl, 1)) cfg->custom.yards = !cfg->custom.yards;
+            snprintf(yl, sizeof yl, "Islands: %s", cfg->custom.islands ? "yes" : "no");
+            if (btn(&in, x0, 590, 300, yl, 1)) cfg->custom.islands = !cfg->custom.islands;
             if (btn(&in, cx + 20, 545, 180, "Start", total[0] && total[1] && total[0] + total[1] < 120)) {
                 snprintf(cfg->scenario, sizeof cfg->scenario, "custom");
                 return MENU_PLAY;

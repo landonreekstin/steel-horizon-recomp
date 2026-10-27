@@ -565,6 +565,16 @@ static void minimap(hud *h, const world *w, int sh)
     int side = -1;
     for (int i = 0; i < w->count && side < 0; i++)
         if (w->ships[i].owner == h->player) side = w->ships[i].side;
+    for (int k = 0; k < w->isle_count; k++) {             /* islands */
+        const island *is = &w->isles[k];
+        float r = is->radius * h->map_scale;
+        for (float dy = -r; dy <= r; dy += 1) {         /* a disc, clipped to the map */
+            float hw = sqrtf(fmaxf(0, r * r - dy * dy)), yy = MY(is->z) + dy;
+            float xa = fmaxf(MX(is->x) - hw, x0), xb = fminf(MX(is->x) + hw, x0 + size);
+            if (yy < y0 || yy + 1 > y0 + size || xb <= xa) continue;
+            ui_rect(xa, yy, xb, yy + 1, 0.42f, 0.45f, 0.3f, 0.9f);
+        }
+    }
     for (int i = 0; i < w->count; i++) {
         const ship *s = &w->ships[i];
         if (!s->alive) continue;

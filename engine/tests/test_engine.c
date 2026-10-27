@@ -1250,6 +1250,49 @@ static void test_standalone(void)
           "Iowa and Yamato fight: %d shells", w.shots);
 }
 
+static void test_islands(const class_table *ct)
+{
+    const ship_class *dd = class_find(ct, "AmericanDestroyer"), *jdd = class_find(ct, "JapaneseDestroyer");
+    const ship_class *pt = class_find(ct, "AmericanTorpedoBoat"), *bb = class_find(ct, "JapaneseBattleship");
+    world w;
+    world_init(&w);
+    w.fog = 1;
+    w.isles[0] = (island){0, 2000, 600, 100, 1};
+    w.isle_count = 1;
+    int a = world_spawn(&w, dd, 0, 0, 0, 0), hidden = world_spawn(&w, jdd, 1, 0, 3900, 0), open = world_spawn(&w, jdd, 1, 3000, 1500, 0);
+    w.ships[a].hold_fire = w.ships[hidden].hold_fire = w.ships[open].hold_fire = 1;
+    world_step(&w);
+    CHECK(!visible_to(&w, 0, hidden) && visible_to(&w, 0, open), "island hides the ship behind it");
+    /* Routing: a move straight through the island goes round it, and arrives. */
+    int ids[1] = {a};
+    order_move(&w, ids, 1, 0, 4400, 0);
+    CHECK(w.ships[a].wp_count >= 2, "routed round the island (%d waypoints)", w.ships[a].wp_count);
+    float closest = 1e9f;
+    for (int t = 0; t < 600 * SIM_HZ && w.ships[a].wp_count; t++) {
+        world_step(&w);
+        closest = fminf(closest, hypotf(w.ships[a].x, w.ships[a].z - 2000));
+    }
+    CHECK(closest > 600 && hypotf(w.ships[a].x, w.ships[a].z - 4400) < 300, "never aground (closest %.0f), arrived", closest);
+    /* Land stops a ship pushed at it, and a torpedo run at it. */
+    world_init(&w);
+    w.isles[0] = (island){1200, 0, 450, 30, 2};         /* low: guns still see over the line */
+    w.isle_count = 1;
+    world_spawn(&w, pt, 0, 0, 0, 0);
+    world_spawn(&w, bb, 1, 2400, 0, 0);                  /* abeam, beyond the island */
+    w.ships[1].hold_fire = 1;
+    run(&w, 120);
+    CHECK(w.torps >= 3 && w.torp_hits == 0, "torpedoes stopped by the island (%d hits, %d fired)", w.torp_hits, w.torps);
+    world_init(&w);
+    w.isles[0] = (island){0, 600, 300, 80, 3};
+    w.isle_count = 1;
+    int ram = world_spawn(&w, dd, 0, 0, 0, 0);
+    w.ships[ram].wp[0] = (waypoint){0, 600};      /* steer straight for its centre */
+    w.ships[ram].wp_count = 1;
+    run(&w, 60);
+    CHECK(hypotf(w.ships[ram].x, w.ships[ram].z - 600) >= 300, "can't sail onto land (%.0f from centre)",
+          hypotf(w.ships[ram].x, w.ships[ram].z - 600));
+}
+
 int main(int argc, char **argv)
 {
     const char *assets = argc > 1 ? argv[1] : "assets";
@@ -1278,6 +1321,7 @@ int main(int argc, char **argv)
     test_genship(&ct);
     test_vision(&ct);
     test_standalone();
+    test_islands(&ct);
     printf("%d failures\n", failures);
     return failures != 0;
 }

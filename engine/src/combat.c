@@ -416,6 +416,11 @@ static void projectiles_step(world *w)
             }
         } else if (p->ammo == AMMO_TORPEDO) {
             float x = p->x0 + p->vx * t, z = p->z0 + p->vz * t;
+            if (w->isle_count && island_at(w, x, z, 0) >= 0) {   /* runs onto a beach */
+                fx(w, FX_SPLASH, x, 0, z);
+                p->active = 0;
+                continue;
+            }
             for (int j = 0; j < w->count; j++) {
                 const ship *s = &w->ships[j];
                 if (j == p->owner || !s->alive || s->cls->submerged) continue;

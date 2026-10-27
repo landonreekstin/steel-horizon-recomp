@@ -27,6 +27,8 @@ void genship_build(const ship_class *c, gen_model *out);
 void genship_gun(const ship_class *c, gen_model *out);
 /* A carrier aircraft in the nation's colours (+Z nose; the renderer draws it at 2x). */
 void genship_plane(const char *nation, gen_model *out);
+/* An island: a seeded hill of radius r and height h, centred on the origin. */
+void genship_island(unsigned seed, float r, float h, gen_model *out);
 void genship_free(gen_model *m);
 
 #endif

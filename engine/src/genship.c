@@ -259,6 +259,43 @@ void genship_plane(const char *nation, gen_model *out)
     box(&out->part[1], -0.35f, 0.6f, -0.6f, 0.35f, 1.0f, 1.2f);   /* canopy */
 }
 
+void genship_island(unsigned seed, float R, float H, gen_model *out)
+{
+    memset(out, 0, sizeof *out);
+    out->count = 3;
+    const float cols[3][3] = {{0.76f, 0.7f, 0.52f}, {0.32f, 0.45f, 0.24f}, {0.45f, 0.42f, 0.38f}};   /* sand, grass, rock */
+    for (int p = 0; p < 3; p++) memcpy(out->part[p].color, cols[p], sizeof cols[p]);
+    enum { A = 40, RINGS = 10 };
+    float amp[5], ph[5];
+    unsigned s = seed;
+    for (int k = 0; k < 5; k++) {
+        s = s * 1664525u + 1013904223u;
+        amp[k] = (float)(s >> 24) / 255.0f * 0.18f;
+        ph[k] = (float)((s >> 8) & 0xffff) / 65536.0f * 6.2831853f;
+    }
+    float pt[RINGS + 2][A][3];
+    for (int ring = 0; ring <= RINGS + 1; ring++)
+        for (int a = 0; a < A; a++) {
+            float ang = 6.2831853f * (float)a / A, wob = 1;
+            for (int k = 0; k < 5; k++) wob += amp[k] * sinf((float)(k + 2) * ang + ph[k]);
+            float u = ring <= RINGS ? (float)ring / RINGS : 1.12f;   /* the last ring: underwater skirt */
+            float r = R * u * wob;
+            float h = ring <= RINGS ? H * powf(fmaxf(0, 1 - u * u), 1.4f) * (0.85f + 0.3f * wob - 0.3f) + 3 : -25;
+            if (ring == RINGS) h = 2;                    /* the beach line */
+            pt[ring][a][0] = cosf(ang) * r;
+            pt[ring][a][1] = h;
+            pt[ring][a][2] = sinf(ang) * r;
+        }
+    for (int ring = 0; ring <= RINGS; ring++)
+        for (int a = 0; a < A; a++) {
+            int b = (a + 1) % A;
+            const float *p0 = pt[ring][a], *p1 = pt[ring][b], *p2 = pt[ring + 1][b], *p3 = pt[ring + 1][a];
+            float hmean = (p0[1] + p1[1] + p2[1] + p3[1]) / 4;
+            int part = hmean < 8 ? 0 : hmean > H * 0.7f ? 2 : 1;
+            quad(&out->part[part], p0, p3, p2, p1);
+        }
+}
+
 void genship_free(gen_model *m)
 {
     for (int p = 0; p < GEN_PARTS; p++) { free(m->part[p].v); free(m->part[p].idx); }

@@ -131,6 +131,7 @@ void world_step(world *w)
     combat_step(w);
     air_step(w);
     base_step(w);
+    islands_step(w);
     fleet_step(w);
     if (w->tick % (2 * SIM_HZ) == 0) ai_step(w);
     w->tick++;
@@ -221,7 +222,12 @@ void order_move(world *w, const int *ids, int n, float x, float z, int append)
     for (int i = 0; i < n; i++) {
         ship *s = &w->ships[ids[i]];
         if (!append) s->wp_count = 0;
-        if (s->wp_count < MAX_WAYPOINTS) s->wp[s->wp_count++] = slot[assign[i]];
+        /* Round any islands on the way (from the last queued point when appending). */
+        float fx = append && s->wp_count ? s->wp[s->wp_count - 1].x : s->x;
+        float fz = append && s->wp_count ? s->wp[s->wp_count - 1].z : s->z;
+        waypoint route[6];
+        int nr = island_route(w, fx, fz, slot[assign[i]].x, slot[assign[i]].z, route, 6);
+        for (int k = 0; k < nr && s->wp_count < MAX_WAYPOINTS; k++) s->wp[s->wp_count++] = route[k];
     }
 }
 

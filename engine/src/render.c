@@ -1144,6 +1144,21 @@ void renderer_draw(renderer *r, const camera *cam, int w, int h, const world *wd
         }
     }
 
+    /* Islands: generated once each, from their seeds. */
+    for (int k = 0; k < wd->isle_count; k++) {
+        const island *is = &wd->isles[k];
+        char key[64];
+        snprintf(key, sizeof key, "@isle:%u:%d", is->seed, (int)is->radius);
+        const gpu_model *im = get_model(r, key);
+        if (!im) {
+            gen_model g;
+            genship_island(is->seed, is->radius, is->height, &g);
+            im = gen_upload(r, key, &g, NULL);
+            genship_free(&g);
+        }
+        if (im) draw_model(r, im, m4translate(v3(is->x, 0, is->z)), v3(1, 1, 1));
+    }
+
     /* Aircraft, drawn at the original's 2x scale. */
     for (int k = 0; k < wd->air_count; k++) {
         const aircraft *a = &wd->air[k];

@@ -269,3 +269,10 @@ each kill planes (fighters more); Japan won all 4 after the fighter fix.
   ranges and reloads are this game's own numbers. 0.72 world units per metre.
 - Destroyers carry their historical torpedo tubes here (the original game's didn't).
 - Models are generated (ships, turrets, aircraft), sound is silent without the bank.
+
+## Islands (`engine/src/islands.c`) — design
+- Seeded round islands (radius 250–900, height 40–160, irregular coastline) placed in
+  the battle area clear of the fleets. Ships are kept off them; torpedoes end on them;
+  they block sight between ships (aircraft see over); move orders get up to four
+  detour waypoints round islands in the way. Scenario `archipelago` (the fleet action
+  among ten islands); custom battles can add islands. Shown on the minimap.

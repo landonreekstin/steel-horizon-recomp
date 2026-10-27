@@ -64,6 +64,13 @@ typedef enum { MISSION_NONE, MISSION_CAP, MISSION_ESCORT, MISSION_STRIKE, MISSIO
 #define REVEAL_S 10.0f
 #define RECON_COOLDOWN 180.0f
 #define SHIP_WORDS ((MAX_SHIPS + 63) / 64)
+#define MAX_ISLANDS 24
+
+/* Terrain: round islands (src/islands.c). */
+typedef struct {
+    float x, z, radius, height;
+    unsigned seed;             /* shapes the generated hill */
+} island;
 
 typedef struct {
     plane_type type;
@@ -206,6 +213,8 @@ typedef struct {
     float last_x[2][MAX_SHIPS], last_z[2][MAX_SHIPS];   /* where each side last saw them */
     long last_seen[2][MAX_SHIPS];        /* tick, -1 never */
     int fog;                             /* 1: fog of war on */
+    island isles[MAX_ISLANDS];
+    int isle_count;
     /* Each team's officers: speciality and the ship they serve on (-1 ashore, -2 lost). */
     int officer_count[2];
     officer_kind officer_kind_of[2][MAX_OFFICERS];
@@ -317,6 +326,15 @@ void vision_step(world *w);  /* part of world_step */
  * carrier) to circle (x, z). Returns 0 if one went. */
 int order_recon(world *w, int ship, float x, float z);
 int can_recon(const ship *s);
+
+/* Islands (src/islands.c): a seeded archipelago between two lines, collisions,
+ * line of sight, and detours for move orders. */
+void islands_generate(world *w, unsigned seed, int count, float x0, float z0, float x1, float z1);
+int island_blocks(const world *w, float ax, float az, float bx, float bz);   /* sight / torpedo path */
+int island_at(const world *w, float x, float z, float margin);              /* index or -1 */
+void islands_step(world *w);         /* part of world_step: keep ships off the land */
+/* Waypoints from (x0, z0) to (x1, z1) that go round islands; returns count (<= max). */
+int island_route(const world *w, float x0, float z0, float x1, float z1, waypoint *out, int max);
 
 /* Fleet command (src/fleet.c). */
 void order_flagship(world *w, int player, int ship);

@@ -35,6 +35,7 @@ void vision_step(world *w)
             const ship *s = &w->ships[i];
             if (!s->alive || (s->side & 1) != side) continue;
             float d = hypotf(s->x - t->x, s->z - t->z);
+            if (w->isle_count && island_blocks(w, s->x, s->z, t->x, t->z)) continue;   /* behind an island */
             if (t->cls->submerged) {
                 /* Sonar: escorts and anything with depth charges hear farther. */
                 int asw = 0;
