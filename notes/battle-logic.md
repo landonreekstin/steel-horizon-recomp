@@ -224,3 +224,14 @@ each kill planes (fighters more); Japan won all 4 after the fighter fix.
 - **Manual damage control**: clicking a compartment in the panel makes it a priority
   (teams' score ×4 there); hovering shows its structure, water per side, fire, teams
   and every module in it with health and ammunition.
+
+## Generated ship models (`engine/src/genship.c`, `--models generated`) — design
+- No game assets: a hull lofted over 48 stations (waterline half-breadth with a fine
+  bow and a transom, sheer, flare, keel rising at the ends; boot-topping below the
+  waterline, teak deck), superstructure by hull type (stepped bridge tower, one or two
+  funnels with caps, masts, after superstructure; carriers a flight deck and starboard
+  island; submarines a cigar hull and conning tower; auxiliaries a bridge aft and
+  kingposts), and a gunhouse with 1–3 barrels sized by the main gun's calibre, drawn
+  and trained at the class's own mounts. Sizes come from the class's half-length and
+  half-beam (still the original models' bounding boxes), so play is unchanged.
+- The cross-section panel and fleet thumbnails use the generated geometry too.

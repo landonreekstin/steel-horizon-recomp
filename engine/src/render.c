@@ -8,6 +8,7 @@
 
 #include "asset.h"
 #include "font_atlas.h"
+#include "genship.h"
 #include "gl.h"
 
 /* ---- waves (shared by the ocean shader and sea_height) ---------------------- */
@@ -204,7 +205,10 @@ struct renderer {
     int tex_count;
     char tex_name[MAX_TEX_INDEX][64];     /* lower-case basename without .bog */
     char tex_path[MAX_TEX_INDEX][512];
+    int generated;             /* draw generated ships instead of the original models */
 };
+
+void renderer_set_generated(renderer *r, int on) { r->generated = on; }
 
 static void index_textures(renderer *r, const char *dir)
 {
@@ -506,8 +510,107 @@ static gpu_model *shipyard_model(renderer *r, const ship_class *cls)
     return m;
 }
 
+/* Generated ship and gun models (genship.c), cached as "@gen:Name" / "@gun:Name". */
+static gpu_model *gen_upload(renderer *r, const char *key, gen_model *g, const ship_class *mounts_of)
+{
+    for (int i = 0; i < r->model_count; i++)
+        if (!strcmp(r->models[i].path, key)) return &r->models[i];
+    if (r->model_count == MAX_MODELS) return NULL;
+    gpu_model *m = &r->models[r->model_count++];
+    memset(m, 0, sizeof *m);
+    snprintf(m->path, sizeof m->path, "%s", key);
+    m->ok = 1;
+    float lo[3] = {1e9f, 1e9f, 1e9f}, hi[3] = {-1e9f, -1e9f, -1e9f};
+    for (int p = 0; p < g->count; p++)
+        for (int k = 0; k < g->part[p].nv; k++)
+            for (int q = 0; q < 3; q++) { lo[q] = fminf(lo[q], g->part[p].v[k].pos[q]); hi[q] = fmaxf(hi[q], g->part[p].v[k].pos[q]); }
+    memcpy(m->bbox_min, lo, sizeof lo);
+    memcpy(m->bbox_max, hi, sizeof hi);
+    m->radius = fmaxf(hi[2] - lo[2], hi[0] - lo[0]) / 2;
+    profile_begin(&m->prof, lo[2], hi[2]);
+    for (int p = 0; p < g->count; p++) {
+        const gen_part *gp = &g->part[p];
+        for (int k = 0; k < gp->nv; k++) profile_add(&m->prof, gp->v[k].pos);
+        if (!gp->ni || m->mesh_count == 16) continue;
+        int k = m->mesh_count;
+        gpu_mesh *gm = &m->meshes[m->mesh_count++];
+        gm->material = k;
+        gm->index_count = gp->ni;
+        m->textured[k] = 0;
+        memcpy(m->flat[k], gp->color, sizeof m->flat[k]);
+        glGenVertexArrays(1, &gm->vao);
+        glBindVertexArray(gm->vao);
+        glGenBuffers(1, &gm->vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, gm->vbo);
+        glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(vertex) * (size_t)gp->nv), gp->v, GL_STATIC_DRAW);
+        glGenBuffers(1, &gm->ibo);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gm->ibo);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)(sizeof(uint32_t) * (size_t)gp->ni), gp->idx, GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, pos));
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, normal));
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, uv));
+        glEnableVertexAttribArray(0);
+        glEnableVertexAttribArray(1);
+        glEnableVertexAttribArray(2);
+    }
+    profile_end(&m->prof);
+    if (mounts_of)                                  /* turrets go on the class's own mounts */
+        for (int q = 0; q < mounts_of->mount_count && m->mts.count < 32; q++) {
+            const turret_mount *tm = &mounts_of->mounts[q];
+            if (!tm->name[0]) continue;
+            mount_point *p = &m->mts.points[m->mts.count++];
+            snprintf(p->name, sizeof p->name, "%s", tm->name);
+            memcpy(p->pos, tm->pos, sizeof p->pos);
+            float a = tm->arc_center, c = cosf(a), sn = sinf(a);
+            float rot[9] = {c, 0, sn, 0, 1, 0, -sn, 0, c};
+            memcpy(p->rot, rot, sizeof rot);
+        }
+    return m;
+}
+
+static void gen_key(char *out, size_t n, const char *kind, const ship_class *c)
+{
+    snprintf(out, n, "@%s:%s", kind, c->name);
+}
+
+static const gpu_model *ship_model(renderer *r, const ship_class *c, int stage)
+{
+    if (r->generated && c->hull_type != HULL_SHIPYARD) {
+        char key[96];
+        gen_key(key, sizeof key, "gen", c);
+        return get_model(r, key);
+    }
+    const gpu_model *m = get_model(r, c->model[stage - 1]);
+    return m ? m : get_model(r, c->model[0]);
+}
+
+static const gpu_model *gun_model(renderer *r, const ship_class *c)
+{
+    if (r->generated && c->hull_type != HULL_SHIPYARD) {
+        char key[96];
+        gen_key(key, sizeof key, "gun", c);
+        return get_model(r, key);
+    }
+    return get_model(r, c->gun_model);
+}
+
 int renderer_load_class(renderer *r, const ship_class *cls)
 {
+    if (r->generated && cls->hull_type != HULL_SHIPYARD) {
+        char key[96];
+        gen_model g;
+        genship_build(cls, &g);
+        gen_key(key, sizeof key, "gen", cls);
+        gen_upload(r, key, &g, cls);
+        genship_free(&g);
+        genship_gun(cls, &g);
+        gen_key(key, sizeof key, "gun", cls);
+        gen_upload(r, key, &g, NULL);
+        genship_free(&g);
+        if (cls->hull_type == 1)
+            for (int st = 1; st <= 3; st++) plane_model(r, cls->nation, st);
+        return 0;
+    }
     if (cls->model[0][0] == '@') {
         get_model(r, cls->gun_model);
         return shipyard_model(r, cls) ? 0 : -1;
@@ -741,7 +844,7 @@ static vec3 health_colour(float hp)
 
 const ship_profile *renderer_profile(renderer *r, const ship_class *c)
 {
-    const gpu_model *m = get_model(r, c->model[0]);
+    const gpu_model *m = ship_model(r, c, 1);
     return m && m->prof.ok ? &m->prof : NULL;
 }
 
@@ -934,8 +1037,7 @@ void renderer_draw(renderer *r, const camera *cam, int w, int h, const world *wd
         int shore = s->cls->hull_type == HULL_SHIPYARD;
         if (!s->alive && s->sink > 90 && !shore) continue;   /* gone under */
         int stage = s->stage < 1 ? 1 : s->stage > 3 ? 3 : s->stage;
-        const gpu_model *m = get_model(r, s->cls->model[stage - 1]);
-        if (!m) m = get_model(r, s->cls->model[0]);
+        const gpu_model *m = ship_model(r, s->cls, stage);
         if (!m) continue;
         float x = s->prev_x + (s->x - s->prev_x) * alpha, z = s->prev_z + (s->z - s->prev_z) * alpha;
         float hd = s->prev_heading + wrap_angle(s->heading - s->prev_heading) * alpha;
@@ -951,7 +1053,7 @@ void renderer_draw(renderer *r, const camera *cam, int w, int h, const world *wd
         mat4 model = m4mul(m4translate(v3(x, y, z)), m4mul(m4yaw(hd), m4mul(m4pitch(-pitch), m4roll(-roll))));
         vec3 tint = s->alive ? v3(1, 1, 1) : v3(0.35f, 0.3f, 0.3f);
         draw_model(r, m, model, tint);
-        const gpu_model *gun = get_model(r, s->cls->gun_model);
+        const gpu_model *gun = gun_model(r, s->cls);
         for (int k = 0; gun && k < m->mts.count; k++) {
             const mount_point *mp = &m->mts.points[k];
             if (!strchr("FRPS", mp->name[0]) || !isdigit((unsigned char)mp->name[1])) continue;

@@ -170,14 +170,16 @@ menu_result menu_run(SDL_Window *win, renderer *r, const class_table *ct, menu_c
         switch (screen) {
         case MAIN: {
             title((float)sw, "STEEL HORIZON  -  NAVAL COMMAND", "a real-time naval battle game on the 1940s seas");
-            ui_rect(cx - bw / 2 - 20, 130, cx + bw / 2 + 20, 470, BG[0], BG[1], BG[2], BG[3]);
+            ui_rect(cx - bw / 2 - 20, 130, cx + bw / 2 + 20, 485, BG[0], BG[1], BG[2], BG[3]);
             ui_text(cx - bw / 2, 145, "Admiral's name", 0.7f, 0.75f, 0.8f, 1);
             field(&in, cx - bw / 2, 165, bw, cfg->name, sizeof cfg->name);
             if (btn(&in, cx - bw / 2, 215, bw, "Skirmish", 1)) screen = SKIRMISH;
             if (btn(&in, cx - bw / 2, 260, bw, "Custom battle", 1)) screen = CUSTOM;
             if (btn(&in, cx - bw / 2, 305, bw, "Host an online game", 1)) screen = HOST;
             if (btn(&in, cx - bw / 2, 350, bw, "Join an online game", 1)) screen = JOIN;
-            if (btn(&in, cx - bw / 2, 410, bw, "Quit", 1)) return MENU_QUIT;
+            if (btn(&in, cx - bw / 2, 395, bw, cfg->generated ? "Ship models: generated" : "Ship models: original", 1))
+                cfg->generated = !cfg->generated;
+            if (btn(&in, cx - bw / 2, 425, bw, "Quit", 1)) return MENU_QUIT;
             break;
         }
         case SKIRMISH: {

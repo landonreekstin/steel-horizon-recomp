@@ -15,6 +15,7 @@ typedef struct {
     custom_spec custom;
     char name[24], address[64];
     int port, players, teams[MAX_PLAYERS];
+    int generated;             /* draw generated ship models instead of the game's */
 } menu_config;
 
 void menu_defaults(menu_config *c);

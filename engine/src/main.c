@@ -563,7 +563,7 @@ int main(int argc, char **argv)
 {
     const char *assets = "assets", *shot = NULL, *scenario = "m01";
     unsigned long long seed = 1;
-    int mute = 0, sound = 0, scenario_given = 0;
+    int mute = 0, sound = 0, scenario_given = 0, generated = 0;
     int ai_both = 0, host_port = -1, mp_players = 2, teams[MAX_PLAYERS] = {0}, teams_given = 0, bot = 0;
     long desync_at = -1;
     const char *join_addr = NULL, *player_name = "Admiral";
@@ -584,6 +584,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--bot")) bot = 1;
         else if (!strcmp(argv[i], "--mute")) mute = 1;
         else if (!strcmp(argv[i], "--sound")) sound = 1;   /* sound in --screenshot runs too */
+        else if (!strcmp(argv[i], "--models") && i + 1 < argc) generated = !strcmp(argv[++i], "generated");
         else if (!strcmp(argv[i], "--desync-test") && i + 1 < argc) desync_at = atol(argv[++i]);
         else if (!strcmp(argv[i], "--teams") && i + 1 < argc) {
             const char *p = argv[++i];
@@ -631,6 +632,7 @@ int main(int argc, char **argv)
         scenario = mc.scenario;
         g.custom = mc.custom;
         player_name = mc.name;
+        generated = mc.generated;
         if (mr == MENU_HOST) {
             host_port = mc.port;
             mp_players = mc.players;
@@ -752,6 +754,7 @@ int main(int argc, char **argv)
     char bank_path[600];
     snprintf(bank_path, sizeof bank_path, "%s/sound/banks/game.bnk", path);
     g.snd = (shot && !sound) || mute ? NULL : audio_open(bank_path);
+    renderer_set_generated(r, generated);
     for (int i = 0; i < g.w.count; i++)
         if (renderer_load_class(r, g.w.ships[i].cls)) return 1;
     for (int s = 0; s < 2; s++)                     /* ships the yards can build */

@@ -25,6 +25,8 @@ typedef struct {
 } ship_profile;
 
 renderer *renderer_create(const char *files_dir);
+/* 1: draw ships from genship.c's generated models instead of the game's (--models generated). */
+void renderer_set_generated(renderer *r, int on);
 void renderer_destroy(renderer *r);
 
 /* Preload the models a class uses (all damage stages + gun). Returns 0 on success. */

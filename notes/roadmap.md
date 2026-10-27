@@ -29,6 +29,9 @@ Full plan: `~/.claude/plans/i-want-to-recompile-snoopy-pearl.md`. Status per pha
 - 8 (front end): main menu, skirmish list, custom-battle fleet picker (nations, hull
   counts, optional shipyards), host/join screens and lobby; minimap; hover accuracy
   readout; original sound effects and voice lines.
+- Generated ship models (`--models generated`, or the main menu's toggle): the first
+  step toward not needing the ISO; still to do: ship data independent of ships.json,
+  and models from real ship plans per class (Iowa, Yamato, Fletcher, ...).
 
 ## Next
 

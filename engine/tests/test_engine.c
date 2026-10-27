@@ -13,6 +13,7 @@
 
 #include "asset.h"
 #include "data.h"
+#include "genship.h"
 #include "command.h"
 #include "math3d.h"
 #include "sim.h"
@@ -1080,6 +1081,39 @@ static void test_fleet(const class_table *ct)
     CHECK(!memcmp(final[0], final[1], sizeof final[0]), "replayed commands give the same battle");
 }
 
+/* Generated models: every class gets a plausible ship (and turret) of its own size. */
+static void test_genship(const class_table *ct)
+{
+    int bad = 0, checked = 0;
+    for (int i = 0; i < ct->count; i++) {
+        const ship_class *c = &ct->classes[i];
+        if (c->hull_type == HULL_SHIPYARD) continue;
+        gen_model g;
+        genship_build(c, &g);
+        int tris = 0;
+        float lo[3] = {1e9f, 1e9f, 1e9f}, hi[3] = {-1e9f, -1e9f, -1e9f};
+        for (int p = 0; p < g.count; p++) {
+            tris += g.part[p].ni / 3;
+            for (int k = 0; k < g.part[p].nv; k++)
+                for (int q = 0; q < 3; q++) { lo[q] = fminf(lo[q], g.part[p].v[k].pos[q]); hi[q] = fmaxf(hi[q], g.part[p].v[k].pos[q]); }
+        }
+        float len = hi[2] - lo[2], beam = hi[0] - lo[0];
+        int ok = tris > 200 && fabsf(len - 2 * c->half_length) < 0.1f * c->half_length + 2 &&
+                 beam < 2.6f * c->half_beam + 1 && beam > 1.5f * c->half_beam && lo[1] < 0 && hi[1] > 0;
+        if (!ok) {
+            bad++;
+            if (bad < 5) printf("  genship %s: %d tris, length %.0f (class %.0f), beam %.0f (class %.0f), y %.0f..%.0f\n",
+                                c->name, tris, len, 2 * c->half_length, beam, 2 * c->half_beam, lo[1], hi[1]);
+        }
+        genship_free(&g);
+        genship_gun(c, &g);
+        if (g.part[5].ni < 36) bad++;
+        genship_free(&g);
+        checked++;
+    }
+    CHECK(checked > 50 && bad == 0, "generated models: %d of %d off", bad, checked);
+}
+
 int main(int argc, char **argv)
 {
     const char *assets = argc > 1 ? argv[1] : "assets";
@@ -1105,6 +1139,7 @@ int main(int argc, char **argv)
     test_command(&ct);
     test_bases(&ct);
     test_fleet(&ct);
+    test_genship(&ct);
     printf("%d failures\n", failures);
     return failures != 0;
 }
