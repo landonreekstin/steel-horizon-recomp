@@ -29,6 +29,15 @@ mat4 camera_viewproj(const camera *c, int w, int h, vec3 *eye);
 void renderer_draw(renderer *r, const camera *cam, int w, int h, const world *wd,
                    float alpha, const unsigned char *selected, const drag_box *box, float t);
 
+/* Screen-space UI, in pixels from the top left; batched until ui_flush. */
+void ui_rect(float x0, float y0, float x1, float y1, float r, float g, float b, float a);
+float ui_text(float x, float y, const char *str, float r, float g, float b, float a);  /* returns width */
+float ui_text_width(const char *str);
+int ui_mark(void);                          /* vertex index of the next ui_rect */
+void ui_set_bottom(int mark, float y1);     /* resize that rect once its contents are laid out */
+float ui_line_height(void);
+void ui_flush(renderer *r, int w, int h);
+
 /* Sea surface height at (x, z) and time t, matching the ocean shader's waves. */
 float sea_height(float x, float z, float t);
 

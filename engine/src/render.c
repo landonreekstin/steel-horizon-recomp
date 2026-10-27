@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "asset.h"
+#include "font_atlas.h"
 #include "gl.h"
 
 /* ---- waves (shared by the ocean shader and sea_height) ---------------------- */
@@ -157,6 +158,16 @@ static const char *LINE_VS = GLSL
     "uniform mat4 u_vp; out vec4 v_col;\n"
     "void main() { v_col = a_col; gl_Position = u_vp * vec4(a_pos, 1.0); }\n";
 
+/* Screen-space UI: solid quads (uv.x < 0) and glyphs from the font atlas. */
+static const char *UI_VS = GLSL
+    "layout(location=0) in vec2 a_pos; layout(location=1) in vec2 a_uv; layout(location=2) in vec4 a_col;\n"
+    "uniform vec2 u_screen; out vec2 v_uv; out vec4 v_col;\n"
+    "void main() { v_uv = a_uv; v_col = a_col;\n"
+    "  gl_Position = vec4(a_pos.x / u_screen.x * 2.0 - 1.0, 1.0 - a_pos.y / u_screen.y * 2.0, 0.0, 1.0); }\n";
+static const char *UI_FS = GLSL
+    "in vec2 v_uv; in vec4 v_col; uniform sampler2D u_font; out vec4 o;\n"
+    "void main() { o = v_uv.x < 0.0 ? v_col : vec4(v_col.rgb, v_col.a * texture(u_font, v_uv).r); }\n";
+
 static const char *LINE_FS = GLSL
     "in vec4 v_col; out vec4 o; void main() { o = v_col; }\n";
 
@@ -183,8 +194,8 @@ typedef struct {
 
 struct renderer {
     char files_dir[256];
-    GLuint ship_prog, sea_prog, sky_prog, line_prog;
-    GLuint sea_vao, sea_ibo, sky_vao, line_vao, line_vbo;
+    GLuint ship_prog, sea_prog, sky_prog, line_prog, ui_prog;
+    GLuint sea_vao, sea_ibo, sky_vao, line_vao, line_vbo, ui_vao, ui_vbo, font_tex;
     int sea_index_count;
     gpu_model models[MAX_MODELS];
     int model_count;
@@ -381,8 +392,100 @@ renderer *renderer_create(const char *files_dir)
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 28, (void *)12);
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
+    /* UI quads: (x, y, u, v, r, g, b, a). */
+    r->ui_prog = program(UI_VS, UI_FS);
+    glGenVertexArrays(1, &r->ui_vao);
+    glBindVertexArray(r->ui_vao);
+    glGenBuffers(1, &r->ui_vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, r->ui_vbo);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 32, 0);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 32, (void *)8);
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 32, (void *)16);
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(2);
     glBindVertexArray(0);
+    glGenTextures(1, &r->font_tex);
+    glBindTexture(GL_TEXTURE_2D, r->font_tex);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, FONT_ATLAS_W, FONT_ATLAS_H, 0, GL_RED, GL_UNSIGNED_BYTE, FONT_ATLAS);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     return r;
+}
+
+/* ---- UI batch ------------------------------------------------------------------------ */
+
+#define UI_MAX_VERTS 24576
+static float g_ui[UI_MAX_VERTS * 8];
+static int g_ui_count;
+
+static void ui_vert(float x, float y, float u, float v, const float *c)
+{
+    float *p = &g_ui[g_ui_count++ * 8];
+    p[0] = x; p[1] = y; p[2] = u; p[3] = v;
+    p[4] = c[0]; p[5] = c[1]; p[6] = c[2]; p[7] = c[3];
+}
+
+static void ui_quad(float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1, const float *c)
+{
+    if (g_ui_count + 6 > UI_MAX_VERTS) return;
+    ui_vert(x0, y0, u0, v0, c); ui_vert(x1, y0, u1, v0, c); ui_vert(x1, y1, u1, v1, c);
+    ui_vert(x0, y0, u0, v0, c); ui_vert(x1, y1, u1, v1, c); ui_vert(x0, y1, u0, v1, c);
+}
+
+void ui_rect(float x0, float y0, float x1, float y1, float r, float g, float b, float a)
+{
+    const float c[4] = {r, g, b, a};
+    ui_quad(x0, y0, x1, y1, -1, -1, -1, -1, c);
+}
+
+float ui_text(float x, float y, const char *str, float r, float g, float b, float a)
+{
+    const float c[4] = {r, g, b, a};
+    float x0 = x;
+    for (const unsigned char *p = (const unsigned char *)str; *p; p++) {
+        if (*p >= 32 && *p < 127) {
+            int i = *p - 32, cx = i % FONT_COLS * FONT_CELL_W, cy = i / FONT_COLS * FONT_CELL_H;
+            ui_quad(x, y, x + FONT_CELL_W, y + FONT_CELL_H, (float)cx / FONT_ATLAS_W, (float)cy / FONT_ATLAS_H,
+                    (float)(cx + FONT_CELL_W) / FONT_ATLAS_W, (float)(cy + FONT_CELL_H) / FONT_ATLAS_H, c);
+        }
+        x += FONT_CELL_W;
+    }
+    return x - x0;
+}
+
+int ui_mark(void) { return g_ui_count; }
+
+/* Move the bottom edge of the quad that ui_rect emitted at vertex mark. */
+void ui_set_bottom(int mark, float y1)
+{
+    if (mark < 0 || mark + 6 > g_ui_count) return;
+    g_ui[(mark + 2) * 8 + 1] = g_ui[(mark + 4) * 8 + 1] = g_ui[(mark + 5) * 8 + 1] = y1;
+}
+
+float ui_text_width(const char *str) { return (float)(strlen(str) * FONT_CELL_W); }
+float ui_line_height(void) { return FONT_CELL_H; }
+
+void ui_flush(renderer *r, int w, int h)
+{
+    if (!g_ui_count) return;
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glUseProgram(r->ui_prog);
+    glUniform2f(glGetUniformLocation(r->ui_prog, "u_screen"), (float)w, (float)h);
+    glUniform1i(glGetUniformLocation(r->ui_prog, "u_font"), 0);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, r->font_tex);
+    glBindVertexArray(r->ui_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, r->ui_vbo);
+    glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(float) * 8 * (size_t)g_ui_count), g_ui, GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, g_ui_count);
+    g_ui_count = 0;
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
 }
 
 void renderer_destroy(renderer *r)

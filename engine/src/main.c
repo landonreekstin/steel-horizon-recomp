@@ -19,6 +19,7 @@
 
 #include "data.h"
 #include "gl.h"
+#include "hud.h"
 #include "math3d.h"
 #include "render.h"
 #include "sim.h"
@@ -219,6 +220,68 @@ static void print_state(const world *w)
     }
 }
 
+/* Orders from a key (or the controls toolbar, which sends the same keys). */
+static void order_key(game *g, SDL_Keycode k, int ctrl, hud *hd)
+{
+    if (k == SDLK_z) {                              /* evasive manoeuvres for a minute */
+        int ids[MAX_SHIPS], n = selected_ids(g, ids);
+        order_evade(&g->w, ids, n, 60);
+    } else if (k == SDLK_t) {                       /* cycle the main battery's aim point */
+        static const int cycle[] = {-1, MOD_ENGINE, MOD_MAGAZINE, MOD_STEERING, MOD_BRIDGE, MOD_TURRET};
+        int ids[MAX_SHIPS], n = selected_ids(g, ids);
+        if (n) {
+            int cur = g->w.ships[ids[0]].aim[BAT_MAIN], q = 0;
+            while (q < 6 && cycle[q] != cur) q++;
+            order_aim(&g->w, ids, n, cycle[(q + 1) % 6], (1u << BAT_MAIN) | (1u << BAT_SECONDARY));
+        }
+    } else if (k == SDLK_c) hd->show_captain = !hd->show_captain;
+    else if (k == SDLK_F1) hd->show_controls = !hd->show_controls;
+    else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) hud_act_top(&g->w);
+    else if (k == SDLK_s && !ctrl) {
+        int ids[MAX_SHIPS];
+        order_stop(&g->w, ids, selected_ids(g, ids));
+    } else if (k == SDLK_b || k == SDLK_g || k == SDLK_r) {
+        /* Carriers: B strike the focus target (else the nearest enemy ship),
+         * G fighter patrol overhead, R recall the air group. */
+        int ids[MAX_SHIPS], n = selected_ids(g, ids);
+        for (int q = 0; q < n; q++) {
+            const ship *c = &g->w.ships[ids[q]];
+            if (!is_carrier(c)) continue;
+            int t = c->order_target[BAT_MAIN];
+            if (k == SDLK_b && (t < 0 || !g->w.ships[t].alive)) {
+                float bd = INFINITY;
+                t = -1;
+                for (int j = 0; j < g->w.count; j++) {
+                    const ship *e2 = &g->w.ships[j];
+                    if (!e2->alive || e2->side == c->side || e2->cls->submerged) continue;
+                    float d = hypotf(e2->x - c->x, e2->z - c->z);
+                    if (d < bd) { bd = d; t = j; }
+                }
+            }
+            if (k == SDLK_b) order_strike(&g->w, ids[q], t);
+            else if (k == SDLK_g) order_cap(&g->w, ids[q]);
+            else order_recall(&g->w, ids[q]);
+        }
+    } else if (k == SDLK_p || k == SDLK_x || k == SDLK_m) {
+        /* Damage control: P cycles crew priority, X counter-floods, M floods
+         * the magazines (no more cook-offs, but those turrets fall silent). */
+        int ids[MAX_SHIPS], n = selected_ids(g, ids);
+        if (k == SDLK_p && n)
+            order_dc_policy(&g->w, ids, n, (dc_policy)((g->w.ships[ids[0]].policy + 1) % DC_POLICIES));
+        else if (k == SDLK_x) order_counter_flood(&g->w, ids, n);
+        else if (k == SDLK_m) order_flood_magazines(&g->w, ids, n);
+    } else if (k == SDLK_h || k == SDLK_f) {
+        /* H toggles hold fire; F: fire at will (drop focus targets). */
+        int ids[MAX_SHIPS], n = selected_ids(g, ids);
+        if (k == SDLK_f) order_attack(&g->w, ids, n, -1, ~0u);
+        order_hold_fire(&g->w, ids, n, k == SDLK_h && n && !g->w.ships[ids[0]].hold_fire);
+    } else if (k >= SDLK_1 && k <= SDLK_9) {
+        int gi = (int)(k - SDLK_0);
+        if (ctrl) memcpy(g->groups[gi], g->selected, sizeof g->selected);
+        else memcpy(g->selected, g->groups[gi], sizeof g->selected);
+    }
+}
+
 int main(int argc, char **argv)
 {
     const char *assets = "assets", *shot = NULL, *scenario = "m01";
@@ -264,7 +327,7 @@ int main(int argc, char **argv)
             for (int i = 0; i < g.w.count; i++)
                 if (!g.w.ships[i].alive && !sunk_seen[i]) {
                     sunk_seen[i] = 1;
-                    static const char *why[] = {"?", "flooded", "capsized", "magazine exploded", "structure failed"};
+                    static const char *why[] = {"?", "flooded", "capsized", "magazine exploded", "structure failed", "abandoned"};
                     const ship *sk = &g.w.ships[i];
                     printf("t=%6.1f s  sunk: ship %d %s (%s, water %.2f, list %.0f deg)\n", (double)t / SIM_HZ, i,
                            sk->cls->name, why[sk->cause], sk->water, sk->list * 180 / PI_F);
@@ -310,6 +373,7 @@ int main(int argc, char **argv)
     Uint64 freq = SDL_GetPerformanceFrequency(), last = SDL_GetPerformanceCounter();
     double acc = 0, sim_time = 0;
     int running = 1, frame = 0, orbit = 0;
+    static hud hd = {.show_captain = 1, .show_controls = 1};
     if (shot) {                                     /* deterministic picture for checking */
         /* Select the player's ships and steam them halfway to the enemy. */
         int ids[MAX_SHIPS], n = 0, ne = 0;
@@ -348,51 +412,13 @@ int main(int argc, char **argv)
                 else if (k == SDLK_EQUALS || k == SDLK_PLUS || k == SDLK_KP_PLUS) g.time_scale = g.time_scale < 4 ? g.time_scale * 2 : 4;
                 else if (k == SDLK_MINUS || k == SDLK_KP_MINUS) g.time_scale = g.time_scale > 1 ? g.time_scale / 2 : 1;
                 else if (k == SDLK_F12) save_ppm("shrts_screenshot.ppm", w, h);
-                else if (k == SDLK_s && !ctrl) {
-                    int ids[MAX_SHIPS];
-                    order_stop(&g.w, ids, selected_ids(&g, ids));
-                } else if (k == SDLK_b || k == SDLK_g || k == SDLK_r) {
-                    /* Carriers: B strike the focus target (else the nearest enemy ship),
-                     * G fighter patrol overhead, R recall the air group. */
-                    int ids[MAX_SHIPS], n = selected_ids(&g, ids);
-                    for (int q = 0; q < n; q++) {
-                        const ship *c = &g.w.ships[ids[q]];
-                        if (!is_carrier(c)) continue;
-                        int t = c->order_target[BAT_MAIN];
-                        if (k == SDLK_b && (t < 0 || !g.w.ships[t].alive)) {
-                            float bd = INFINITY;
-                            t = -1;
-                            for (int j = 0; j < g.w.count; j++) {
-                                const ship *e2 = &g.w.ships[j];
-                                if (!e2->alive || e2->side == c->side || e2->cls->submerged) continue;
-                                float d = hypotf(e2->x - c->x, e2->z - c->z);
-                                if (d < bd) { bd = d; t = j; }
-                            }
-                        }
-                        if (k == SDLK_b) order_strike(&g.w, ids[q], t);
-                        else if (k == SDLK_g) order_cap(&g.w, ids[q]);
-                        else order_recall(&g.w, ids[q]);
-                    }
-                } else if (k == SDLK_p || k == SDLK_x || k == SDLK_m) {
-                    /* Damage control: P cycles crew priority, X counter-floods, M floods
-                     * the magazines (no more cook-offs, but those turrets fall silent). */
-                    int ids[MAX_SHIPS], n = selected_ids(&g, ids);
-                    if (k == SDLK_p && n)
-                        order_dc_policy(&g.w, ids, n, (dc_policy)((g.w.ships[ids[0]].policy + 1) % DC_POLICIES));
-                    else if (k == SDLK_x) order_counter_flood(&g.w, ids, n);
-                    else if (k == SDLK_m) order_flood_magazines(&g.w, ids, n);
-                } else if (k == SDLK_h || k == SDLK_f) {
-                    /* H toggles hold fire; F: fire at will (drop focus targets). */
-                    int ids[MAX_SHIPS], n = selected_ids(&g, ids);
-                    if (k == SDLK_f) order_attack(&g.w, ids, n, -1, ~0u);
-                    order_hold_fire(&g.w, ids, n, k == SDLK_h && n && !g.w.ships[ids[0]].hold_fire);
-                } else if (k >= SDLK_1 && k <= SDLK_9) {
-                    int gi = (int)(k - SDLK_0);
-                    if (ctrl) memcpy(g.groups[gi], g.selected, sizeof g.selected);
-                    else memcpy(g.selected, g.groups[gi], sizeof g.selected);
-                }
+                else order_key(&g, k, ctrl, &hd);
             } else if (e.type == SDL_MOUSEBUTTONDOWN) {
-                if (e.button.button == SDL_BUTTON_LEFT) {
+                if (e.button.button == SDL_BUTTON_LEFT && hud_over(&hd, (float)e.button.x, (float)e.button.y)) {
+                    hd.click = 1;
+                    hd.click_x = (float)e.button.x;
+                    hd.click_y = (float)e.button.y;
+                } else if (e.button.button == SDL_BUTTON_LEFT) {
                     g.box.x0 = g.box.x1 = e.button.x;
                     g.box.y0 = g.box.y1 = e.button.y;
                     g.box.active = 1;
@@ -468,6 +494,8 @@ int main(int argc, char **argv)
         }
         renderer_draw(r, &g.cam, w, h, &g.w, g.paused ? 1.0f : (float)(acc / SIM_DT),
                       g.selected, &g.box, (float)sim_time);
+        int key = hud_draw(&hd, r, &g.w, g.selected, w, h, (float)sim_time);
+        if (key) order_key(&g, key, 0, &hd);
         if (shot && ++frame >= frames) {
             save_ppm(shot, w, h);
             running = 0;
