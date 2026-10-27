@@ -141,7 +141,7 @@ static float deck_at(const ship_class *c, float z, float L, float B)
     return B * f.freeboard * (1 + f.sheer * fmaxf(u, 0) * fmaxf(u, 0) + 0.15f * fmaxf(-u, 0) * fmaxf(-u, 0));
 }
 
-static void submarine(gen_model *m, float L, float B)
+static void submarine(gen_model *m, float L, float B, float zt)   /* zt: conning tower centre */
 {
     /* A cigar: round sections, mostly awash; a conning tower amidships forward. */
     enum { S = 32, K = 10 };
@@ -155,8 +155,70 @@ static void submarine(gen_model *m, float L, float B)
             float p2[3] = {cosf(a1) * r1, yc + sinf(a1) * r1, u1 * L}, p3[3] = {cosf(a1) * r0, yc + sinf(a1) * r0, u0 * L};
             quad(&m->part[sinf((a0 + a1) / 2) < -0.2f ? P_BOOT : P_HULL], p0, p1, p2, p3);
         }
-    box(&m->part[P_HULL], -0.3f * B, 0.3f * B, 0.05f * L, 0.3f * B, 1.5f * B, 0.3f * L);
-    box(&m->part[P_DARK], -0.05f * B, 1.5f * B, 0.15f * L, 0.05f * B, 2.4f * B, 0.17f * L);   /* periscopes */
+    box(&m->part[P_HULL], -0.3f * B, 0.3f * B, zt - 0.125f * L, 0.3f * B, 1.5f * B, zt + 0.125f * L);
+    box(&m->part[P_DARK], -0.05f * B, 1.5f * B, zt - 0.025f * L, 0.05f * B, 2.4f * B, zt - 0.005f * L);   /* periscopes */
+}
+
+/* The real ship's layout (standalone classes): each feature where her profile has it. */
+static void from_plan(gen_model *m, const ship_class *c, float L, float B)
+{
+    const ship_plan *pl = &c->plan;
+    gen_part *up = &m->part[P_UPPER], *dark = &m->part[P_DARK];
+    int h = c->hull_type;
+    if (h == 1) {                                        /* carrier: flight deck, island to starboard */
+        float fd = deck_at(c, 0, L, B) + 0.45f * B;
+        box(&m->part[P_DECK], -1.2f * B, fd - 0.15f * B, -0.97f * L, 1.2f * B, fd, 0.98f * L);
+        box(up, -1.2f * B, deck_at(c, 0, L, B), -0.9f * L, 1.2f * B, fd - 0.15f * B, 0.9f * L);
+        float z0 = pl->island_z0, z1 = pl->island_z1;
+        if (z1 <= z0) { z0 = -0.05f * L; z1 = 0.18f * L; }
+        box(up, 0.85f * B, fd, z0, 1.15f * B, fd + 1.0f * B, z1);
+        box(up, 0.9f * B, fd + 1.0f * B, z0 + 0.25f * (z1 - z0), 1.12f * B, fd + 1.45f * B, z1 - 0.15f * (z1 - z0));
+        for (int k = 0; k < pl->funnels; k++)            /* the funnel trunked into the island */
+            box(up, 0.88f * B, fd + 0.6f * B, pl->funnel_z[k] - 0.035f * L, 1.13f * B, fd + pl->funnel_h[k], pl->funnel_z[k] + 0.035f * L);
+        if (pl->mast_h > 0)
+            box(dark, 0.98f * B, fd, pl->mast_z - 0.004f * L, 1.02f * B, fd + pl->mast_h, pl->mast_z + 0.004f * L);
+        return;
+    }
+    float d0 = deck_at(c, 0, L, B), th = pl->tower_h, zt = pl->tower_z;
+    if (th > 0) {
+        if (pl->tower == TOWER_PAGODA) {
+            /* Many stepped platforms, each narrower, on a tall core (Japanese style). */
+            box(up, -0.35f * B, d0, zt - 0.03f * L, 0.35f * B, d0 + th, zt + 0.03f * L);
+            for (int lv = 0; lv < 7; lv++) {
+                float y = d0 + th * (0.15f + 0.12f * (float)lv), w = B * (0.9f - 0.09f * (float)lv), l = L * (0.08f - 0.007f * (float)lv);
+                box(up, -w, y, zt - l / 2, w, y + th * 0.05f, zt + l / 2);
+            }
+            box(up, -0.5f * B, d0 + th * 0.97f, zt - 0.02f * L, 0.5f * B, d0 + th * 1.05f, zt + 0.02f * L);   /* rangefinder */
+        } else {
+            /* Bridge block, then a narrower fire-control tower on top. */
+            int lv_n = th > 15 ? 4 : th > 6 ? 3 : 2;
+            float base = th * (lv_n == 4 ? 0.45f : 0.75f);
+            for (int lv = 0; lv < lv_n; lv++) {
+                float w = B * (0.8f - 0.12f * (float)lv), y0 = d0 + base * (float)lv / (float)lv_n, y1 = d0 + base * (float)(lv + 1) / (float)lv_n;
+                float len = L * (0.11f - 0.015f * (float)lv) * (h == 13 ? 1.6f : 1);
+                box(up, -w, y0, zt - len * 0.7f, w, y1, zt + len * 0.3f);
+            }
+            if (lv_n == 4) {
+                box(up, -0.32f * B, d0 + base, zt - 0.03f * L, 0.32f * B, d0 + th * 0.8f, zt + 0.025f * L);
+                box(up, -0.22f * B, d0 + th * 0.8f, zt - 0.02f * L, 0.22f * B, d0 + th * 0.92f, zt + 0.015f * L);
+                box(up, -0.55f * B, d0 + th * 0.92f, zt - 0.02f * L, 0.55f * B, d0 + th, zt + 0.02f * L);   /* director */
+            }
+        }
+        if (h != 13)                                     /* foremast */
+            box(dark, -0.03f * B, d0 + th, zt - 0.004f * L, 0.03f * B, d0 + th * 1.35f + 2, zt + 0.004f * L);
+    }
+    for (int k = 0; k < pl->funnels; k++) {
+        float rx = B * (is_big(h) ? 0.3f : 0.24f), rz = L * (is_big(h) ? 0.04f : 0.035f), top = d0 + pl->funnel_h[k];
+        prism(up, 0, pl->funnel_z[k], rx, rz, d0, top, 10);
+        prism(dark, 0, pl->funnel_z[k], rx * 1.02f, rz * 1.02f, top, top + 0.12f * B, 10);
+    }
+    if (pl->aft_h > 0) {
+        box(up, -0.65f * B, d0, pl->aft_z0, 0.65f * B, d0 + pl->aft_h, pl->aft_z1);
+        box(up, -0.35f * B, d0 + pl->aft_h, pl->aft_z0 + 0.3f * (pl->aft_z1 - pl->aft_z0), 0.35f * B, d0 + pl->aft_h * 1.5f,
+            pl->aft_z1 - 0.2f * (pl->aft_z1 - pl->aft_z0));
+    }
+    if (pl->mast_h > 0)
+        box(dark, -0.035f * B, d0, pl->mast_z - 0.005f * L, 0.035f * B, d0 + pl->mast_h, pl->mast_z + 0.005f * L);
 }
 
 void genship_build(const ship_class *c, gen_model *out)
@@ -166,8 +228,12 @@ void genship_build(const ship_class *c, gen_model *out)
     for (int p = 0; p < P_COUNT; p++) memcpy(out->part[p].color, COLOURS[p], sizeof COLOURS[p]);
     float L = c->half_length > 1 ? c->half_length : 60, B = c->half_beam > 0.5f ? c->half_beam : L / 8;
     int h = c->hull_type;
-    if (c->submerged) { submarine(out, L, B); return; }
+    if (c->submerged) {
+        submarine(out, L, B, c->plan.has && c->plan.tower_h > 0 ? c->plan.tower_z : 0.175f * L);
+        return;
+    }
     hull(out, c, L, B);
+    if (c->plan.has) { from_plan(out, c, L, B); return; }
     /* Where the guns are: the superstructure goes between the fore and aft groups. */
     float fore = L * 0.45f, aft = -L * 0.45f;
     int nf = 0, na = 0;

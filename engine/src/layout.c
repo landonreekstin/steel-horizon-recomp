@@ -288,6 +288,45 @@ static void add_weapon(ship_class *c, jnode *guns, const char *name, weapon_kind
             : t && (t[2] == 0 || t[2] == ' ') ? AMMO_TORPEDO : AMMO_SHELL;
 }
 
+/* "plan": positions as fractions of the length from the bow, heights in metres above
+ * the deck. Returns the turret positions (model z) in tz, or 0 if none are given. */
+static int load_plan(ship_class *c, const jnode *j, float scale, float *tz, int max_t)
+{
+    const jnode *p = json_get(j, "plan");
+    if (!p) return 0;
+    float L = c->half_length;
+#define AT(f) (L * (1 - 2 * (float)(f)))
+    ship_plan *pl = &c->plan;
+    pl->has = 1;
+    const jnode *t = json_get(p, "tower");
+    if (t && json_len(t) >= 2) {
+        pl->tower_z = AT(t->child->num);
+        pl->tower_h = (float)t->child->next->num * scale;
+        const jnode *st = t->child->next->next;
+        pl->tower = st && st->str && !strcmp(st->str, "pagoda") ? TOWER_PAGODA
+                  : st && st->str && !strcmp(st->str, "tripod") ? TOWER_TRIPOD : TOWER_BLOCK;
+    }
+    for (const jnode *f = json_get(p, "funnels") ? json_get(p, "funnels")->child : NULL; f && pl->funnels < PLAN_FUNNELS; f = f->next)
+        if (json_len(f) >= 2) {
+            pl->funnel_z[pl->funnels] = AT(f->child->num);
+            pl->funnel_h[pl->funnels++] = (float)f->child->next->num * scale;
+        }
+    const jnode *a = json_get(p, "aft");
+    if (a && json_len(a) >= 3) {
+        pl->aft_z0 = AT(a->child->next->num);
+        pl->aft_z1 = AT(a->child->num);
+        pl->aft_h = (float)a->child->next->next->num * scale;
+    }
+    const jnode *m = json_get(p, "mast");
+    if (m && json_len(m) >= 2) { pl->mast_z = AT(m->child->num); pl->mast_h = (float)m->child->next->num * scale; }
+    const jnode *is = json_get(p, "island");
+    if (is && json_len(is) >= 2) { pl->island_z0 = AT(is->child->next->num); pl->island_z1 = AT(is->child->num); }
+    int n = 0;
+    for (const jnode *e = json_get(p, "turrets") ? json_get(p, "turrets")->child : NULL; e && n < max_t; e = e->next) tz[n++] = AT(e->num);
+#undef AT
+    return n;
+}
+
 int classes_load_standalone(const char *path, class_table *out)
 {
     memset(out, 0, sizeof *out);
@@ -332,17 +371,23 @@ int classes_load_standalone(const char *path, class_table *out)
         if (c->aa_damage > 0) add_weapon(c, guns, "AA", WK_AIR, 1);
         float L = c->half_length, B = c->half_beam, deck = B * 0.6f;
         int carrier = c->hull_type == 1;
+        /* The real ship's turret positions when the plan gives them (bow to stern: fore
+         * first, then aft), else evenly spaced. */
+        float tz[16];
+        int planned = load_plan(c, j, scale, tz, 16) == nf + na;
         /* Superfiring turrets fore and aft (carriers' guns sit in the gallery, undrawn). */
         for (int k = 0; main_gun && k < nf; k++) {
             char nm[16];
             snprintf(nm, sizeof nm, carrier ? "" : "F%d", k + 1);
-            add_mount(c, nm, carrier ? B : 0, deck + (float)k * 3, L * (0.62f - 0.15f * (float)k), 0, 150 * DEG, wmain_f);
+            add_mount(c, nm, carrier ? B : 0, deck + (float)k * 3, planned ? tz[k] : L * (0.62f - 0.15f * (float)k), 0,
+                      150 * DEG, wmain_f);
         }
         for (int k = 0; main_gun && k < na; k++) {
             char nm[16];
             snprintf(nm, sizeof nm, carrier ? "" : "R%d", k + 1);
-            add_mount(c, nm, carrier ? -B : 0, deck + (float)(na - 1 - k) * 3, -L * (0.68f - 0.15f * (float)(na - 1 - k)),
-                      PI_F, 150 * DEG, wmain_a);
+            /* R1 is the one nearest amidships: superfiring over the others. */
+            add_mount(c, nm, carrier ? -B : 0, deck + (float)(na - 1 - k) * 3,
+                      planned ? tz[nf + k] : -L * (0.68f - 0.15f * (float)(na - 1 - k)), PI_F, 150 * DEG, wmain_a);
         }
         if (wsec >= 0) {
             add_mount(c, "", -B, deck, 0, -PI_F / 2, 80 * DEG, wsec);

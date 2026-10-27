@@ -35,7 +35,7 @@ Full plan: `~/.claude/plans/i-want-to-recompile-snoopy-pearl.md`. Status per pha
   step toward not needing the ISO.
 - Standalone mode (`--standalone`, or automatic without game data): our own ship table
   of 26 historical classes, generated models and aircraft; the game runs with no game
-  files at all. Still to do: per-class models from real ship plans, our own sounds.
+  files at all. Each standalone class now has a "plan" read off published profile drawings (turret, tower, funnel, mast, aft-superstructure and island positions; approximate), and genship.c builds her from it. Still to do: our own sounds.
 
 ## Next
 

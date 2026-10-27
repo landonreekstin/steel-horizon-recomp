@@ -43,6 +43,21 @@ typedef struct {
     int mount;              /* MOD_TURRET: the mount it is; MOD_MAGAZINE: -1 */
 } module_def;
 
+/* Standalone classes: where the real ship's features stand (engine/data/standalone.json
+ * "plan"). Positions are model z (+ bow); heights above the deck; world units. */
+#define PLAN_FUNNELS 4
+typedef enum { TOWER_BLOCK, TOWER_PAGODA, TOWER_TRIPOD } tower_style;
+typedef struct {
+    int has;
+    float tower_z, tower_h;
+    tower_style tower;
+    int funnels;
+    float funnel_z[PLAN_FUNNELS], funnel_h[PLAN_FUNNELS];
+    float aft_z0, aft_z1, aft_h;    /* after superstructure; aft_h 0 = none */
+    float mast_z, mast_h;           /* mainmast; mast_h 0 = none */
+    float island_z0, island_z1;     /* carriers */
+} ship_plan;
+
 typedef struct {
     char name[48];          /* e.g. "AmericanBattleship" */
     char nation[16];
@@ -65,6 +80,7 @@ typedef struct {
     float reserve_buoyancy;         /* fraction of the hull that can flood before she sinks */
     int dc_crews;                   /* damage-control teams */
     float complement;               /* crew aboard at the start (design: typical WWII figures) */
+    ship_plan plan;                 /* standalone only: the real ship's layout */
 } ship_class;
 
 typedef struct {
