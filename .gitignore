@@ -1,0 +1,10 @@
+# Original binaries are other people's code: analyse them, never commit them.
+target/
+# Build output
+build/
+recomp/build/
+*.o
+*.obj
+.direnv/
+assets/
+__pycache__/
