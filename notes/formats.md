@@ -64,3 +64,18 @@ data but not yet confirmed in BOOT.BIN code.
   gun models have `firepoint` (muzzle).
 
 ## .pfn — text list of the texture names a model uses (one per line).
+
+## Sound banks (`sound/banks/*.bnk`, "SBlk") — `tools/bnk.py`, `engine/src/asset.c`
+- Header u32 words: `3, 2, 0x18, …, data_offset (word [4]), data_size`; "SBlk" block at
+  0x18. game.bnk: 415 samples, data at 0x6b30 (4.0 MB); frontend.bnk the menu sounds.
+- Table of 24-byte entries from the first f32 85.21 (`00 6e aa 42`):
+  `f32 85.21, u32 0, u32 0x80ff0000, u32 flags (0x9fc0 / 0x409fc0), u32 offset, u32 size`;
+  offsets relative to the data, sizes include one end-flagged pad frame.
+- Names follow, one per entry in order, in 40-byte records, cut at 15 characters
+  ("ENORMCANNSHT1_W").
+- Data: standard PSP/PS2 ADPCM (16-byte frames: predictor<<4|shift, flags, 28 nibbles;
+  the usual five filter pairs). All 262,252 frames parse; flag bit 0 ends a sample.
+- **Sample rate is not in the table.** Taken as 44.1 kHz: the voice lines' pitch comes
+  out at 133–164 Hz (male) at 44.1 kHz, 67 Hz at 22.05 kHz. Unconfirmed by ear yet
+  (samples on the NAS under `steel-horizon/sound-check/`).
+- Music (`sound/music/*.at3`) is ATRAC3 in RIFF; not decoded (no decoder on hand).
