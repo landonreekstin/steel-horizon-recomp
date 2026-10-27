@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EXE = os.path.join(ROOT, "engine", "build", "shrts")
@@ -46,6 +47,34 @@ def run(assets, port, perturb=None):
     return results
 
 
+def rejoin(assets, port):
+    """A client drops out mid-battle and comes back: it replays the history and must
+    end up with the same battle as everyone else."""
+    common = ["--assets", assets, "--headless", "3000", "--bot"]
+    host = subprocess.Popen([EXE, "--host", str(port), "--players", "3", "--teams", "0,1,0", "--scenario", "fleet",
+                             "--name", "host"] + common, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    if "hosting on port" not in host.stdout.readline():
+        return None
+    p1 = subprocess.Popen([EXE, "--join", f"127.0.0.1:{port}", "--name", "p1"] + common,
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    p2 = subprocess.Popen([EXE, "--join", f"127.0.0.1:{port}", "--name", "p2"] + common,
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    time.sleep(1.5)
+    p2.kill()                                   # connection lost mid-battle
+    p2.wait()
+    p2 = subprocess.Popen([EXE, "--join", f"127.0.0.1:{port}", "--name", "p2"] + common,
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    outs = [x.communicate(timeout=900)[0] for x in (host, p1, p2)]
+    res = []
+    for out in outs:
+        m = re.findall(r"final tick (\d+) checksum ([0-9a-f]+)", out)
+        if not m:
+            print("FAIL rejoin: no result from a peer:\n" + out[-1500:])
+            return None
+        res.append(m[-1])
+    return res
+
+
 def main(assets):
     fails = 0
     port = 47000 + os.getpid() % 1000
@@ -65,6 +94,11 @@ def main(assets):
     print("perturbed client:", r)
     if r[0][2] == "-1":
         print("FAIL host missed the desync")
+        fails += 1
+    r = rejoin(assets, port + 2)
+    print("rejoined client:", r)
+    if r is None or len({x[1] for x in r}) != 1:
+        print("FAIL the rejoined client's battle differs")
         fails += 1
     print(f"{fails} failures")
     return 1 if fails else 0

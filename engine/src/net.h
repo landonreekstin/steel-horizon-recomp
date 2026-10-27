@@ -60,6 +60,7 @@ void net_send_command(net *n, const command *c);
 /* Host: close turn k with the commands received so far, and send it. */
 void net_make_turn(net *n, long turn);
 int net_have_turn(const net *n, long turn);
+long net_latest_turn(const net *n);   /* highest turn received / made */
 int net_turn_commands(const net *n, long turn, command *out, int max);
 /* After applying turn k: report our state checksum (and free the turn's slot). */
 void net_done_turn(net *n, long turn, uint32_t checksum);

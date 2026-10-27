@@ -940,6 +940,9 @@ int main(int argc, char **argv)
         if (!g.paused) {
             acc += dt * g.time_scale;
             if (g.net && net_poll(g.net)) { fprintf(stderr, "lost the connection\n"); running = 0; }
+            /* Rejoined (or far behind): replay the history as fast as it goes. */
+            for (int k = 0; g.net && k < 6000 && net_latest_turn(g.net) * NET_TURN > g.w.tick + 60; k++)
+                if (!mp_step(&g)) break;
             while (acc >= SIM_DT) {
                 if (!mp_step(&g)) { acc = SIM_DT; break; }     /* waiting for the next turn */
                 acc -= SIM_DT;

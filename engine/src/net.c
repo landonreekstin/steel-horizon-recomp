@@ -18,7 +18,7 @@ enum { M_HELLO = 1, M_WELCOME, M_START, M_CMD, M_TURN, M_ACK, M_CHAT };
 #define CHAT_LINE 96
 #define CHAT_KEEP 16
 
-#define RING 1024              /* turns buffered */
+#define RING 1024              /* turns tracked for checksum comparison */
 #define LAG_LIMIT 8            /* host waits for a peer more than this many turns behind */
 #define BUF 65536
 
@@ -27,12 +27,11 @@ typedef struct {
     unsigned char in[BUF];
     size_t in_len;
     long acked;                /* latest turn this peer finished */
+    int catching_up;           /* rejoined: replaying history, not waited for */
 } conn;
 
 typedef struct {
-    long turn;                 /* which turn is in this slot, -1 none */
-    int count;
-    command cmds[NET_MAX_TURN_CMDS];
+    long turn;                 /* which turn's checksums are in this slot, -1 none */
     uint32_t sum[MAX_PLAYERS];
     unsigned acked_mask;
 } turn_slot;
@@ -47,6 +46,11 @@ struct net {
     command pending[NET_MAX_TURN_CMDS * 4];
     int pending_count;
     turn_slot ring[RING];
+    /* Every turn's commands, from turn 0: a rejoining player replays them all. */
+    command *hist;
+    int *hist_off, *hist_len;
+    long hist_turns, hist_cap;
+    int hist_cmds, hist_cmd_cap;
     long desync;
     char chat[CHAT_KEEP][CHAT_LINE];
     int chat_head, chat_count;
@@ -160,6 +164,9 @@ void net_close(net *n)
     for (int i = 0; i < MAX_PLAYERS; i++)
         if (n->peer[i].fd >= 0) close(n->peer[i].fd);
     if (n->host) close(n->listen_fd);
+    free(n->hist);
+    free(n->hist_off);
+    free(n->hist_len);
     free(n);
 }
 
@@ -168,13 +175,39 @@ int net_is_host(const net *n) { return n->host; }
 int net_player(const net *n) { return n->player; }
 int net_lobby_full(const net *n) { return n->host && n->joined == n->players; }
 
+/* Append turn `turn` to the history (turns arrive in order; the first NET_DELAY are
+ * empty by design and filled in here). */
 static void store_turn(net *n, long turn, const command *cmds, int count)
 {
-    turn_slot *s = slot(n, turn);
-    s->turn = turn;
-    s->count = count > NET_MAX_TURN_CMDS ? NET_MAX_TURN_CMDS : count;
-    memcpy(s->cmds, cmds, sizeof(command) * (size_t)s->count);
-    s->acked_mask = 0;
+    if (turn < n->hist_turns) return;                  /* already have it */
+    while (n->hist_turns <= turn) {
+        if (n->hist_turns == n->hist_cap) {
+            n->hist_cap = n->hist_cap ? n->hist_cap * 2 : 4096;
+            n->hist_off = realloc(n->hist_off, sizeof(int) * (size_t)n->hist_cap);
+            n->hist_len = realloc(n->hist_len, sizeof(int) * (size_t)n->hist_cap);
+        }
+        int c = n->hist_turns == turn ? (count > NET_MAX_TURN_CMDS ? NET_MAX_TURN_CMDS : count) : 0;
+        if (n->hist_cmds + c > n->hist_cmd_cap) {
+            n->hist_cmd_cap = (n->hist_cmds + c) * 2 + 256;
+            n->hist = realloc(n->hist, sizeof(command) * (size_t)n->hist_cmd_cap);
+        }
+        n->hist_off[n->hist_turns] = n->hist_cmds;
+        n->hist_len[n->hist_turns] = c;
+        if (c) memcpy(n->hist + n->hist_cmds, cmds, sizeof(command) * (size_t)c);
+        n->hist_cmds += c;
+        n->hist_turns++;
+    }
+}
+
+static void send_turn(net *n, int fd, long turn)
+{
+    unsigned char buf[10 + NET_MAX_TURN_CMDS * sizeof(command)];
+    int64_t t64 = turn;
+    uint16_t c16 = (uint16_t)n->hist_len[turn];
+    memcpy(buf, &t64, 8);
+    memcpy(buf + 8, &c16, 2);
+    memcpy(buf + 10, n->hist + n->hist_off[turn], sizeof(command) * (size_t)c16);
+    send_msg(fd, M_TURN, buf, 10 + (uint32_t)(c16 * sizeof(command)));
 }
 
 static void handle(net *n, int from, int type, const unsigned char *p, uint32_t len)
@@ -186,6 +219,14 @@ static void handle(net *n, int from, int type, const unsigned char *p, uint32_t 
             n->names[from][23] = 0;
             unsigned char wl[2] = {(unsigned char)from, (unsigned char)n->players};
             send_msg(n->peer[from].fd, M_WELCOME, wl, 2);
+            if (n->started) {                          /* rejoining: the game and its whole history */
+                send_msg(n->peer[from].fd, M_START, &n->game, sizeof n->game);
+                for (long t = 0; t < n->hist_turns; t++) send_turn(n, n->peer[from].fd, t);
+                char line[CHAT_LINE];
+                snprintf(line, sizeof line, "%.20s rejoined", n->names[from]);
+                chat_store(n, line);
+                for (int q = 1; q < n->players; q++) send_msg(n->peer[q].fd, M_CHAT, line, (uint32_t)strlen(line));
+            }
         }
         break;
     case M_WELCOME:
@@ -220,7 +261,9 @@ static void handle(net *n, int from, int type, const unsigned char *p, uint32_t 
             memcpy(&t64, p, 8);
             memcpy(&sum, p + 8, 4);
             n->peer[from].acked = (long)t64;
+            if (n->peer[from].catching_up && (long)t64 >= n->hist_turns - 1 - LAG_LIMIT / 2) n->peer[from].catching_up = 0;
             turn_slot *s = slot(n, (long)t64);
+            if (s->turn != (long)t64 && (long)t64 > s->turn) { s->turn = (long)t64; s->acked_mask = 0; }
             if (s->turn == (long)t64) {
                 s->sum[from] = sum;
                 s->acked_mask |= 1u << from;
@@ -298,18 +341,27 @@ int net_poll(net *n)
     if (n->host) {
         int fd;
         while ((fd = accept(n->listen_fd, NULL, NULL)) >= 0) {
-            if (n->joined == n->players || n->started) { close(fd); continue; }
+            int p = -1;
+            if (!n->started && n->joined < n->players) p = n->joined++;
+            else if (n->started)                       /* a dropped player coming back */
+                for (int q = 1; q < n->players && p < 0; q++)
+                    if (n->peer[q].fd < 0) p = q;
+            if (p < 0) { close(fd); continue; }
             nonblock(fd);
-            int p = n->joined++;
             n->peer[p].fd = fd;
             n->peer[p].in_len = 0;
             n->peer[p].acked = -1;
+            n->peer[p].catching_up = n->started;
         }
         for (int p = 1; p < n->joined; p++)
             if (n->peer[p].fd >= 0 && read_conn(n, p)) {
                 fprintf(stderr, "player %d (%s) disconnected\n", p, n->names[p]);
                 close(n->peer[p].fd);
                 n->peer[p].fd = -1;
+                char line[CHAT_LINE];
+                snprintf(line, sizeof line, "%.20s lost connection (can rejoin)", n->names[p]);
+                chat_store(n, line);
+                for (int q = 1; q < n->players; q++) send_msg(n->peer[q].fd, M_CHAT, line, (uint32_t)strlen(line));
             }
         return 0;
     }
@@ -362,36 +414,30 @@ void net_send_command(net *n, const command *c)
 
 void net_make_turn(net *n, long turn)
 {
-    if (!n->host || slot(n, turn)->turn == turn) return;
+    if (!n->host || turn < n->hist_turns) return;
     int cnt = n->pending_count > NET_MAX_TURN_CMDS ? NET_MAX_TURN_CMDS : n->pending_count;
     store_turn(n, turn, n->pending, cnt);
     memmove(n->pending, n->pending + cnt, sizeof(command) * (size_t)(n->pending_count - cnt));
     n->pending_count -= cnt;
-    unsigned char buf[10 + NET_MAX_TURN_CMDS * sizeof(command)];
-    int64_t t64 = turn;
-    uint16_t c16 = (uint16_t)cnt;
-    memcpy(buf, &t64, 8);
-    memcpy(buf + 8, &c16, 2);
-    memcpy(buf + 10, slot(n, turn)->cmds, sizeof(command) * (size_t)cnt);
-    for (int p = 1; p < n->players; p++) send_msg(n->peer[p].fd, M_TURN, buf, 10 + (uint32_t)(cnt * sizeof(command)));
+    for (int p = 1; p < n->players; p++) send_turn(n, n->peer[p].fd, turn);
 }
+
+long net_latest_turn(const net *n) { return n->hist_turns - 1; }
 
 int net_have_turn(const net *n, long turn)
 {
     if (turn < NET_DELAY) return 1;                    /* the first turns are empty by design */
     if (n->host)                                       /* don't run away from slow peers */
         for (int p = 1; p < n->players; p++)
-            if (n->peer[p].fd >= 0 && n->peer[p].acked < turn - LAG_LIMIT) return 0;
-    return n->ring[((turn % RING) + RING) % RING].turn == turn;
+            if (n->peer[p].fd >= 0 && !n->peer[p].catching_up && n->peer[p].acked < turn - LAG_LIMIT) return 0;
+    return turn < n->hist_turns;
 }
 
 int net_turn_commands(const net *n, long turn, command *out, int max)
 {
-    if (turn < NET_DELAY) return 0;
-    const turn_slot *s = &n->ring[((turn % RING) + RING) % RING];
-    if (s->turn != turn) return 0;
-    int k = s->count < max ? s->count : max;
-    memcpy(out, s->cmds, sizeof(command) * (size_t)k);
+    if (turn < NET_DELAY || turn >= n->hist_turns) return 0;
+    int k = n->hist_len[turn] < max ? n->hist_len[turn] : max;
+    memcpy(out, n->hist + n->hist_off[turn], sizeof(command) * (size_t)k);
     return k;
 }
 
@@ -399,9 +445,8 @@ void net_done_turn(net *n, long turn, uint32_t checksum)
 {
     if (n->host) {
         turn_slot *s = slot(n, turn);
-        if (s->turn != turn) {                         /* an empty early turn: track it anyway */
+        if (s->turn != turn) {                         /* first report for this turn */
             s->turn = turn;
-            s->count = 0;
             s->acked_mask = 0;
         }
         s->sum[0] = checksum;
