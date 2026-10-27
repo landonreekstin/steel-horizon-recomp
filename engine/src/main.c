@@ -9,6 +9,8 @@
  * RMB move (Shift queues waypoints), RMB on an enemy: focus fire (Ctrl: secondaries
  * only), H hold fire, F fire at will, S stop, Ctrl+1..9 set group, 1..9 select group,
  * carriers: B air strike on the focus target (or nearest), G fighter patrol, R recall,
+ * damage control: P crew priority (auto/fires/flooding/weapons), X counter-flood,
+ * M flood magazines,
  * W/A/D + arrows pan, Q/E rotate, wheel zoom, MMB drag orbit, Space pause,
  * +/- time compression (x1..x4), F12 screenshot, Esc quit. */
 #include <stdio.h>
@@ -193,6 +195,16 @@ static void print_state(const world *w)
         printf("ship %2d %-26s side %d pos %7.0f %7.0f hdg %6.1f spd %5.2f hp %5.0f/%-5.0f %s\n", i,
                s->cls->name, s->side, s->x, s->z, s->heading * 180 / PI_F, s->speed,
                s->hp, s->cls->max_health, s->alive ? "" : "SUNK");
+        if (s->alive) {
+            float st = 0;
+            int fires = 0, dead_turrets = 0, turrets = 0;
+            for (int k = 0; k < s->cls->comp_count; k++) { st += s->comp[k].structure; fires += s->comp[k].fire > 0; }
+            for (int m = 0; m < s->cls->module_count; m++)
+                if (s->cls->modules[m].kind == MOD_TURRET) { turrets++; dead_turrets += s->module_hp[m] <= 0; }
+            printf("      structure %.2f water %.2f list %.0f deg fires %d turrets out %d/%d engines %.2f%s\n",
+                   st / (float)s->cls->comp_count, s->water, s->list * 180 / PI_F, fires, dead_turrets, turrets,
+                   module_health(s, MOD_ENGINE, -1), s->jammed ? " rudder jammed" : "");
+        }
         if (is_carrier(s)) {
             static const char *names[] = {"hangar", "out", "attack", "return", "deck", "falling", "lost"};
             for (int type = 0; type < 2; type++) {
@@ -252,15 +264,20 @@ int main(int argc, char **argv)
             for (int i = 0; i < g.w.count; i++)
                 if (!g.w.ships[i].alive && !sunk_seen[i]) {
                     sunk_seen[i] = 1;
-                    printf("t=%6.1f s  sunk: ship %d %s\n", (double)t / SIM_HZ, i, g.w.ships[i].cls->name);
+                    static const char *why[] = {"?", "flooded", "capsized", "magazine exploded", "structure failed"};
+                    const ship *sk = &g.w.ships[i];
+                    printf("t=%6.1f s  sunk: ship %d %s (%s, water %.2f, list %.0f deg)\n", (double)t / SIM_HZ, i,
+                           sk->cls->name, why[sk->cause], sk->water, sk->list * 180 / PI_F);
                 }
         }
         printf("after %.1f s (%d ticks): winner %d, %d shells fired, %d hit (%.1f%%), "
                "%d torpedoes %d hit, %d depth-charge hits\n"
-               "  air: %d bombs %d hit, planes lost to AA %d, to fighters %d, ditched %d\n",
+               "  air: %d bombs %d hit, planes lost to AA %d, to fighters %d, ditched %d\n"
+               "  damage: %d penetrations, %d bounced, %d fires, %d magazine explosions\n",
                (double)t / SIM_HZ, t, world_winner(&g.w), g.w.shots, g.w.hits,
                g.w.shots ? 100.0 * g.w.hits / g.w.shots : 0.0, g.w.torps, g.w.torp_hits, g.w.dc_hits,
-               g.w.bombs, g.w.bomb_hits, g.w.planes_lost_aa, g.w.planes_lost_fighters, g.w.planes_ditched);
+               g.w.bombs, g.w.bomb_hits, g.w.planes_lost_aa, g.w.planes_lost_fighters, g.w.planes_ditched,
+               g.w.penetrations, g.w.ricochets, g.w.fires_started, g.w.magazine_explosions);
         print_state(&g.w);
         return 0;
     }
@@ -356,6 +373,14 @@ int main(int argc, char **argv)
                         else if (k == SDLK_g) order_cap(&g.w, ids[q]);
                         else order_recall(&g.w, ids[q]);
                     }
+                } else if (k == SDLK_p || k == SDLK_x || k == SDLK_m) {
+                    /* Damage control: P cycles crew priority, X counter-floods, M floods
+                     * the magazines (no more cook-offs, but those turrets fall silent). */
+                    int ids[MAX_SHIPS], n = selected_ids(&g, ids);
+                    if (k == SDLK_p && n)
+                        order_dc_policy(&g.w, ids, n, (dc_policy)((g.w.ships[ids[0]].policy + 1) % DC_POLICIES));
+                    else if (k == SDLK_x) order_counter_flood(&g.w, ids, n);
+                    else if (k == SDLK_m) order_flood_magazines(&g.w, ids, n);
                 } else if (k == SDLK_h || k == SDLK_f) {
                     /* H toggles hold fire; F: fire at will (drop focus targets). */
                     int ids[MAX_SHIPS], n = selected_ids(&g, ids);
@@ -451,16 +476,21 @@ int main(int argc, char **argv)
         char title[256];
         int ids[MAX_SHIPS];
         int win_side = world_winner(&g.w), nsel = selected_ids(&g, ids);
-        char air_info[64] = "";
+        char air_info[64] = "", dc_info[64] = "";
+        static const char *policy_names[] = {"auto", "fires", "flooding", "weapons"};
+        if (nsel) {
+            const ship *s0 = &g.w.ships[ids[0]];
+            snprintf(dc_info, sizeof dc_info, "  |  DC: %s, list %.0f deg", policy_names[s0->policy], s0->list * 180 / PI_F);
+        }
         for (int q = 0; q < nsel; q++)
             if (is_carrier(&g.w.ships[ids[q]])) {
                 snprintf(air_info, sizeof air_info, "  |  hangar: %d fighters %d bombers (B/G/R)",
                          hangar_count(&g.w, ids[q], PLANE_FIGHTER), hangar_count(&g.w, ids[q], PLANE_BOMBER));
                 break;
             }
-        snprintf(title, sizeof title, "Steel Horizon RTS  |  %s x%d  |  %d selected%s%s  |  t=%.0fs%s",
+        snprintf(title, sizeof title, "Steel Horizon RTS  |  %s x%d  |  %d selected%s%s%s  |  t=%.0fs%s",
                  g.paused ? "PAUSED" : "running", g.time_scale, nsel,
-                 nsel && g.w.ships[ids[0]].hold_fire ? " (holding fire)" : "", air_info, sim_time,
+                 nsel && g.w.ships[ids[0]].hold_fire ? " (holding fire)" : "", dc_info, air_info, sim_time,
                  win_side == 0 ? "  |  VICTORY" : win_side == 1 ? "  |  DEFEAT" : "");
         SDL_SetWindowTitle(win, title);
     }

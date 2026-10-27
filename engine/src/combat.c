@@ -111,19 +111,23 @@ void fx(world *w, fx_kind kind, float x, float y, float z)
     w->fx_head = (w->fx_head + 1) % MAX_FX;
 }
 
-void apply_damage(world *w, int j, float dmg)
+/* A mount whose turret is wrecked, or whose magazine is flooded, can't fire. */
+static int mount_ready(const ship *s, int m)
 {
-    ship *t = &w->ships[j];
-    if (!t->alive) return;
-    t->hp = clampf(t->hp - dmg, 0, t->cls->max_health);
-    float f = t->hp / t->cls->max_health;
-    t->stage = f < 1.0f / 3 ? 3 : f < 2.0f / 3 ? 2 : 1;
-    if (t->hp <= 0) {
-        t->alive = 0;
-        t->stage = 3;
-        t->wp_count = 0;
-        fx(w, FX_SINK, t->x, 0, t->z);
+    if (module_health(s, MOD_TURRET, m) <= 0) return 0;
+    const turret_mount *mt = &s->cls->mounts[m];
+    if (mt->bat != BAT_MAIN && mt->bat != BAT_TORPEDO) return 1;
+    for (int q = 0; q < s->cls->module_count; q++) {
+        const module_def *d = &s->cls->modules[q];
+        if (d->kind == MOD_TURRET && d->mount == m) return !s->comp[d->comp].mag_flooded;
     }
+    return 1;
+}
+
+/* Fire-control quality: radar and bridge damage widen the spread. */
+static float fire_control_factor(const ship *s)
+{
+    return (module_health(s, MOD_RADAR, -1) < 0.3f ? 1.4f : 1) * (module_health(s, MOD_BRIDGE, -1) < 0.3f ? 1.2f : 1);
 }
 
 /* ---- targeting --------------------------------------------------------------------- */
@@ -213,7 +217,7 @@ static void fire(world *w, int i, int m, int j, float aim_yaw)
             p->flight = wp->max_range / TORP_SPEED;
             w->torps++;
         }
-        tu->reload = wp->fire_rate * TORP_RELOAD_SCALE;
+        tu->reload = wp->fire_rate * TORP_RELOAD_SCALE * (module_health(s, MOD_TURRET, m) < 0.5f ? 1.8f : 1);
         fx(w, FX_MUZZLE, mx, my, mz);
         return;
     }
@@ -230,14 +234,16 @@ static void fire(world *w, int i, int m, int j, float aim_yaw)
         launch_ballistic(p, mx, my, mz, ax, az, fmaxf(1.5f, d / 150.0f));
     } else {
         float v = shell_speed(wp), T = intercept(mx, mz, t->x, t->z, tvx, tvz, v);
-        float sigma = d * DISPERSION * 85.0f / hit_chance(s->cls->hull_type, t->cls->hull_type, d);
+        float sigma = d * DISPERSION * 85.0f / hit_chance(s->cls->hull_type, t->cls->hull_type, d) * fire_control_factor(s);
         float lead = T * LEAD_ERROR;            /* misjudged target speed, per axis */
         float ax = t->x + tvx * T + gauss(w) * sigma + gauss(w) * lead * t->speed;
         float az = t->z + tvz * T + gauss(w) * sigma + gauss(w) * lead * t->speed;
         launch_ballistic(p, mx, my, mz, ax, az, hypotf(ax - mx, az - mz) / v);
+        p->pen = shell_pen(wp, d);
+        p->plunging = d > 0.55f * wp->max_range;
         w->shots++;
     }
-    tu->reload = fmaxf(2.0f, wp->fire_rate * RELOAD_SCALE);
+    tu->reload = fmaxf(2.0f, wp->fire_rate * RELOAD_SCALE) * (module_health(s, MOD_TURRET, m) < 0.5f ? 1.8f : 1);
     fx(w, FX_MUZZLE, mx, my, mz);
 }
 
@@ -271,10 +277,10 @@ static void fire_control(world *w, int i)
         }
         float cur = wrap_angle(tu->yaw - mt->arc_center);
         float goal = clampf(wrap_angle(want - mt->arc_center), -mt->arc_half, mt->arc_half);
-        float step = traverse_rate(wp) * SIM_DT;
+        float step = traverse_rate(wp) * SIM_DT * (module_health(s, MOD_TURRET, m) < 0.5f ? 0.5f : 1);
         cur += clampf(goal - cur, -step, step);
         tu->yaw = wrap_angle(cur + mt->arc_center);
-        if (tu->target >= 0 && tu->reload <= 0 && fabsf(wrap_angle(want - tu->yaw)) < ON_BEARING)
+        if (tu->target >= 0 && tu->reload <= 0 && fabsf(wrap_angle(want - tu->yaw)) < ON_BEARING && mount_ready(s, m))
             fire(w, i, m, tu->target, tu->yaw);
     }
 }
@@ -293,12 +299,12 @@ static void shell_impact(world *w, projectile *p)
         if (d < bd) { bd = d; best = j; }
     }
     if (best >= 0 && bd <= 0) {
-        apply_damage(w, best, p->damage);
+        damage_hit(w, best, p->ammo == AMMO_BOMB ? HIT_BOMB : HIT_SHELL, x, z, p->damage, p->pen, p->plunging);
         if (p->ammo == AMMO_BOMB) w->bomb_hits++;
         else w->hits++;
         fx(w, FX_HIT, x, 8, z);
     } else if (best >= 0 && bd <= NEAR_MISS) {
-        apply_damage(w, best, p->damage * 0.25f);
+        damage_hit(w, best, HIT_NEAR_MISS, x, z, p->damage, 0, 0);
         fx(w, FX_NEAR_MISS, x, 0, z);
     } else {
         fx(w, FX_SPLASH, x, 0, z);
@@ -324,7 +330,7 @@ static void projectiles_step(world *w)
                 if (j == p->owner || !s->alive || s->cls->submerged) continue;
                 if (s->side == p->side && t < TORP_ARM_S) continue;
                 if (hull_distance(s, x, z) <= 0) {
-                    apply_damage(w, j, p->damage);
+                    damage_hit(w, j, HIT_TORPEDO, x, z, p->damage, 0, 0);
                     w->torp_hits++;
                     fx(w, FX_TORP_HIT, x, 0, z);
                     p->active = 0;
@@ -341,7 +347,7 @@ static void projectiles_step(world *w)
                 for (int j = 0; j < w->count; j++) {
                     const ship *s = &w->ships[j];
                     if (s->alive && s->cls->submerged && s->side != p->side && hull_distance(s, x, z) <= DC_RADIUS) {
-                        apply_damage(w, j, p->damage);
+                        damage_hit(w, j, HIT_DEPTH_CHARGE, s->x, s->z, p->damage, 0, 0);
                         w->dc_hits++;
                     }
                 }

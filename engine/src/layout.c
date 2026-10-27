@@ -91,6 +91,60 @@ static void build_mounts(ship_class *c, const mounts *pts)
     }
 }
 
+static void add_module(ship_class *c, module_kind kind, float z, int mount)
+{
+    if (c->module_count == MAX_MODULES) return;
+    int k = 0;
+    while (k < c->comp_count - 1 && z > c->comp_z[k + 1]) k++;
+    module_def *m = &c->modules[c->module_count++];
+    m->kind = kind;
+    m->comp = k;
+    m->mount = mount;
+}
+
+/* Compartments and modules from the hull size and the weapon mounts (design: the
+ * original has a single HP pool). Armour is in the same units as shell_pen. */
+static void build_damage_layout(ship_class *c)
+{
+    int h = c->hull_type;
+    int capital = h == 2 || h == 3 || h == 14 || h == 17 || h == 20 || h == 21;
+    int small = h == 6 || h == 7 || h == 13 || h == 15 || c->submerged;
+    c->comp_count = capital || h == 1 ? 10 : small ? (h == 13 ? 4 : 6) : 8;
+    float L = c->half_length;
+    for (int k = 0; k <= c->comp_count; k++) c->comp_z[k] = -L + 2 * L * (float)k / (float)c->comp_count;
+    c->module_count = 0;
+    /* Turrets, tubes and racks; a magazine under each main-battery compartment. */
+    int has_mag[MAX_COMPARTMENTS] = {0};
+    for (int m = 0; m < c->mount_count; m++) {
+        add_module(c, MOD_TURRET, c->mounts[m].pos[2], m);
+        const class_weapon *w = &c->weapons[c->mounts[m].weapon];
+        if (c->mounts[m].bat == BAT_MAIN || w->ammo == AMMO_TORPEDO) {
+            int k = c->modules[c->module_count - 1].comp;
+            if (!has_mag[k]) { has_mag[k] = 1; add_module(c, MOD_MAGAZINE, c->mounts[m].pos[2], -1); }
+        }
+    }
+    /* Machinery amidships, steering gear aft, bridge and radar forward of amidships. */
+    add_module(c, MOD_ENGINE, -0.12f * L, -1);
+    add_module(c, MOD_ENGINE, 0.08f * L, -1);
+    add_module(c, MOD_STEERING, -0.92f * L, -1);
+    if (!c->submerged) {
+        add_module(c, MOD_BRIDGE, 0.22f * L, -1);
+        add_module(c, MOD_RADAR, 0.22f * L, -1);
+    }
+    if (c->aa_damage > 0) {
+        add_module(c, MOD_AA, 0.3f * L, -1);
+        add_module(c, MOD_AA, -0.3f * L, -1);
+    }
+    if (h == 1) add_module(c, MOD_FLIGHT_DECK, 0, -1);
+    /* Armour against shell_pen (16in ~3.6 at point blank, 5in ~1.6): a battleship's belt
+     * stops everything below 14in and her own guns beyond ~1,800, where they plunge
+     * onto the thinner deck instead. */
+    c->belt = capital ? (h == 2 ? 2.2f : 2.9f) : h == 1 ? 1.4f : h == 5 ? 1.8f : small ? 0.3f : 0.8f;
+    c->deck = capital ? (h == 2 ? 1.6f : 2.2f) : h == 1 ? 1.2f : h == 5 ? 1.2f : small ? 0.2f : 0.6f;
+    c->reserve_buoyancy = capital ? 0.32f : h == 1 ? 0.30f : small ? 0.24f : 0.27f;
+    c->dc_crews = capital || h == 1 ? 4 : h == 5 ? 3 : small ? (h == 13 ? 1 : 2) : 2;
+}
+
 int classes_load_layouts(class_table *t, const char *files_dir)
 {
     int failed = 0;
@@ -115,6 +169,7 @@ int classes_load_layouts(class_table *t, const char *files_dir)
             }
         }
         build_mounts(c, &pts);
+        build_damage_layout(c);
     }
     return failed;
 }

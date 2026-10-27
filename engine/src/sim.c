@@ -34,6 +34,7 @@ int world_spawn(world *w, const ship_class *cls, int side, float x, float z, flo
     s->hp = cls->max_health;
     s->stage = 1;
     for (int b = 0; b < BATTERIES; b++) s->order_target[b] = -1;
+    damage_init(s);
     for (int m = 0; m < cls->mount_count; m++) {
         s->turrets[m].yaw = cls->mounts[m].arc_center;
         s->turrets[m].target = -1;
@@ -43,9 +44,16 @@ int world_spawn(world *w, const ship_class *cls, int side, float x, float z, flo
     return id;
 }
 
+/* Top speed with machinery damage and the drag of water aboard. */
+static float top_speed(const ship *s)
+{
+    float engines = module_health(s, MOD_ENGINE, -1);
+    return s->max_speed * clampf(engines * 1.25f, 0, 1) * clampf(1 - s->water * 1.5f, 0.2f, 1);
+}
+
 static void steer(ship *s)
 {
-    float target_speed = 0, rudder_target = 0;
+    float target_speed = 0, rudder_target = 0, vmax = top_speed(s);
     while (s->wp_count) {
         float dx = s->wp[0].x - s->x, dz = s->wp[0].z - s->z;
         float dist = sqrtf(dx * dx + dz * dz);
@@ -55,23 +63,27 @@ static void steer(ship *s)
         }
         float err = wrap_angle(atan2f(dx, dz) - s->heading);
         rudder_target = clampf(err / RUDDER_GAIN, -1, 1);
-        target_speed = s->max_speed;
+        target_speed = vmax;
         if (s->wp_count == 1) {
             /* Slow down to stop near the last waypoint: v = sqrt(2 a d). */
             float v = sqrtf(2.0f * s->accel * fmaxf(dist - ARRIVE_RADIUS * 0.5f, 0));
-            target_speed = fminf(target_speed, fmaxf(v, s->max_speed * 0.15f));
+            target_speed = fminf(target_speed, fmaxf(v, vmax * 0.15f));
         }
         if (fabsf(err) > PI_F / 2) target_speed *= 0.6f;   /* tighten hard turns */
         break;
     }
-    float dr = clampf(rudder_target - s->rudder, -RUDDER_RATE * SIM_DT, RUDDER_RATE * SIM_DT);
-    s->rudder += dr;
+    /* Steering gear out: the rudder stays where it was. Bridge gone: conned from
+     * the after station, the helm answers at half rate. */
+    float rate = RUDDER_RATE * (module_health(s, MOD_BRIDGE, -1) < 0.3f ? 0.5f : 1);
+    if (!s->jammed) s->rudder += clampf(rudder_target - s->rudder, -rate * SIM_DT, rate * SIM_DT);
     float dv = clampf(target_speed - s->speed, -s->accel * SIM_DT, s->accel * SIM_DT);
     s->speed = fmaxf(0, s->speed + dv);
 }
 
 void world_step(world *w)
 {
+    /* Damage first, so this tick's movement and gunnery see its effects. */
+    for (int i = 0; i < w->count; i++) damage_step(w, i);
     for (int i = 0; i < w->count; i++) {
         ship *s = &w->ships[i];
         s->prev_x = s->x;

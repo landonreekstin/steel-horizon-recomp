@@ -5,6 +5,8 @@
 #define MAX_CLASSES 80
 #define MAX_CLASS_WEAPONS 12
 #define MAX_MOUNTS 16
+#define MAX_COMPARTMENTS 10
+#define MAX_MODULES 32
 
 typedef enum { WK_SURFACE, WK_AIR, WK_SUBMERGED } weapon_kind;
 typedef enum { AMMO_NONE, AMMO_SHELL, AMMO_TORPEDO, AMMO_DC, AMMO_BOMB } ammo_kind;
@@ -28,6 +30,17 @@ typedef struct {
     battery bat;
 } turret_mount;
 
+/* Damage model (src/damage.c): the hull is cut into compartments stern to bow;
+ * modules are the parts that can be knocked out, each sitting in one compartment. */
+typedef enum { MOD_TURRET, MOD_MAGAZINE, MOD_ENGINE, MOD_STEERING, MOD_BRIDGE, MOD_RADAR, MOD_AA,
+               MOD_FLIGHT_DECK, MOD_KINDS } module_kind;
+
+typedef struct {
+    module_kind kind;
+    int comp;               /* compartment index */
+    int mount;              /* MOD_TURRET: the mount it is; MOD_MAGAZINE: -1 */
+} module_def;
+
 typedef struct {
     char name[48];          /* e.g. "AmericanBattleship" */
     char nation[16];
@@ -42,6 +55,13 @@ typedef struct {
     float half_length, half_beam;  /* hull footprint (model bbox), world units */
     int mount_count;
     turret_mount mounts[MAX_MOUNTS];
+    int comp_count;                 /* compartment k spans comp_z[k]..comp_z[k+1] (model z) */
+    float comp_z[MAX_COMPARTMENTS + 1];
+    int module_count;
+    module_def modules[MAX_MODULES];
+    float belt, deck;               /* armour, in shell-penetration units (see damage.c) */
+    float reserve_buoyancy;         /* fraction of the hull that can flood before she sinks */
+    int dc_crews;                   /* damage-control teams */
 } ship_class;
 
 typedef struct {

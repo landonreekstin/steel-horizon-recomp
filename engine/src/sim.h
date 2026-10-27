@@ -35,7 +35,7 @@
 #define REARM_S 40.0f
 
 typedef enum { FX_NONE, FX_MUZZLE, FX_SPLASH, FX_HIT, FX_NEAR_MISS, FX_TORP_HIT, FX_DC_BLAST, FX_SINK,
-               FX_FLAK, FX_AIR_GUN, FX_PLANE_DOWN } fx_kind;
+               FX_FLAK, FX_AIR_GUN, FX_PLANE_DOWN, FX_RICOCHET, FX_MAGAZINE } fx_kind;
 
 typedef enum { PLANE_FIGHTER, PLANE_BOMBER } plane_type;
 typedef enum { AIR_HANGAR, AIR_OUT, AIR_ATTACK, AIR_RETURN, AIR_DECK, AIR_FALLING, AIR_LOST } air_state;
@@ -68,7 +68,22 @@ typedef struct {
     long tick0;
     float flight;                  /* shell/DC: seconds to impact; torpedo: seconds to max range */
     float px, pz;                  /* torpedo: position at the previous tick */
+    float pen;                     /* shell/bomb penetration (shell_pen) */
+    int plunging;                  /* falls on the deck rather than the belt */
 } projectile;
+
+typedef enum { DC_AUTO, DC_FIRES, DC_FLOODING, DC_WEAPONS, DC_POLICIES } dc_policy;
+typedef enum { HIT_SHELL, HIT_NEAR_MISS, HIT_TORPEDO, HIT_BOMB, HIT_DEPTH_CHARGE } hit_kind;
+
+typedef struct {
+    float structure;           /* 1 intact .. 0 wrecked */
+    float flood[2];            /* water, fraction of the compartment's half: 0 port, 1 starboard */
+    float leak[2];             /* inflow, fraction per second */
+    float fire;                /* 0 none .. 1 raging */
+    int crews;                 /* damage-control teams working here */
+    int mag_flooded;           /* magazine deliberately flooded */
+    int counter_flood;         /* side (0/1) being counter-flooded, -1 none */
+} compartment;
 
 typedef struct {
     float yaw;                 /* training angle relative to the bow, radians */
@@ -96,6 +111,14 @@ typedef struct {
     int hold_fire;
     int ai;                    /* steered by ai_step */
     float aa_reload;           /* seconds until the AA battery fires again */
+    compartment comp[MAX_COMPARTMENTS];
+    float module_hp[MAX_MODULES];  /* 1 intact, 0 destroyed */
+    float list, trim;          /* radians: + list to starboard, + trim bow down */
+    float water;               /* flooded fraction of the whole hull */
+    dc_policy policy;
+    float dc_timer;
+    int jammed;                /* steering gear out: rudder stuck */
+    int cause;                 /* why she went down: 0 afloat, 1 flooding, 2 capsized, 3 magazine, 4 structure */
     float launch_timer;        /* carrier: seconds until the next plane can take off */
     waypoint wp[MAX_WAYPOINTS];
     int wp_count;
@@ -115,6 +138,7 @@ typedef struct {
     aircraft air[MAX_AIRCRAFT];
     int air_count;
     int bombs, bomb_hits, planes_lost_aa, planes_lost_fighters, planes_ditched;
+    int penetrations, ricochets, fires_started, magazine_explosions;
 } world;
 
 void world_init(world *w);   /* seed 1 */
@@ -141,6 +165,19 @@ float shell_speed(const class_weapon *w);
 int can_engage(const world *w, int i, int m, int j);
 /* Side with ships still afloat if the other has none, else -1. */
 int world_winner(const world *w);
+
+/* Damage model (src/damage.c). damage_hit resolves one hit at world point (x, z):
+ * pen = penetration (shell calibre and range, see shell_pen), side = 0 port / 1 starboard
+ * of the hull that was struck. */
+void damage_init(ship *s);
+void damage_hit(world *w, int j, hit_kind kind, float x, float z, float dmg, float pen, int plunging);
+void damage_step(world *w, int i);
+float shell_pen(const class_weapon *wp, float dist);
+float module_health(const ship *s, module_kind kind, int mount);   /* mean hp, 1 if none */
+float condition(const ship *s);    /* 0..1, drives the health bar and the 01/02/03 models */
+void order_dc_policy(world *w, const int *ids, int n, dc_policy p);
+void order_flood_magazines(world *w, const int *ids, int n);
+void order_counter_flood(world *w, const int *ids, int n);
 
 /* Carrier orders: launch every ready bomber at target ship (fighters escort them
  * when ready), put ready fighters on patrol over the carrier, or recall everything. */

@@ -7,6 +7,8 @@
 #include "math3d.h"
 #include "sim.h"
 
+#define STRIKE_RANGE 12000.0f /* carriers launch at targets this close */
+
 static float engage_range(const ship_class *c)
 {
     float gun = 0, torp = 0;
@@ -45,7 +47,7 @@ void ai_step(world *w)
             /* Strike anything within reach, cover the fleet when enemy planes are up,
              * and keep well clear of the gun line. */
             int ready = hangar_count(w, i, PLANE_BOMBER);     /* a full deck load, or all that's left */
-            if (ready >= (bombers_left < 3 ? bombers_left : 3) && bd < 9000) order_strike(w, i, best);
+            if (ready >= (bombers_left < 3 ? bombers_left : 3) && bd < STRIKE_RANGE) order_strike(w, i, best);
             for (int k = 0; k < w->air_count; k++) {
                 const aircraft *a = &w->air[k];
                 if (a->side != s->side && (a->state == AIR_OUT || a->state == AIR_ATTACK) &&
@@ -55,7 +57,7 @@ void ai_step(world *w)
             if (d < 5000) {
                 float away = atan2f(s->x - t->x, s->z - t->z);
                 order_move(w, &i, 1, s->x + sinf(away) * 800, s->z + cosf(away) * 800, 0);
-            } else if (s->wp_count == 0 && d > 8000) {
+            } else if (s->wp_count == 0 && d > STRIKE_RANGE * 0.9f) {
                 float to = atan2f(t->x - s->x, t->z - s->z);
                 order_move(w, &i, 1, s->x + sinf(to) * 800, s->z + cosf(to) * 800, 0);
             }

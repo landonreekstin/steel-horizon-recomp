@@ -256,6 +256,7 @@ static float hit_rate(const class_table *ct, float speed, int *shots)
     }
     for (int t = 0; t < 600 * SIM_HZ; t++) {
         world_step(&w);
+        damage_init(&w.ships[1]);
         w.ships[1].hp = bb->max_health;
     }
     *shots = w.shots;
@@ -481,6 +482,131 @@ static void test_air(const class_table *ct)
     CHECK(!memcmp(hp[0], hp[1], sizeof hp[0]), "air combat is deterministic");
 }
 
+static int count_modules(const ship_class *c, module_kind k)
+{
+    int n = 0;
+    for (int m = 0; m < c->module_count; m++) n += c->modules[m].kind == k;
+    return n;
+}
+
+static void test_damage(const class_table *ct)
+{
+    const ship_class *bb = class_find(ct, "AmericanBattleship"), *dd = class_find(ct, "GermanDestroyer");
+    const ship_class *cv = class_find(ct, "AmericanAircraftCarrier");
+    if (!bb || !dd || !cv) return;
+    world w;
+
+    /* Layout */
+    CHECK(bb->comp_count == 10 && dd->comp_count == 6, "compartments BB %d DD %d", bb->comp_count, dd->comp_count);
+    /* R1 and R2 share a compartment, so one magazine serves both. */
+    CHECK(count_modules(bb, MOD_MAGAZINE) == 3 && count_modules(bb, MOD_ENGINE) == 2 &&
+          count_modules(bb, MOD_STEERING) == 1 && count_modules(bb, MOD_BRIDGE) == 1 && count_modules(bb, MOD_RADAR) == 1,
+          "BB magazines %d engines %d", count_modules(bb, MOD_MAGAZINE), count_modules(bb, MOD_ENGINE));
+    CHECK(count_modules(cv, MOD_FLIGHT_DECK) == 1 && count_modules(bb, MOD_FLIGHT_DECK) == 0, "only the carrier has a flight deck");
+    int steer_comp = -1;
+    for (int m = 0; m < bb->module_count; m++) if (bb->modules[m].kind == MOD_STEERING) steer_comp = bb->modules[m].comp;
+    CHECK(steer_comp == 0, "steering gear in the stern compartment (%d)", steer_comp);
+
+    /* Armour: 5in never pierces a battleship's belt, 16in does at short range. */
+    const class_weapon *w16 = &bb->weapons[0], *w5 = NULL;
+    for (int i = 0; i < dd->weapon_count; i++) if (dd->weapons[i].ammo == AMMO_SHELL) w5 = &dd->weapons[i];
+    CHECK(w5 && shell_pen(w16, 0) > shell_pen(w16, 3000) && shell_pen(w5, 0) < bb->belt, "penetration falls with range; 5in < BB belt");
+    world_init(&w);
+    world_spawn(&w, bb, 1, 0, 0, 0);
+    for (int k = 0; k < 40; k++) damage_hit(&w, 0, HIT_SHELL, 10, (float)(k % 9) * 15 - 60, w5->damage, shell_pen(w5, 1000), 0);
+    CHECK(w.penetrations == 0 && w.ricochets == 40, "5in on a BB belt: %d through", w.penetrations);
+    world_init(&w);
+    world_spawn(&w, bb, 1, 0, 0, 0);
+    for (int k = 0; k < 20; k++) {                       /* fresh ship each time: 20 hits would sink her */
+        damage_init(&w.ships[0]);
+        damage_hit(&w, 0, HIT_SHELL, 10, 0, w16->damage, shell_pen(w16, 500), 0);
+    }
+    CHECK(w.penetrations >= 18, "16in at 500: %d of 20 through", w.penetrations);
+
+    /* A torpedo floods one side and lists her; the crew counter-floods it back. */
+    world_init(&w);
+    world_spawn(&w, bb, 1, 0, 0, 0);
+    damage_hit(&w, 0, HIT_TORPEDO, 15, 20, 240, 0, 0);   /* +X: starboard */
+    run(&w, 25);
+    float peak = w.ships[0].list;
+    run(&w, 180);
+    CHECK(peak > 0.05f && w.ships[0].alive, "torpedo to starboard lists her %.1f deg", peak * 180 / PI_F);
+    CHECK(fabsf(w.ships[0].list) < peak * 0.6f, "counter-flooding: list %.1f -> %.1f deg", peak * 180 / PI_F,
+          w.ships[0].list * 180 / PI_F);
+
+    /* Three torpedoes on one side sink a destroyer by flooding or capsizing. */
+    world_init(&w);
+    world_spawn(&w, dd, 1, 0, 0, 0);
+    for (int k = 0; k < 3; k++) damage_hit(&w, 0, HIT_TORPEDO, 5, (float)(k - 1) * 30, 240, 0, 0);
+    run(&w, 120);
+    CHECK(!w.ships[0].alive && (w.ships[0].cause == 1 || w.ships[0].cause == 2), "DD sunk by torpedoes (cause %d)", w.ships[0].cause);
+
+    /* Fire in a magazine: crews and flooding the magazine are what save her. */
+    static ship_class nocrew;
+    nocrew = *bb;
+    nocrew.dc_crews = 0;
+    int mag_comp = -1;
+    for (int m = 0; m < bb->module_count; m++) if (bb->modules[m].kind == MOD_MAGAZINE) { mag_comp = bb->modules[m].comp; break; }
+    int blew = 0, survived_flooded = 0, survived_crewed = 0;
+    for (int trial = 0; trial < 3; trial++) {
+        world_init(&w);
+        world_seed(&w, 100 + (unsigned)trial);
+        world_spawn(&w, trial == 2 ? bb : &nocrew, 1, 0, 0, 0);
+        w.ships[0].comp[mag_comp].fire = 1;
+        if (trial == 1) { int id = 0; order_flood_magazines(&w, &id, 1); }
+        run(&w, 1500);
+        if (trial == 0) blew = !w.ships[0].alive && w.ships[0].cause == 3;
+        if (trial == 1) survived_flooded = w.ships[0].alive || w.ships[0].cause != 3;
+        if (trial == 2) survived_crewed = w.ships[0].alive;
+    }
+    CHECK(blew, "an unfought magazine fire cooks off");
+    CHECK(survived_flooded && survived_crewed, "flooded magazine / crews prevent it (%d, %d)", survived_flooded, survived_crewed);
+
+    /* Crew priorities: fires first vs flooding first. */
+    int fire_crews[2];
+    for (int pass = 0; pass < 2; pass++) {
+        world_init(&w);
+        world_spawn(&w, bb, 1, 0, 0, 0);
+        w.ships[0].comp[2].fire = 0.3f;
+        w.ships[0].comp[7].leak[0] = 0.01f;
+        w.ships[0].policy = pass ? DC_FLOODING : DC_FIRES;
+        world_step(&w);
+        fire_crews[pass] = w.ships[0].comp[2].crews;
+    }
+    CHECK(fire_crews[0] > fire_crews[1], "fire priority puts more teams on the fire (%d vs %d)", fire_crews[0], fire_crews[1]);
+
+    /* Flooded magazines silence those turrets: a target dead ahead at 2,500 is out of
+     * 5in range, so only the main battery could fire. */
+    world_init(&w);
+    world_spawn(&w, bb, 0, 0, 0, 0);
+    world_spawn(&w, bb, 1, 0, 2500, 0);
+    w.ships[1].hold_fire = 1;
+    { int id = 0; order_flood_magazines(&w, &id, 1); }
+    run(&w, 60);
+    CHECK(w.shots == 0, "%d shells from flooded magazines", w.shots);
+
+    /* Machinery and steering. */
+    world_init(&w);
+    world_spawn(&w, bb, 0, 0, 0, 0);
+    for (int m = 0; m < bb->module_count; m++)
+        if (bb->modules[m].kind == MOD_ENGINE) w.ships[0].module_hp[m] = 0;
+    w.ships[0].dc_timer = 1e9f;                          /* no repairs in this check */
+    w.ships[0].wp[0] = (waypoint){0, 5000};
+    w.ships[0].wp_count = 1;
+    run(&w, 30);
+    CHECK(w.ships[0].speed < 0.01f, "dead in the water without engines (%.2f)", w.ships[0].speed);
+    world_init(&w);
+    world_spawn(&w, bb, 0, 0, 0, 0);
+    w.ships[0].rudder = 0.5f;
+    for (int m = 0; m < bb->module_count; m++)
+        if (bb->modules[m].kind == MOD_STEERING) w.ships[0].module_hp[m] = 0;
+    w.ships[0].dc_timer = 1e9f;
+    w.ships[0].wp[0] = (waypoint){-3000, 0};
+    w.ships[0].wp_count = 1;
+    run(&w, 10);
+    CHECK(w.ships[0].jammed && w.ships[0].rudder == 0.5f, "steering gear out: rudder stuck at %.2f", w.ships[0].rudder);
+}
+
 int main(int argc, char **argv)
 {
     const char *assets = argc > 1 ? argv[1] : "assets";
@@ -501,6 +627,7 @@ int main(int argc, char **argv)
     test_sim(&ct);
     test_combat(&ct);
     test_air(&ct);
+    test_damage(&ct);
     printf("%d failures\n", failures);
     return failures != 0;
 }

@@ -11,7 +11,7 @@
 #include "sim_internal.h"
 
 #define DEG (PI_F / 180.0f)
-#define FUEL_S 420.0f          /* endurance; planes head home with 90 s left */
+#define FUEL_S 700.0f          /* endurance: a 12,000-unit strike and back, with 90 s spare */
 #define LAUNCH_INTERVAL 2.0f
 #define ATTACK_RUN 1000.0f     /* bombers start their dive this far from the target */
 #define DIVE_ALT 130.0f
@@ -21,6 +21,7 @@
 #define GUN_DAMAGE 30.0f
 #define GUN_INTERVAL 0.2f
 #define BOMB_DAMAGE 100.0f
+#define BOMB_PEN 2.4f          /* through cruiser and carrier decks, sometimes a battleship's */
 #define AA_HIT 0.30f
 #define AA_INTERVAL 0.5f
 #define INTERCEPT_RADIUS 2500.0f
@@ -184,6 +185,8 @@ static void bomber_step(world *w, aircraft *a)
             p->owner = -1;
             p->side = a->side;
             p->damage = BOMB_DAMAGE;
+            p->pen = BOMB_PEN;
+            p->plunging = 1;
             launch_ballistic(p, a->x, a->y, a->z, px + gauss(w) * sigma, pz + gauss(w) * sigma, tf);
             w->bombs++;
         }
@@ -255,7 +258,7 @@ static void return_step(world *w, aircraft *a)
     const ship *c = &w->ships[home];
     float d = hypotf(c->x - a->x, c->z - a->z);
     fly_to(a, c->x, d < 800 ? 25 : CRUISE_ALT, c->z, 30, plane_speed(a));
-    if (d < 120 && a->y < 60) {
+    if (d < 120 && a->y < 60 && module_health(c, MOD_FLIGHT_DECK, -1) >= 0.4f) {
         a->state = AIR_DECK;
         a->carrier = home;
         a->mission = MISSION_NONE;
@@ -284,7 +287,8 @@ static void aa_step(world *w, int i)
     s->aa_reload = AA_INTERVAL;
     aircraft *a = &w->air[best];
     fx(w, FX_FLAK, a->x + gauss(w) * 18, a->y + gauss(w) * 10, a->z + gauss(w) * 18);
-    if (rand01(w) < AA_HIT * (1 - 0.5f * bd / AA_RANGE)) plane_damage(w, a, s->cls->aa_damage, 0);
+    if (rand01(w) < AA_HIT * (1 - 0.5f * bd / AA_RANGE))
+        plane_damage(w, a, s->cls->aa_damage * module_health(s, MOD_AA, -1), 0);
 }
 
 void air_step(world *w)
@@ -292,7 +296,7 @@ void air_step(world *w)
     /* Launches: one plane every two seconds off each carrier's bow. */
     for (int i = 0; i < w->count; i++) {
         ship *c = &w->ships[i];
-        if (!c->alive || !is_carrier(c)) continue;
+        if (!c->alive || !is_carrier(c) || module_health(c, MOD_FLIGHT_DECK, -1) < 0.4f) continue;
         c->launch_timer -= SIM_DT;
         if (c->launch_timer > 0) continue;
         for (int k = 0; k < w->air_count; k++) {

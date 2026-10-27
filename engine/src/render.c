@@ -439,6 +439,124 @@ static void flush_lines(renderer *r, mat4 vp)
     g_line_count = 0;
 }
 
+/* ---- cross-section damage panel (screen space) ------------------------------------- */
+
+static void fill(float x0, float y0, float x1, float y1, float cr, float cg, float cb, float ca)
+{
+    for (float y = y0; y < y1; y += 1) line(v3(x0, y + 0.5f, 0), v3(x1, y + 0.5f, 0), cr, cg, cb, ca);
+}
+
+static void frame(float x0, float y0, float x1, float y1, float cr, float cg, float cb)
+{
+    line(v3(x0, y0, 0), v3(x1, y0, 0), cr, cg, cb, 1);
+    line(v3(x1, y0, 0), v3(x1, y1, 0), cr, cg, cb, 1);
+    line(v3(x1, y1, 0), v3(x0, y1, 0), cr, cg, cb, 1);
+    line(v3(x0, y1, 0), v3(x0, y0, 0), cr, cg, cb, 1);
+}
+
+static vec3 health_colour(float hp)
+{
+    return hp <= 0 ? v3(0.15f, 0.15f, 0.15f) : hp < 0.3f ? v3(0.95f, 0.25f, 0.2f)
+         : hp < 0.7f ? v3(0.95f, 0.8f, 0.2f) : v3(0.3f, 0.9f, 0.35f);
+}
+
+/* Side profile, stern left and bow right: compartments with water (port above,
+ * starboard below the centre line), fire and crews; modules as marks coloured by
+ * health (green, yellow, red, black = destroyed). */
+static void damage_panel(const ship *s, int w, int h, float t)
+{
+    const ship_class *c = s->cls;
+    int n = c->comp_count;
+    if (n == 0) return;
+    float pw = fminf(760, (float)w - 40), x0 = ((float)w - pw) / 2, y0 = (float)h - 170, ph = 150;
+    fill(x0 - 10, y0 - 10, x0 + pw + 10, y0 + ph + 10, 0.04f, 0.06f, 0.08f, 0.75f);
+    float hx0 = x0 + 20, hx1 = x0 + pw - 90, deck = y0 + 45, keel = y0 + 115;
+    float L = c->half_length;
+    #define PX(z) (hx0 + ((z) + L) / (2 * L) * (hx1 - hx0))
+    for (int k = 0; k < n; k++) {
+        const compartment *cp = &s->comp[k];
+        float a = PX(c->comp_z[k]) + 1, b = PX(c->comp_z[k + 1]) - 1, mid = (deck + keel) / 2;
+        /* Taper the bow and stern ends of the profile. */
+        float top = deck, bot = keel - (k == 0 || k == n - 1 ? 20 : 0);
+        fill(a, top, b, bot, 0.25f + 0.3f * (1 - cp->structure), 0.27f, 0.3f, 0.9f);
+        float fp = cp->flood[0] * (mid - top), fs = cp->flood[1] * (bot - mid);
+        if (fp > 0) fill(a, mid - fp, b, mid, 0.15f, 0.4f, 0.85f, 0.9f);
+        if (fs > 0) fill(a, bot - fs, b, bot, 0.15f, 0.4f, 0.85f, 0.9f);
+        if (cp->fire > 0) {
+            float flick = 0.75f + 0.25f * sinf(t * 17 + (float)k * 2.1f);
+            fill(a, top, b, top + (bot - top) * 0.5f * cp->fire * flick, 1.0f, 0.45f, 0.1f, 0.85f);
+        }
+        if (cp->leak[0] + cp->leak[1] > 0)                 /* open leak: a blue tick at the keel */
+            line(v3((a + b) / 2 - 4, bot + 4, 0), v3((a + b) / 2 + 4, bot + 4, 0), 0.3f, 0.6f, 1, 1);
+        if (cp->structure < 0.05f) {                       /* wrecked */
+            line(v3(a, top, 0), v3(b, bot, 0), 0.9f, 0.2f, 0.15f, 1);
+            line(v3(a, bot, 0), v3(b, top, 0), 0.9f, 0.2f, 0.15f, 1);
+        }
+        for (int q = 0; q < cp->crews; q++)                /* damage-control teams */
+            fill(a + 3 + (float)q * 6, bot - 7, a + 7 + (float)q * 6, bot - 3, 1, 1, 1, 1);
+        if (cp->mag_flooded) frame(a + 2, top + 2, b - 2, bot - 2, 0.3f, 0.6f, 1);
+        vec3 sc = health_colour(cp->structure);
+        frame(a, top, b, bot, sc.x * 0.8f, sc.y * 0.8f, sc.z * 0.8f);
+        line(v3(a, mid, 0), v3(b, mid, 0), 0.5f, 0.55f, 0.6f, 0.5f);
+    }
+    /* Modules */
+    int stack[MAX_COMPARTMENTS] = {0};
+    for (int m = 0; m < c->module_count; m++) {
+        const module_def *d = &c->modules[m];
+        float z = d->kind == MOD_TURRET ? c->mounts[d->mount].pos[2] : (c->comp_z[d->comp] + c->comp_z[d->comp + 1]) / 2;
+        float x = PX(z);
+        vec3 col = health_colour(s->module_hp[m]);
+        switch (d->kind) {
+        case MOD_TURRET: {
+            const turret_mount *mt = &c->mounts[d->mount];
+            float sz = mt->bat == BAT_MAIN ? 7 : 4, yy = deck - 4 - (mt->bat == BAT_MAIN ? 0 : 10);
+            if (mt->bat == BAT_ASW || mt->bat == BAT_TORPEDO) yy = deck - 4;
+            fill(x - sz, yy - sz, x + sz, yy, col.x, col.y, col.z, 1);
+            break;
+        }
+        case MOD_MAGAZINE:
+            fill(x - 5, keel - 26, x + 5, keel - 16, col.x * 0.5f + 0.4f, col.y * 0.3f, col.z * 0.2f, 1);
+            frame(x - 5, keel - 26, x + 5, keel - 16, 1, 0.6f, 0.2f);
+            break;
+        case MOD_ENGINE:
+            fill(x - 9, keel - 14, x + 9, keel - 4, col.x, col.y, col.z, 1);
+            break;
+        case MOD_STEERING:
+            fill(x - 4, keel - 12, x + 4, keel - 2, col.x, col.y, col.z, 1);
+            break;
+        case MOD_BRIDGE:
+            fill(x - 6, deck - 30, x + 6, deck - 8, col.x, col.y, col.z, 1);
+            break;
+        case MOD_RADAR:
+            line(v3(x, deck - 30, 0), v3(x, deck - 42, 0), col.x, col.y, col.z, 1);
+            line(v3(x - 6, deck - 42, 0), v3(x + 6, deck - 42, 0), col.x, col.y, col.z, 1);
+            break;
+        case MOD_AA:
+            fill(x - 3 + (float)stack[d->comp] * 8, deck - 16, x + 3 + (float)stack[d->comp] * 8, deck - 10, col.x, col.y, col.z, 1);
+            stack[d->comp]++;
+            break;
+        case MOD_FLIGHT_DECK:
+            fill(hx0, deck - 3, hx1, deck, col.x, col.y, col.z, 1);
+            break;
+        default:
+            break;
+        }
+    }
+    #undef PX
+    /* Gauges at the right: list (a tilted bar), water against reserve buoyancy, condition. */
+    float gx = x0 + pw - 50, gy = y0 + 50;
+    float ca = cosf(s->list), sa = sinf(s->list);
+    line(v3(gx - 25 * ca, gy - 25 * sa, 0), v3(gx + 25 * ca, gy + 25 * sa, 0), 0.9f, 0.9f, 0.9f, 1);
+    line(v3(gx - 30, gy, 0), v3(gx + 30, gy, 0), 0.4f, 0.4f, 0.45f, 1);
+    float wf = clampf(s->water / c->reserve_buoyancy, 0, 1), cf = s->hp / c->max_health;
+    fill(gx - 30, gy + 30, gx + 30, gy + 38, 0.1f, 0.1f, 0.12f, 1);
+    fill(gx - 30, gy + 30, gx - 30 + 60 * wf, gy + 38, 0.2f, 0.45f, 0.9f, 1);
+    vec3 cc = health_colour(cf);
+    fill(gx - 30, gy + 44, gx + 30, gy + 52, 0.1f, 0.1f, 0.12f, 1);
+    fill(gx - 30, gy + 44, gx - 30 + 60 * cf, gy + 52, cc.x, cc.y, cc.z, 1);
+    if (s->jammed) frame(gx - 32, gy - 32, gx + 32, gy + 56, 0.95f, 0.25f, 0.2f);
+}
+
 void renderer_draw(renderer *r, const camera *cam, int w, int h, const world *wd,
                    float alpha, const unsigned char *selected, const drag_box *box, float t)
 {
@@ -493,8 +611,15 @@ void renderer_draw(renderer *r, const camera *cam, int w, int h, const world *wd
         float x = s->prev_x + (s->x - s->prev_x) * alpha, z = s->prev_z + (s->z - s->prev_z) * alpha;
         float hd = s->prev_heading + wrap_angle(s->heading - s->prev_heading) * alpha;
         float y = s->cls->submerged ? -6.0f : sea_height(x, z, t) * 0.5f;
-        if (!s->alive) y -= fminf(s->sink * 0.6f, 50);    /* settles over about 80 s */
-        mat4 model = m4mul(m4translate(v3(x, y, z)), m4yaw(hd));
+        y -= s->water * 25;                              /* lower in the water as she floods */
+        float roll = s->list, pitch = s->trim;
+        if (!s->alive) {
+            y -= fminf(s->sink * 0.6f, 50);              /* settles over about 80 s */
+            if (s->cause == 2) roll += (s->list >= 0 ? 1 : -1) * fminf(s->sink * 0.08f, 2.6f);   /* rolls over */
+            else pitch += (s->trim >= 0 ? 1 : -1) * fminf(s->sink * 0.006f, 0.35f);              /* goes down by an end */
+        }
+        /* m4roll turns +X down for positive angles; list > 0 is to starboard (+X). */
+        mat4 model = m4mul(m4translate(v3(x, y, z)), m4mul(m4yaw(hd), m4mul(m4pitch(-pitch), m4roll(-roll))));
         vec3 tint = s->alive ? v3(1, 1, 1) : v3(0.35f, 0.3f, 0.3f);
         draw_model(r, m, model, tint);
         const gpu_model *gun = get_model(r, s->cls->gun_model);
@@ -513,6 +638,25 @@ void renderer_draw(renderer *r, const camera *cam, int w, int h, const world *wd
             mat4 gm = m4mul(model, m4mul(m4translate(v3(mp->pos[0], mp->pos[1], mp->pos[2])),
                                          m4mul(m4yaw(train), m4from_rows3(mp->rot))));
             draw_model(r, gun, gm, tint);
+        }
+        /* Fires: flames and a smoke column over each burning compartment. */
+        for (int k = 0; k < s->cls->comp_count; k++) {
+            float f = s->comp[k].fire;
+            if (f <= 0 || (!s->alive && s->sink > 20)) continue;
+            float cz = (s->cls->comp_z[k] + s->cls->comp_z[k + 1]) / 2;
+            vec3 base = m4point(model, v3(0, 10, cz));
+            float flick = 0.7f + 0.3f * sinf(t * 23 + (float)k * 1.7f);
+            for (int q = 0; q < 5; q++) {
+                float ox = ((float)q - 2) * 3;
+                line(v3(base.x + ox, base.y, base.z), v3(base.x + ox * 0.5f, base.y + (10 + 14 * f) * flick, base.z), 1, 0.45f + 0.2f * flick, 0.1f, 0.95f);
+            }
+            for (int q = 0; q < 4; q++) {                 /* smoke drifts downwind (+X) as it rises */
+                float h0 = (float)q * 35 * f, h1 = h0 + 35 * f;
+                line(v3(base.x + h0 * 0.4f, base.y + 15 + h0, base.z), v3(base.x + h1 * 0.4f, base.y + 15 + h1, base.z),
+                     0.18f, 0.17f, 0.16f, 0.7f - 0.15f * (float)q);
+                line(v3(base.x + h0 * 0.4f + 4, base.y + 15 + h0, base.z + 3), v3(base.x + h1 * 0.4f + 6, base.y + 15 + h1, base.z + 4),
+                     0.22f, 0.21f, 0.2f, 0.6f - 0.13f * (float)q);
+            }
         }
         if (!s->alive) continue;
         /* Selection ring, orders and ordered targets */
@@ -643,6 +787,23 @@ void renderer_draw(renderer *r, const camera *cam, int w, int h, const world *wd
                     line(c, v3(c.x + cosf(ang) * 15 * age / 0.5f, c.y + sinf(ang) * 15 * age / 0.5f, c.z), 1, 0.5f, 0.1f, 1 - age / 0.5f);
                 }
             break;
+        case FX_RICOCHET:
+            if (age < 0.3f)
+                for (int q = 0; q < 4; q++) {
+                    float ang = (float)q * 1.6f + (float)k;
+                    line(c, v3(c.x + cosf(ang) * 18 * age / 0.3f, c.y + 10 * age / 0.3f, c.z + sinf(ang) * 18 * age / 0.3f), 1, 0.95f, 0.7f, 1 - age / 0.3f);
+                }
+            break;
+        case FX_MAGAZINE: {                               /* the column and the fireball */
+            float hh = 400 * fminf(age / 1.2f, 1);
+            for (int q = 0; q < 16; q++) {
+                float ang = (float)q / 16 * 2 * PI_F;
+                float r0 = 20 + 60 * fminf(age, 1);
+                line(v3(c.x + cosf(ang) * 10, 0, c.z + sinf(ang) * 10), v3(c.x + cosf(ang) * r0, hh * (0.7f + 0.3f * (float)(q & 1)), c.z + sinf(ang) * r0),
+                     age < 0.8f ? 1.0f : 0.3f, age < 0.8f ? 0.6f : 0.28f, age < 0.8f ? 0.2f : 0.26f, fade);
+            }
+            break;
+        }
         case FX_MUZZLE:
             if (age < 0.25f)
                 for (int q = 0; q < 6; q++) {
@@ -684,6 +845,12 @@ void renderer_draw(renderer *r, const camera *cam, int w, int h, const world *wd
         }
     }
     flush_lines(r, ortho);
+    for (int i = 0; selected && i < wd->count; i++)
+        if (selected[i] && wd->ships[i].alive) {
+            damage_panel(&wd->ships[i], w, h, t);
+            flush_lines(r, ortho);
+            break;
+        }
 
     /* Drag box in screen space */
     if (box && box->active) {
