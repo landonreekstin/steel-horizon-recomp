@@ -59,7 +59,7 @@ int at_yard(const world *w, int i)
 
 float mode_time_left(const world *w)
 {
-    if (w->mode != MODE_DEFEND) return 0;
+    if (w->mode == MODE_SKIRMISH || w->time_limit <= 0) return 0;
     return fmaxf(0, w->time_limit - (float)w->tick * SIM_DT);
 }
 
@@ -184,6 +184,8 @@ int world_winner(const world *w)
         if (!yard_up[0] && yard_up[1]) return 1;
         if (!yard_up[1] && yard_up[0]) return 0;
         if (!yard_up[0] && !yard_up[1]) return alive[0] > alive[1] ? 0 : alive[1] > alive[0] ? 1 : -1;
+        if (w->time_limit > 0 && mode_time_left(w) <= 0)   /* on time: points */
+            return w->score[0] > w->score[1] ? 0 : w->score[1] > w->score[0] ? 1 : -1;
         return -1;
     case MODE_DEFEND: {
         int d = w->defender & 1, a = 1 - d;

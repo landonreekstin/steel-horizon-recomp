@@ -194,7 +194,9 @@ typedef struct {
     int flagship_of[FLEET_PLAYERS];      /* ship index, -1 none */
     float shaken[FLEET_PLAYERS];         /* seconds the fleet is rattled after losing her */
     int defender;              /* MODE_DEFEND: the side holding the shipyard */
-    float time_limit;          /* MODE_DEFEND: seconds the defender must hold */
+    float time_limit;          /* MODE_DEFEND: seconds the defender must hold; MODE_ASSAULT:
+                                * after this, the side with more points wins (0: no limit) */
+    float score[2];            /* points: the build cost of enemy ships sunk */
 } world;
 
 void world_init(world *w);   /* seed 1 */

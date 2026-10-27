@@ -1048,6 +1048,36 @@ static void test_fleet(const class_table *ct)
     world_step(&w);
     CHECK(w.officer_ship[0][o] == -2, "officer lost with his ship");
 
+    /* AI captains: a fire by the magazine gets it flooded without anyone asking. */
+    world_init(&w);
+    int aib = world_spawn(&w, bb, 1, 0, 0, 0);
+    w.ships[aib].ai = 1;
+    int mag = module_index(bb, MOD_MAGAZINE);
+    w.ships[aib].comp[bb->modules[mag].comp].fire = 0.7f;
+    run(&w, 3);
+    CHECK(w.ships[aib].comp[bb->modules[mag].comp].mag_flooded, "AI captain flooded the burning magazine");
+
+    /* Assault home guards: a quarter of each side, whatever the ships' indices. */
+    world_init(&w);
+    w.mode = MODE_ASSAULT;
+    const ship_class *uyd = class_find(ct, "AmericanShipyard"), *jyd = class_find(ct, "JapaneseShipyard");
+    if (uyd && jyd) {
+        shipyard_spawn(&w, uyd, 0, 0, -7000, 0);
+        shipyard_spawn(&w, jyd, 1, 0, 7000, PI_F);
+        for (int k = 0; k < 8; k++) {               /* interleaved, as two yards build them */
+            world_spawn(&w, dd, 0, (float)k * 300, -5000, 0);
+            world_spawn(&w, jbb, 1, (float)k * 300, 5000, PI_F);
+        }
+        for (int i = 0; i < w.count; i++) w.ships[i].ai = 1;
+        run(&w, 120);
+        float sp[2] = {0, 0};
+        for (int i = 0; i < w.count; i++)
+            if (!is_shore(&w.ships[i])) sp[w.ships[i].side] += hypotf(w.ships[i].x - w.ships[w.sides[w.ships[i].side].yard].x,
+                                                                      w.ships[i].z - w.ships[w.sides[w.ships[i].side].yard].z);
+        CHECK(fabsf(sp[0] - sp[1]) < 0.35f * (sp[0] + sp[1]) / 2, "both sides deploy alike (mean distance from home %.0f vs %.0f)",
+              sp[0] / 8, sp[1] / 8);
+    }
+
     /* Replays: the same command stream reproduces the battle exactly. */
     float final[2][4];
     for (int pass = 0; pass < 2; pass++) {

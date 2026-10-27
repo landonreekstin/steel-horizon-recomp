@@ -627,7 +627,12 @@ static void mode_banner(const world *w, int sw)
 {
     char msg[128];
     switch (w->mode) {
-    case MODE_ASSAULT: snprintf(msg, sizeof msg, "ASSAULT: destroy the enemy yard"); break;
+    case MODE_ASSAULT: {
+        int left = (int)mode_time_left(w);
+        snprintf(msg, sizeof msg, "ASSAULT: destroy the enemy yard  %d:%02d  points %.0f-%.0f", left / 60, left % 60,
+                 w->score[0], w->score[1]);
+        break;
+    }
     case MODE_DEFEND: {
         int left = (int)mode_time_left(w);
         snprintf(msg, sizeof msg, w->defender == 0 ? "DEFEND the yard: %d:%02d left" : "ATTACK the yard: %d:%02d left",

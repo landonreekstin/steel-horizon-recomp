@@ -62,10 +62,68 @@ static void ai_command(world *w)
     }
 }
 
+/* AI captains act on their own reports, as an attentive player would. */
+static void ai_captains(world *w)
+{
+    for (int side = 0; side < 2; side++) {
+        captain_report rep[64];
+        int n = captain_reports(w, side, rep, 64);
+        for (int k = 0; k < n; k++) {
+            const ship *s = &w->ships[rep[k].ship];
+            if (!s->ai || rep[k].kind == REP_BRIDGE_LOST || rep[k].kind == REP_WITHDRAW ||
+                rep[k].kind == REP_RETURN_TO_YARD || rep[k].kind == REP_LAUNCH_STRIKE || rep[k].urgency < 40) continue;
+            captain_act(w, &rep[k]);
+        }
+    }
+}
+
+/* Concentration of fire: each AI fleet's main batteries on one target, the enemy most
+ * of its ships can reach, weighted toward damaged and valuable ships. Every 10 s. */
+static void ai_focus(world *w)
+{
+    if (w->tick % (10 * SIM_HZ) != 0) return;
+    for (int p = 0; p < FLEET_PLAYERS + 2; p++) {
+        int best = -1;
+        float bscore = 0;
+        for (int j = 0; j < w->count; j++) {
+            const ship *t = &w->ships[j];
+            if (!t->alive || t->cls->submerged) continue;
+            int reach = 0, side = -1;
+            for (int i = 0; i < w->count; i++) {
+                const ship *s = &w->ships[i];
+                if (s->owner != p || !s->alive || !s->ai || s->side == t->side) continue;
+                side = s->side;
+                for (int m = 0; m < s->cls->mount_count; m++)
+                    if (s->cls->mounts[m].bat == BAT_MAIN && can_engage(w, i, m, j)) { reach++; break; }
+            }
+            if (side < 0 || !reach) continue;
+            float cond = t->hp / t->cls->max_health;
+            float score = (float)reach * (1.5f - cond) * (0.5f + class_cost(t->cls) / 1500);
+            if (score > bscore) { bscore = score; best = j; }
+        }
+        for (int i = 0; i < w->count; i++) {
+            ship *s = &w->ships[i];
+            if (s->owner == p && s->alive && s->ai) s->order_target[BAT_MAIN] = best;
+        }
+    }
+}
+
+/* Every fourth ship of a side (by its order within that side's fleet) guards home:
+ * the ship index itself won't do, since two yards building in turn give each side
+ * indices of one parity. */
+static int home_guard(const world *w, int i)
+{
+    int ord = 0;
+    for (int j = 0; j < i; j++) ord += w->ships[j].side == w->ships[i].side && !is_shore(&w->ships[j]);
+    return ord % 4 == 0;
+}
+
 void ai_step(world *w)
 {
     ai_build(w);
     ai_command(w);
+    ai_captains(w);
+    ai_focus(w);
     for (int i = 0; i < w->count; i++) {
         ship *s = &w->ships[i];
         if (!s->ai || !s->alive || is_shore(s)) continue;
@@ -108,10 +166,11 @@ void ai_step(world *w)
         int attacking = ey >= 0 && w->ships[ey].alive &&
                         (w->mode == MODE_ASSAULT || (w->mode == MODE_DEFEND && (s->side & 1) != (w->defender & 1)));
         int guard = (w->mode == MODE_DEFEND && (s->side & 1) == (w->defender & 1)) ||
-                    (w->mode == MODE_ASSAULT && i % 4 == 0);
+                    (w->mode == MODE_ASSAULT && home_guard(w, i));
         if (attacking && !guard && !s->committed && y >= 0 && w->ships[y].alive) {
             /* Muster off the home yard; the wave sails when big enough (4, then 2 more
-             * each time, so a stalled assault escalates). */
+             * each time up to 8, so a stalled assault escalates), or as soon as it
+             * outnumbers the enemy's whole fleet by two. */
             const ship *hy = &w->ships[y];
             float fwd = hy->cls->half_length + 2500;
             float rx = hy->x + sinf(hy->heading) * fwd, rz = hy->z + cosf(hy->heading) * fwd;
@@ -119,14 +178,19 @@ void ai_step(world *w)
             for (int j = 0; j < w->count; j++) {
                 const ship *o = &w->ships[j];
                 mustered += o->alive && o->ai && o->side == s->side && !is_shore(o) && !o->committed && !o->returning &&
-                            j % 4 != 0 && hypotf(o->x - rx, o->z - rz) < 1500;
+                            !home_guard(w, j) && hypotf(o->x - rx, o->z - rz) < 1500;
             }
             side_state *own = &w->sides[s->side & 1];
-            if (mustered >= 4 + 2 * own->waves) {
+            int enemies = 0;
+            for (int j = 0; j < w->count; j++)
+                enemies += w->ships[j].alive && w->ships[j].side != s->side && !is_shore(&w->ships[j]);
+            int need = 4 + 2 * own->waves;
+            if (need > 8) need = 8;                       /* waves grow, but not past eight */
+            if (mustered >= need || mustered >= enemies + 2) {
                 own->waves++;
                 for (int j = 0; j < w->count; j++) {
                     ship *o = &w->ships[j];
-                    if (o->alive && o->ai && o->side == s->side && !is_shore(o) && j % 4 != 0 && hypotf(o->x - rx, o->z - rz) < 1500)
+                    if (o->alive && o->ai && o->side == s->side && !is_shore(o) && !home_guard(w, j) && hypotf(o->x - rx, o->z - rz) < 1500)
                         o->committed = 1;
                 }
             } else {

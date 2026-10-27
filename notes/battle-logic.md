@@ -235,3 +235,13 @@ each kill planes (fighters more); Japan won all 4 after the fighter fix.
   and trained at the class's own mounts. Sizes come from the class's half-length and
   half-beam (still the original models' bounding boxes), so play is unchanged.
 - The cross-section panel and fleet thumbnails use the generated geometry too.
+
+## AI commander (phase 8)
+- AI ships act on their own captain's reports of urgency ≥ 40 (magazine fires,
+  torpedoes, list, flooding, fires); AI fleets concentrate their main batteries every
+  10 s on the enemy most of their ships can reach, weighted to damaged, valuable ships.
+- Assault: a quarter of each side's ships (by order within the side) guard home; waves
+  muster off the yard and sail at 4, 6, then 8 ships, or once they outnumber the enemy
+  fleet by two. (A bug picked guards by ship index; with two yards building in turn
+  that gave one side half guards and the other none.) A 60-minute limit decides on
+  points (build cost of enemy ships sunk).

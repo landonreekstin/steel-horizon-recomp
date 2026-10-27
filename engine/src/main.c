@@ -134,7 +134,7 @@ static int setup_scenario(game *g, const char *name)
         int assault = !strcmp(name, "assault"), player_defends = !strcmp(name, "defend");
         g->w.mode = assault ? MODE_ASSAULT : MODE_DEFEND;
         g->w.defender = player_defends ? 0 : 1;
-        g->w.time_limit = 30 * 60;
+        g->w.time_limit = assault ? 60 * 60 : 30 * 60;   /* assault: then decided on points */
         if (assault || player_defends) err |= yard(g, "American", 0, 0, -7000, 0, us_build, 6);
         if (assault || !player_defends) err |= yard(g, "Japanese", 1, 0, 7000, PI_F, jp_build, 6);
         /* The defender has the yard, the attacker a bigger fleet. */
@@ -180,6 +180,7 @@ static int setup_scenario(game *g, const char *name)
         }
         if (cs->yards) {
             g->w.mode = MODE_ASSAULT;
+            g->w.time_limit = 60 * 60;
             for (int sd = 0; sd < 2; sd++) {
                 const char *opts[CUSTOM_HULLS];
                 char names[CUSTOM_HULLS][64];
@@ -710,7 +711,13 @@ int main(int argc, char **argv)
                         if (ey >= 0) closest = fminf(closest, hypotf(s->x - g.w.ships[ey].x, s->z - g.w.ships[ey].z));
                     }
                     int y = g.w.sides[sd].yard;
-                    printf("  | side %d: %2d ships", sd, n);
+                    int committed = 0, returning = 0;
+                    for (int i = 0; i < g.w.count; i++)
+                        if (g.w.ships[i].alive && g.w.ships[i].side == sd && !is_shore(&g.w.ships[i])) {
+                            committed += g.w.ships[i].committed;
+                            returning += g.w.ships[i].returning;
+                        }
+                    printf("  | side %d: %2d ships (%d committed, %d repairing)", sd, n, committed, returning);
                     if (y >= 0) printf(", yard %3.0f%%, budget %5.0f", 100 * g.w.ships[y].hp / g.w.ships[y].cls->max_health, g.w.sides[sd].budget);
                     if (ey >= 0 && n) printf(", %5.0f from enemy yard", closest);
                 }

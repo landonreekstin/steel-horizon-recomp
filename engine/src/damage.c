@@ -147,6 +147,7 @@ static void go_down(world *w, int j, int cause)
     s->stage = 3;
     s->wp_count = 0;
     s->cause = cause;
+    w->score[1 - (s->side & 1)] += class_cost(s->cls);
     fx(w, cause == 3 ? FX_MAGAZINE : FX_SINK, s->x, 0, s->z);
     if (cause == 3) w->magazine_explosions++;
 }
