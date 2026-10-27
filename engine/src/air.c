@@ -263,9 +263,7 @@ static void return_step(world *w, aircraft *a)
         a->carrier = home;
         a->mission = MISSION_NONE;
         a->target = -1;
-        a->timer = REARM_S;
-        a->hp = a->max_hp;                            /* patched up while rearming */
-        a->stage = 1;
+        a->timer = REARM_S;                           /* rearmed and patched up below */
     }
 }
 
@@ -334,8 +332,13 @@ void air_step(world *w)
             else fighter_step(w, k);
             break;
         case AIR_DECK:
-            a->timer -= SIM_DT;
-            if (a->timer <= 0) a->state = AIR_HANGAR;
+            /* Rearming and repairs happen below: no lifts, no turnaround. */
+            if (module_health(&w->ships[a->carrier], MOD_HANGAR_LIFT, -1) >= 0.3f) a->timer -= SIM_DT;
+            if (a->timer <= 0) {
+                a->state = AIR_HANGAR;
+                a->hp = a->max_hp;
+                a->stage = 1;
+            }
             if (!w->ships[a->carrier].alive) a->state = AIR_LOST;   /* went down with her */
             break;
         case AIR_HANGAR:

@@ -13,6 +13,7 @@
 #define MAX_PROJECTILES 1024
 #define MAX_FX 512
 #define MAX_AIRCRAFT 256
+#define REP_KINDS_MAX 8        /* >= REP_KINDS (report_kind is declared after ship) */
 
 /* Tuning (design choices for the RTS, not values from the original). */
 #define SPEED_SCALE 0.5f       /* world units per second per point of class speed */
@@ -113,12 +114,19 @@ typedef struct {
     float aa_reload;           /* seconds until the AA battery fires again */
     compartment comp[MAX_COMPARTMENTS];
     float module_hp[MAX_MODULES];  /* 1 intact, 0 destroyed */
+    unsigned char module_lost[MAX_MODULES];   /* knocked past the critical point: no repairs */
+    float crew;                /* aboard and fit for duty */
+    int aim[BATTERIES];        /* macro target per battery: a module_kind, or -1 the ship */
+    float evade;               /* seconds of evasive manoeuvring left */
+    float evade_heading;       /* course being steered while evading */
+    float evade_base;          /* the course she was on when told to evade */
+    float report_cool[REP_KINDS_MAX];  /* per report_kind: seconds before the captain raises it again */
     float list, trim;          /* radians: + list to starboard, + trim bow down */
     float water;               /* flooded fraction of the whole hull */
     dc_policy policy;
     float dc_timer;
     int jammed;                /* steering gear out: rudder stuck */
-    int cause;                 /* why she went down: 0 afloat, 1 flooding, 2 capsized, 3 magazine, 4 structure */
+    int cause;                 /* why she went down: 0 afloat, 1 flooding, 2 capsized, 3 magazine, 4 structure, 5 abandoned */
     float launch_timer;        /* carrier: seconds until the next plane can take off */
     waypoint wp[MAX_WAYPOINTS];
     int wp_count;
@@ -178,6 +186,33 @@ float condition(const ship *s);    /* 0..1, drives the health bar and the 01/02/
 void order_dc_policy(world *w, const int *ids, int n, dc_policy p);
 void order_flood_magazines(world *w, const int *ids, int n);
 void order_counter_flood(world *w, const int *ids, int n);
+/* Fire at a part of the target (MOD_ENGINE, MOD_MAGAZINE, MOD_STEERING, MOD_BRIDGE,
+ * MOD_TURRET) instead of the ship as a whole; -1 for the whole ship. */
+void order_aim(world *w, const int *ids, int n, int kind, unsigned mask);
+/* Evasive manoeuvres for `seconds`: comb torpedoes heading her way, else zig-zag. */
+void order_evade(world *w, const int *ids, int n, float seconds);
+/* Expected chance that one shell from mount m of ship i hits ship j now (0..1):
+ * gun, range, both ships' speed and turning, fire control and crew. */
+float hit_probability(const world *w, int i, int m, int j);
+float crew_factor(const ship *s);  /* crew aboard / complement */
+/* 1 if an enemy torpedo will pass close to ship i soon; sets the combing course. */
+int torpedo_threat(const world *w, int i, float *comb_heading);
+
+/* Captain's reports: the recommended immediate action for each ship of a side. */
+typedef enum { REP_FLOOD_MAGAZINE, REP_COUNTER_FLOOD, REP_EVADE_TORPEDO, REP_FIGHT_FLOODING,
+               REP_FIGHT_FIRES, REP_WITHDRAW, REP_LAUNCH_STRIKE,
+               REP_BRIDGE_LOST,  /* not an action: her captain can't report any more */
+               REP_KINDS } report_kind;
+typedef struct {
+    int ship;
+    report_kind kind;
+    float urgency;             /* higher first */
+} captain_report;
+int captain_reports(const world *w, int side, captain_report *out, int max);
+void captain_act(world *w, const captain_report *r);
+void captain_dismiss(world *w, const captain_report *r);   /* quiet for a minute */
+/* Flood one compartment's magazine (the captain's choice), or all of them. */
+void order_flood_magazine(world *w, int ship, int comp);
 
 /* Carrier orders: launch every ready bomber at target ship (fighters escort them
  * when ready), put ready fighters on patrol over the carrier, or recall everything. */

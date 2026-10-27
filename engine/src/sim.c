@@ -51,8 +51,9 @@ static float top_speed(const ship *s)
     return s->max_speed * clampf(engines * 1.25f, 0, 1) * clampf(1 - s->water * 1.5f, 0.2f, 1);
 }
 
-static void steer(ship *s)
+static void steer(world *w, int i)
 {
+    ship *s = &w->ships[i];
     float target_speed = 0, rudder_target = 0, vmax = top_speed(s);
     while (s->wp_count) {
         float dx = s->wp[0].x - s->x, dz = s->wp[0].z - s->z;
@@ -71,6 +72,20 @@ static void steer(ship *s)
         }
         if (fabsf(err) > PI_F / 2) target_speed *= 0.6f;   /* tighten hard turns */
         break;
+    }
+    if (s->evade > 0) {
+        /* Evasive: comb torpedoes coming her way, otherwise zig-zag 35 degrees either
+         * side of her course, changing every 12 s; full speed throughout. */
+        s->evade -= SIM_DT;
+        float comb;
+        if (torpedo_threat(w, i, &comb)) s->evade_heading = comb;
+        else {
+            float base = s->wp_count ? atan2f(s->wp[0].x - s->x, s->wp[0].z - s->z) : s->evade_base;
+            int leg = (int)(w->tick / (12 * SIM_HZ)) & 1;
+            s->evade_heading = wrap_angle(base + (leg ? 0.6f : -0.6f));
+        }
+        rudder_target = clampf(wrap_angle(s->evade_heading - s->heading) / RUDDER_GAIN, -1, 1);
+        target_speed = vmax;
     }
     /* Steering gear out: the rudder stays where it was. Bridge gone: conned from
      * the after station, the helm answers at half rate. */
@@ -96,7 +111,7 @@ void world_step(world *w)
             s->z += cosf(s->heading) * s->speed * SIM_DT;
             continue;
         }
-        steer(s);
+        steer(w, i);
         /* A ship needs way on to turn: rudder authority scales with speed. */
         float authority = clampf(s->speed / fmaxf(s->max_speed, 1e-3f) * 1.5f, 0.15f, 1.0f);
         s->heading = wrap_angle(s->heading + s->rudder * s->max_yaw * authority * SIM_DT);

@@ -135,7 +135,11 @@ static void build_damage_layout(ship_class *c)
         add_module(c, MOD_AA, 0.3f * L, -1);
         add_module(c, MOD_AA, -0.3f * L, -1);
     }
-    if (h == 1) add_module(c, MOD_FLIGHT_DECK, 0, -1);
+    if (h == 1) {
+        add_module(c, MOD_FLIGHT_DECK, 0, -1);
+        add_module(c, MOD_HANGAR_LIFT, 0.45f * L, -1);  /* forward and after lifts */
+        add_module(c, MOD_HANGAR_LIFT, -0.35f * L, -1);
+    }
     /* Armour against shell_pen (16in ~3.6 at point blank, 5in ~1.6): a battleship's belt
      * stops everything below 14in and her own guns beyond ~1,800, where they plunge
      * onto the thinner deck instead. */
@@ -143,6 +147,8 @@ static void build_damage_layout(ship_class *c)
     c->deck = capital ? (h == 2 ? 1.6f : 2.2f) : h == 1 ? 1.2f : h == 5 ? 1.2f : small ? 0.2f : 0.6f;
     c->reserve_buoyancy = capital ? 0.32f : h == 1 ? 0.30f : small ? 0.24f : 0.27f;
     c->dc_crews = capital || h == 1 ? 4 : h == 5 ? 3 : small ? (h == 13 ? 1 : 2) : 2;
+    c->complement = h == 1 ? 2600 : capital ? (h == 2 ? 1800 : 2500) : h == 5 ? 1100 : h == 6 || h == 15 ? 330
+                  : h == 7 ? 220 : h == 13 ? 17 : c->submerged ? 80 : 300;
 }
 
 int classes_load_layouts(class_table *t, const char *files_dir)

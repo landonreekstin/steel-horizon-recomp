@@ -33,7 +33,7 @@ typedef struct {
 /* Damage model (src/damage.c): the hull is cut into compartments stern to bow;
  * modules are the parts that can be knocked out, each sitting in one compartment. */
 typedef enum { MOD_TURRET, MOD_MAGAZINE, MOD_ENGINE, MOD_STEERING, MOD_BRIDGE, MOD_RADAR, MOD_AA,
-               MOD_FLIGHT_DECK, MOD_KINDS } module_kind;
+               MOD_FLIGHT_DECK, MOD_HANGAR_LIFT, MOD_KINDS } module_kind;
 
 typedef struct {
     module_kind kind;
@@ -62,6 +62,7 @@ typedef struct {
     float belt, deck;               /* armour, in shell-penetration units (see damage.c) */
     float reserve_buoyancy;         /* fraction of the hull that can flood before she sinks */
     int dc_crews;                   /* damage-control teams */
+    float complement;               /* crew aboard at the start (design: typical WWII figures) */
 } ship_class;
 
 typedef struct {

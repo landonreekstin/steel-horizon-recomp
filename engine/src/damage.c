@@ -33,6 +33,8 @@
 #define FIRE_SPREAD 0.03f      /* chance per second for a big fire to reach a neighbour */
 #define MAG_COOKOFF 0.004f     /* chance per second at full fire next to a dry magazine */
 #define MAG_HIT 0.02f          /* chance a penetrating 90-damage hit sets the magazine off */
+#define CRITICAL 0.1f          /* a module knocked below this is lost for the battle */
+#define ABANDON 0.08f          /* crew fraction at which she is abandoned */
 
 static float toughness(module_kind k)
 {
@@ -44,6 +46,7 @@ static float toughness(module_kind k)
     case MOD_RADAR: return 60;
     case MOD_AA: return 90;
     case MOD_FLIGHT_DECK: return 160;
+    case MOD_HANGAR_LIFT: return 100;
     default: return 1e9f;
     }
 }
@@ -57,7 +60,10 @@ void damage_init(ship *s)
         c->crews = c->mag_flooded = 0;
         c->counter_flood = -1;
     }
-    for (int m = 0; m < MAX_MODULES; m++) s->module_hp[m] = 1;
+    for (int m = 0; m < MAX_MODULES; m++) { s->module_hp[m] = 1; s->module_lost[m] = 0; }
+    for (int b = 0; b < BATTERIES; b++) s->aim[b] = -1;
+    s->crew = s->cls->complement;
+    s->evade = 0;
     s->list = s->trim = s->water = 0;
     s->jammed = 0;
     s->cause = 0;
@@ -99,6 +105,23 @@ float condition(const ship *s)
     float buoyancy = 1 - s->water / s->cls->reserve_buoyancy;
     float listing = 1 - fabsf(s->list) / (CAPSIZE_LIST * LIST_TO_RAD);
     return clampf(fminf(structural, fminf(buoyancy, listing)), 0, 1);
+}
+
+float crew_factor(const ship *s)
+{
+    return s->cls->complement > 0 ? clampf(s->crew / s->cls->complement, 0, 1) : 1;
+}
+
+/* Casualties: `share` of the men in one compartment. */
+static void casualties(ship *s, float share)
+{
+    s->crew = fmaxf(0, s->crew - s->cls->complement / (float)s->cls->comp_count * share);
+}
+
+static void hurt_module(ship *s, int m, float amount)
+{
+    s->module_hp[m] = fmaxf(0, s->module_hp[m] - amount);
+    if (s->module_hp[m] < CRITICAL) { s->module_hp[m] = 0; s->module_lost[m] = 1; }
 }
 
 static int comp_at(const ship_class *c, float z)
@@ -164,8 +187,7 @@ static void hit_modules(world *w, ship *s, int k, float dmg, int exposed_only)
         int exposed = d->kind == MOD_RADAR || d->kind == MOD_AA || d->kind == MOD_BRIDGE || d->kind == MOD_TURRET;
         if (exposed_only && !exposed) continue;
         float chance = exposed_only ? (d->kind == MOD_TURRET ? 0.08f : 0.25f) : 0.5f;
-        if (rand01(w) < chance)
-            s->module_hp[m] = fmaxf(0, s->module_hp[m] - dmg * (exposed_only ? 0.5f : 1) / toughness(d->kind));
+        if (rand01(w) < chance) hurt_module(s, m, dmg * (exposed_only ? 0.5f : 1) / toughness(d->kind));
     }
 }
 
@@ -188,6 +210,7 @@ void damage_hit(world *w, int j, hit_kind kind, float x, float z, float dmg, flo
             w->ricochets++;
             wreck(s, k, dmg * 0.12f / comp_hp, side);
             hit_modules(w, s, k, dmg, 1);
+            casualties(s, 0.02f * dmg / comp_hp);
             if (rand01(w) < 0.05f) ignite(w, s, k, 0.2f);
             fx(w, FX_RICOCHET, x, 10, z);
             break;
@@ -195,6 +218,7 @@ void damage_hit(world *w, int j, hit_kind kind, float x, float z, float dmg, flo
         w->penetrations++;
         wreck(s, k, dmg / comp_hp, side);
         hit_modules(w, s, k, dmg, 0);
+        casualties(s, 0.25f * dmg / comp_hp);
         if (rand01(w) < (kind == HIT_BOMB ? 0.5f : 0.25f) * fminf(dmg / 60.0f, 1.5f)) ignite(w, s, k, 0.3f);
         if (!plunging && kind == HIT_SHELL && rand01(w) < 0.35f) cp->leak[side] += dmg / 3000.0f;
         if (has_magazine(s, k) && !cp->mag_flooded && rand01(w) < MAG_HIT * dmg / 90.0f) go_down(w, j, 3);
@@ -211,6 +235,7 @@ void damage_hit(world *w, int j, hit_kind kind, float x, float z, float dmg, flo
         if (k < c->comp_count - 1) s->comp[k + 1].leak[side] += dmg / 2500.0f * bulge;
         wreck(s, k, dmg * 0.5f / comp_hp, side);
         hit_modules(w, s, k, dmg * 0.6f, 0);
+        casualties(s, 0.15f * dmg / comp_hp);
         if (rand01(w) < 0.15f) ignite(w, s, k, 0.3f);
         if (has_magazine(s, k) && !cp->mag_flooded && rand01(w) < MAG_HIT) go_down(w, j, 3);
         break;
@@ -244,7 +269,7 @@ static void assign_crews(ship *s)
         float repair = 0;
         for (int m = 0; m < c->module_count; m++) {
             const module_def *d = &c->modules[m];
-            if (d->comp != k || d->kind == MOD_MAGAZINE || s->module_hp[m] >= REPAIR_CAP) continue;
+            if (d->comp != k || d->kind == MOD_MAGAZINE || s->module_lost[m] || s->module_hp[m] >= REPAIR_CAP) continue;
             float wgt = d->kind == MOD_ENGINE || d->kind == MOD_STEERING ? 1.5f
                       : d->kind == MOD_TURRET || d->kind == MOD_RADAR ? (s->policy == DC_WEAPONS ? 1.2f : 0.6f) : 0.4f;
             repair += (REPAIR_CAP - s->module_hp[m]) * wgt;
@@ -253,7 +278,9 @@ static void assign_crews(ship *s)
         score[k] = fire * pw[0] + flood * pw[1] + repair * pw[2];
         s->comp[k].crews = 0;
     }
-    for (int t = 0; t < c->dc_crews; t++) {
+    /* Short-handed ships man fewer teams. */
+    int teams = (int)ceilf((float)c->dc_crews * fminf(1, crew_factor(s) * 1.4f));
+    for (int t = 0; t < teams; t++) {
         int best = -1;
         float bs = 0.01f;
         for (int k = 0; k < c->comp_count; k++) {
@@ -273,12 +300,14 @@ void damage_step(world *w, int i)
     if (!s->alive || n == 0) return;
     float dt = SIM_DT;
     s->dc_timer -= dt;
+    for (int r = 0; r < REP_KINDS_MAX; r++) s->report_cool[r] = fmaxf(0, s->report_cool[r] - dt);
     if (s->dc_timer <= 0) { assign_crews(s); s->dc_timer = 1.0f; }
     float machinery = module_health(s, MOD_ENGINE, -1);
     float water = 0, list = 0, trim = 0;
     for (int k = 0; k < n; k++) {
         compartment *cp = &s->comp[k];
-        float teams = (float)cp->crews;
+        float teams = (float)cp->crews * (0.5f + 0.5f * crew_factor(s));   /* tired, short-handed */
+        float was = cp->flood[0] + cp->flood[1];
         for (int sd = 0; sd < 2; sd++) {
             /* Leaks fill the space that's still dry; teams plug, pumps drain. */
             cp->flood[sd] += cp->leak[sd] * dt * (1 - cp->flood[sd]);
@@ -293,6 +322,10 @@ void damage_step(world *w, int i)
             }
             cp->flood[sd] = clampf(cp->flood[sd], 0, 1);
         }
+        /* Men caught by the water, and by the fire. */
+        float rose = cp->flood[0] + cp->flood[1] - was;
+        if (rose > 0 && cp->counter_flood < 0) casualties(s, rose * 0.1f);
+        if (cp->fire > 0) casualties(s, 0.003f * cp->fire * dt);
         /* Counter-flooding stops once the list is gone. */
         if (cp->counter_flood >= 0 && fabsf(s->list) < 0.01f) cp->counter_flood = -1;
         /* Fire grows, wrecks, spreads; water and teams put it out. */
@@ -301,8 +334,8 @@ void damage_step(world *w, int i)
             cp->fire = clampf(cp->fire + FIRE_GROWTH * dt - CREW_FIRE * teams * dt, 0, 1);
             cp->structure = fmaxf(0, cp->structure - 0.002f * cp->fire * dt);
             for (int m = 0; m < c->module_count; m++)
-                if (c->modules[m].comp == k && c->modules[m].kind != MOD_MAGAZINE)
-                    s->module_hp[m] = fmaxf(0, s->module_hp[m] - 0.006f * cp->fire * dt);
+                if (c->modules[m].comp == k && c->modules[m].kind != MOD_MAGAZINE && !s->module_lost[m])
+                    hurt_module(s, m, 0.006f * cp->fire * dt);
             if (cp->fire > 0.6f && rand01(w) < FIRE_SPREAD * dt) {
                 int nb = k + (rand01(w) < 0.5f ? -1 : 1);
                 if (nb >= 0 && nb < n) ignite(w, s, nb, 0.15f);
@@ -312,12 +345,12 @@ void damage_step(world *w, int i)
                 return;
             }
         }
-        /* Field repairs: slower on wrecked modules, never back to new. */
+        /* Field repairs up to 70%; a module past the critical point stays lost. */
         if (teams > 0)
             for (int m = 0; m < c->module_count; m++) {
-                if (c->modules[m].comp != k || c->modules[m].kind == MOD_MAGAZINE) continue;
-                float rate = CREW_REPAIR * teams * (s->module_hp[m] <= 0 ? 0.3f : 1) * dt;
-                if (s->module_hp[m] < REPAIR_CAP) s->module_hp[m] = fminf(REPAIR_CAP, s->module_hp[m] + rate);
+                if (c->modules[m].comp != k || c->modules[m].kind == MOD_MAGAZINE || s->module_lost[m]) continue;
+                if (s->module_hp[m] < REPAIR_CAP)
+                    s->module_hp[m] = fminf(REPAIR_CAP, s->module_hp[m] + CREW_REPAIR * teams * dt);
             }
         float wk = (cp->flood[0] + cp->flood[1]) / 2;
         water += wk;
@@ -336,7 +369,8 @@ void damage_step(world *w, int i)
     s->hp = condition(s) * c->max_health;
     float f = s->hp / c->max_health;
     s->stage = f < 1.0f / 3 ? 3 : f < 2.0f / 3 ? 2 : 1;
-    if (s->water >= c->reserve_buoyancy) go_down(w, i, 1);
+    if (crew_factor(s) < ABANDON) go_down(w, i, 5);
+    else if (s->water >= c->reserve_buoyancy) go_down(w, i, 1);
     else if (fabsf(list_frac) > CAPSIZE_LIST) go_down(w, i, 2);
     else if (s->hp <= 0) go_down(w, i, 4);
 }
@@ -348,17 +382,19 @@ void order_dc_policy(world *w, const int *ids, int n, dc_policy p)
     for (int i = 0; i < n; i++) w->ships[ids[i]].policy = p;
 }
 
+void order_flood_magazine(world *w, int ship_id, int k)
+{
+    ship *s = &w->ships[ship_id];
+    if (!has_magazine(s, k) || s->comp[k].mag_flooded) return;
+    s->comp[k].mag_flooded = 1;
+    s->comp[k].flood[0] = fmaxf(s->comp[k].flood[0], 0.5f);
+    s->comp[k].flood[1] = fmaxf(s->comp[k].flood[1], 0.5f);
+}
+
 void order_flood_magazines(world *w, const int *ids, int n)
 {
-    for (int i = 0; i < n; i++) {
-        ship *s = &w->ships[ids[i]];
-        for (int k = 0; k < s->cls->comp_count; k++)
-            if (has_magazine(s, k) && !s->comp[k].mag_flooded) {
-                s->comp[k].mag_flooded = 1;
-                s->comp[k].flood[0] = fmaxf(s->comp[k].flood[0], 0.5f);
-                s->comp[k].flood[1] = fmaxf(s->comp[k].flood[1], 0.5f);
-            }
-    }
+    for (int i = 0; i < n; i++)
+        for (int k = 0; k < w->ships[ids[i]].cls->comp_count; k++) order_flood_magazine(w, ids[i], k);
 }
 
 void order_counter_flood(world *w, const int *ids, int n)

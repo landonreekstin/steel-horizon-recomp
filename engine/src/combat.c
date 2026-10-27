@@ -130,6 +130,72 @@ static float fire_control_factor(const ship *s)
     return (module_health(s, MOD_RADAR, -1) < 0.3f ? 1.4f : 1) * (module_health(s, MOD_BRIDGE, -1) < 0.3f ? 1.2f : 1);
 }
 
+/* ---- accuracy ---------------------------------------------------------------------- */
+
+/* Where in the target's hull a macro target sits (model space z), or 0 = amidships. */
+static float aim_offset(const ship *t, int kind)
+{
+    if (kind < 0) return 0;
+    const ship_class *c = t->cls;
+    for (int pass = 0; pass < 2; pass++)              /* prefer one that still works */
+        for (int m = 0; m < c->module_count; m++) {
+            const module_def *d = &c->modules[m];
+            if ((int)d->kind != kind || (pass == 0 && t->module_hp[m] <= 0)) continue;
+            if (kind == MOD_TURRET && c->mounts[d->mount].bat != BAT_MAIN) continue;
+            return (c->comp_z[d->comp] + c->comp_z[d->comp + 1]) / 2;
+        }
+    return 0;
+}
+
+/* Aim point (lead included) and the spread around it, per axis, for one shell from
+ * mount m of ship i at ship j. The spread combines: the gun's dispersion at this
+ * range (scaled by the original's accuracy table), fire control, crew, aiming at a
+ * part of the ship, evasive steering, the misjudged relative speed of the two
+ * ships, the target's own turning over the time of flight, and the firer's turning. */
+static void gun_solution(const world *w, int i, int m, int j, float *ax, float *az, float *sd, float *T_out)
+{
+    const ship *s = &w->ships[i], *t = &w->ships[j];
+    const turret_mount *mt = &s->cls->mounts[m];
+    const class_weapon *wp = &s->cls->weapons[mt->weapon];
+    float mx, my, mz;
+    mount_world(s, mt, &mx, &my, &mz);
+    float off = aim_offset(t, s->aim[mt->bat]);
+    float px = t->x + sinf(t->heading) * off, pz = t->z + cosf(t->heading) * off;
+    float tvx = sinf(t->heading) * t->speed, tvz = cosf(t->heading) * t->speed;
+    float fvx = sinf(s->heading) * s->speed, fvz = cosf(s->heading) * s->speed;
+    float d = hypotf(px - mx, pz - mz), v = shell_speed(wp), T = intercept(mx, mz, px, pz, tvx, tvz, v);
+    float sigma = d * DISPERSION * 85.0f / hit_chance(s->cls->hull_type, t->cls->hull_type, d);
+    sigma *= fire_control_factor(s) * (1 + 0.6f * (1 - crew_factor(s))) * (s->aim[mt->bat] >= 0 ? 1.25f : 1)
+           * (s->evade > 0 ? 1.3f : 1) * (1 + 0.5f * fabsf(s->rudder) * s->speed / fmaxf(s->max_speed, 1));
+    float rel = hypotf(tvx - fvx, tvz - fvz);
+    float lead = T * LEAD_ERROR * fmaxf(rel, t->speed * 0.5f);
+    float turn = 0.25f * fabsf(t->rudder) * t->max_yaw * t->speed * T * T;
+    *ax = px + tvx * T;
+    *az = pz + tvz * T;
+    *sd = sqrtf(sigma * sigma + lead * lead + turn * turn);
+    if (T_out) *T_out = T;
+}
+
+float hit_probability(const world *w, int i, int m, int j)
+{
+    const ship *s = &w->ships[i], *t = &w->ships[j];
+    if (s->cls->weapons[s->cls->mounts[m].weapon].ammo != AMMO_SHELL) return 0;
+    float ax, az, sd;
+    gun_solution(w, i, m, j, &ax, &az, &sd, NULL);
+    /* The aim error is the same in every direction, so work in the target's own frame:
+     * land within the (tapered) beam and within the length. Aspect drops out. */
+    /* Integrate along the length over the same tapered outline hull_distance uses. */
+    float L = t->cls->half_length, B = t->cls->half_beam, p = 0;
+    const int N = 24;
+    for (int q = 0; q < N; q++) {
+        float z = -L + 2 * L * ((float)q + 0.5f) / (float)N, u = fabsf(z) / L;
+        float bz = B * (1 - 0.6f * u * u * u);
+        float pz = expf(-z * z / (2 * sd * sd)) / (sd * 2.50662827f) * (2 * L / (float)N);
+        p += pz * erff(bz / (sd * 1.41421356f));
+    }
+    return p;
+}
+
 /* ---- targeting --------------------------------------------------------------------- */
 
 int can_engage(const world *w, int i, int m, int j)
@@ -197,7 +263,6 @@ static void fire(world *w, int i, int m, int j, float aim_yaw)
     turret *tu = &s->turrets[m];
     float mx, my, mz;
     mount_world(s, mt, &mx, &my, &mz);
-    float tvx = sinf(t->heading) * t->speed, tvz = cosf(t->heading) * t->speed;
     float d = hypotf(t->x - mx, t->z - mz);
 
     if (wp->ammo == AMMO_TORPEDO) {
@@ -233,17 +298,18 @@ static void fire(world *w, int i, int m, int j, float aim_yaw)
         float ax = t->x + gauss(w) * 20, az = t->z + gauss(w) * 20;
         launch_ballistic(p, mx, my, mz, ax, az, fmaxf(1.5f, d / 150.0f));
     } else {
-        float v = shell_speed(wp), T = intercept(mx, mz, t->x, t->z, tvx, tvz, v);
-        float sigma = d * DISPERSION * 85.0f / hit_chance(s->cls->hull_type, t->cls->hull_type, d) * fire_control_factor(s);
-        float lead = T * LEAD_ERROR;            /* misjudged target speed, per axis */
-        float ax = t->x + tvx * T + gauss(w) * sigma + gauss(w) * lead * t->speed;
-        float az = t->z + tvz * T + gauss(w) * sigma + gauss(w) * lead * t->speed;
+        float v = shell_speed(wp), ax, az, sd;
+        gun_solution(w, i, m, j, &ax, &az, &sd, NULL);
+        ax += gauss(w) * sd;
+        az += gauss(w) * sd;
         launch_ballistic(p, mx, my, mz, ax, az, hypotf(ax - mx, az - mz) / v);
         p->pen = shell_pen(wp, d);
         p->plunging = d > 0.55f * wp->max_range;
         w->shots++;
     }
-    tu->reload = fmaxf(2.0f, wp->fire_rate * RELOAD_SCALE) * (module_health(s, MOD_TURRET, m) < 0.5f ? 1.8f : 1);
+    /* Damaged turrets and thinned-out gun crews load slower. */
+    tu->reload = fmaxf(2.0f, wp->fire_rate * RELOAD_SCALE) * (module_health(s, MOD_TURRET, m) < 0.5f ? 1.8f : 1)
+               / (0.4f + 0.6f * crew_factor(s));
     fx(w, FX_MUZZLE, mx, my, mz);
 }
 
@@ -372,6 +438,47 @@ void order_attack(world *w, const int *ids, int n, int target, unsigned mask)
     for (int i = 0; i < n; i++)
         for (int b = 0; b < BATTERIES; b++)
             if (mask & (1u << b)) w->ships[ids[i]].order_target[b] = target;
+}
+
+void order_aim(world *w, const int *ids, int n, int kind, unsigned mask)
+{
+    for (int i = 0; i < n; i++)
+        for (int b = 0; b < BATTERIES; b++)
+            if (mask & (1u << b)) w->ships[ids[i]].aim[b] = kind;
+}
+
+void order_evade(world *w, const int *ids, int n, float seconds)
+{
+    for (int i = 0; i < n; i++) {
+        ship *s = &w->ships[ids[i]];
+        s->evade = seconds;
+        s->evade_heading = s->evade_base = s->heading;
+    }
+}
+
+int torpedo_threat(const world *w, int i, float *comb)
+{
+    const ship *s = &w->ships[i];
+    float now = (float)w->tick, svx = sinf(s->heading) * s->speed, svz = cosf(s->heading) * s->speed;
+    float worst = INFINITY;
+    int found = 0;
+    for (int k = 0; k < MAX_PROJECTILES; k++) {
+        const projectile *p = &w->proj[k];
+        if (!p->active || p->ammo != AMMO_TORPEDO || p->side == s->side) continue;
+        float tt = (now - (float)p->tick0) * SIM_DT;
+        float rx = p->x0 + p->vx * tt - s->x, rz = p->z0 + p->vz * tt - s->z;
+        float vx = p->vx - svx, vz = p->vz - svz, vv = vx * vx + vz * vz;
+        float tc = vv > 0 ? -(rx * vx + rz * vz) / vv : -1;
+        if (tc <= 0 || tc > 45 || tc > p->flight - tt) continue;
+        float miss = hypotf(rx + vx * tc, rz + vz * tc);
+        if (miss > s->cls->half_length + 60 || tc > worst) continue;
+        worst = tc;
+        found = 1;
+        /* Comb the track: turn parallel to it, whichever way is the smaller turn. */
+        float h = atan2f(p->vx, p->vz);
+        *comb = fabsf(wrap_angle(h - s->heading)) < fabsf(wrap_angle(h + PI_F - s->heading)) ? h : wrap_angle(h + PI_F);
+    }
+    return found;
 }
 
 void order_hold_fire(world *w, const int *ids, int n, int hold)

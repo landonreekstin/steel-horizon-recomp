@@ -241,26 +241,44 @@ static int mount_index(const ship_class *c, const char *name)
 /* Shells a BB fires at an enemy BB 2100 off its starboard quarter (beyond its 5in
  * secondaries, so main battery only), held afloat and silent;
  * returns the hit fraction. speed > 0: the target steams across the line of fire. */
-static float hit_rate(const class_table *ct, float speed, int *shots)
+/* Shells a BB fires at an enemy BB 2100 off its starboard quarter (beyond its 5in
+ * secondaries, so main battery only), held afloat and silent; over four seeds.
+ * Returns the hit fraction and, in *pred, the mean of hit_probability at each shot. */
+static float hit_rate(const class_table *ct, float speed, int *shots, float *pred)
 {
     const ship_class *bb = class_find(ct, "AmericanBattleship");
-    world w;
-    world_init(&w);
-    world_spawn(&w, bb, 0, 0, 0, 0);
-    world_spawn(&w, bb, 1, 1500, -1500, 0);
-    w.ships[1].hold_fire = 1;
-    if (speed > 0) {
-        w.ships[1].speed = speed;
-        w.ships[1].wp[0] = (waypoint){1500, 60000};
-        w.ships[1].wp_count = 1;
+    int fired = 0, hits = 0;
+    double psum = 0;
+    for (unsigned seed = 1; seed <= 4; seed++) {
+        world w;
+        world_init(&w);
+        world_seed(&w, seed);
+        world_spawn(&w, bb, 0, 0, 0, 0);
+        world_spawn(&w, bb, 1, 1500, -1500, 0);
+        w.ships[1].hold_fire = 1;
+        if (speed > 0) {
+            w.ships[1].speed = speed;
+            w.ships[1].wp[0] = (waypoint){1500, 60000};
+            w.ships[1].wp_count = 1;
+        }
+        for (int t = 0; t < 600 * SIM_HZ; t++) {
+            int before = w.shots;
+            /* The prediction for this tick, averaged over the mounts that can bear. */
+            float p = 0;
+            int n = 0;
+            for (int m = 0; m < bb->mount_count; m++)
+                if (bb->mounts[m].bat == BAT_MAIN && can_engage(&w, 0, m, 1)) { p += hit_probability(&w, 0, m, 1); n++; }
+            world_step(&w);
+            if (n) psum += (double)(p / (float)n) * (w.shots - before);
+            damage_init(&w.ships[1]);
+            w.ships[1].hp = bb->max_health;
+        }
+        fired += w.shots;
+        hits += w.hits;
     }
-    for (int t = 0; t < 600 * SIM_HZ; t++) {
-        world_step(&w);
-        damage_init(&w.ships[1]);
-        w.ships[1].hp = bb->max_health;
-    }
-    *shots = w.shots;
-    return w.shots ? (float)w.hits / (float)w.shots : 0;
+    *shots = fired;
+    *pred = fired ? (float)(psum / fired) : 0;
+    return fired ? (float)hits / (float)fired : 0;
 }
 
 static void test_combat(const class_table *ct)
@@ -322,11 +340,15 @@ static void test_combat(const class_table *ct)
 
     /* Accuracy at 2100 against a broadside battleship, and the lead on a crossing one. */
     int n0, n1;
-    float still = hit_rate(ct, 0, &n0), moving = hit_rate(ct, bb->speed * SPEED_SCALE, &n1);
-    printf("hit rate at 2100: stationary %.0f%% of %d, crossing at full speed %.0f%% of %d\n",
-           still * 100, n0, moving * 100, n1);
+    float p0, p1, still = hit_rate(ct, 0, &n0, &p0), moving = hit_rate(ct, bb->speed * SPEED_SCALE, &n1, &p1);
+    printf("hit rate at 2100: stationary %.0f%% of %d (predicted %.0f%%), crossing at full speed %.0f%% of %d (predicted %.0f%%)\n",
+           still * 100, n0, p0 * 100, moving * 100, n1, p1 * 100);
     CHECK(still > 0.30f && still < 0.85f, "stationary hit rate %.2f", still);
-    CHECK(moving > 0.6f * still, "lead works: crossing hit rate %.2f vs %.2f", moving, still);
+    /* The accuracy shown to the player has to match what the shells do; with the
+     * lead broken the crossing rate falls far below the prediction. */
+    CHECK(fabsf(still - p0) < 0.12f && fabsf(moving - p1) < 0.12f,
+          "hit_probability calibrated: %.2f vs %.2f still, %.2f vs %.2f crossing", still, p0, moving, p1);
+    CHECK(p1 < p0, "a crossing target is predicted harder to hit (%.2f vs %.2f)", p1, p0);
 
     /* Damage stages follow HP, a sunk ship stops shooting. */
     world_init(&w);
@@ -607,6 +629,136 @@ static void test_damage(const class_table *ct)
     CHECK(w.ships[0].jammed && w.ships[0].rudder == 0.5f, "steering gear out: rudder stuck at %.2f", w.ships[0].rudder);
 }
 
+static int module_index(const ship_class *c, module_kind k)
+{
+    for (int m = 0; m < c->module_count; m++) if (c->modules[m].kind == k) return m;
+    return -1;
+}
+
+static void test_command(const class_table *ct)
+{
+    const ship_class *bb = class_find(ct, "AmericanBattleship"), *pt = class_find(ct, "AmericanTorpedoBoat");
+    const ship_class *cv = class_find(ct, "AmericanAircraftCarrier");
+    if (!bb || !pt || !cv) return;
+    world w;
+
+    /* Crew: penetrating hits kill men; a short-handed ship mans fewer teams. */
+    world_init(&w);
+    world_spawn(&w, bb, 1, 0, 0, 0);
+    CHECK(w.ships[0].crew == bb->complement && bb->complement > 2000, "BB crew %.0f", w.ships[0].crew);
+    for (int k = 0; k < 4; k++) damage_hit(&w, 0, HIT_SHELL, 5, (float)(k - 2) * 40, 90, 3.6f, 0);
+    CHECK(w.ships[0].crew < bb->complement, "casualties: %.0f of %.0f left", w.ships[0].crew, bb->complement);
+    world_init(&w);
+    world_spawn(&w, bb, 1, 0, 0, 0);
+    w.ships[0].crew = bb->complement * 0.3f;
+    for (int k = 0; k < bb->comp_count; k++) w.ships[0].comp[k].fire = 0.3f;
+    world_step(&w);
+    int teams = 0;
+    for (int k = 0; k < bb->comp_count; k++) teams += w.ships[0].comp[k].crews;
+    CHECK(teams == 2, "30%% crew mans %d of %d teams", teams, bb->dc_crews);
+
+    /* Repairs: a damaged module comes back to 70%, one past the critical point never. */
+    world_init(&w);
+    world_spawn(&w, bb, 1, 0, 0, 0);
+    int eng = module_index(bb, MOD_ENGINE), rad = module_index(bb, MOD_RADAR);
+    w.ships[0].module_hp[eng] = 0.4f;
+    w.ships[0].module_hp[rad] = 0;
+    w.ships[0].module_lost[rad] = 1;
+    run(&w, 120);
+    CHECK(fabsf(w.ships[0].module_hp[eng] - 0.7f) < 1e-3f && w.ships[0].module_hp[rad] == 0,
+          "engine repaired to %.2f, lost radar %.2f", w.ships[0].module_hp[eng], w.ships[0].module_hp[rad]);
+
+    /* Hangar lifts out: bombers that land can't be rearmed. */
+    world_init(&w);
+    world_spawn(&w, cv, 0, 0, 0, 0);
+    world_spawn(&w, bb, 1, 0, 5000, 0);
+    w.ships[1].hold_fire = 1;
+    order_strike(&w, 0, 1);
+    for (int m = 0; m < cv->module_count; m++)
+        if (cv->modules[m].kind == MOD_HANGAR_LIFT) { w.ships[0].module_hp[m] = 0; w.ships[0].module_lost[m] = 1; }
+    run(&w, 420 + REARM_S + 30);
+    CHECK(hangar_count(&w, 0, PLANE_BOMBER) == 0 && count_state(&w, 0, PLANE_BOMBER, AIR_DECK) >= 3,
+          "no lifts: %d bombers stuck on deck, %d rearmed", count_state(&w, 0, PLANE_BOMBER, AIR_DECK),
+          hangar_count(&w, 0, PLANE_BOMBER));
+
+    /* Macro targeting: aiming for the steering gear puts the damage aft. */
+    float aft_share[2];
+    for (int aimed = 0; aimed < 2; aimed++) {
+        float aft = 0, total = 0;
+        for (unsigned seed = 1; seed <= 3; seed++) {
+            world_init(&w);
+            world_seed(&w, seed);
+            world_spawn(&w, bb, 0, 0, 0, 0);
+            world_spawn(&w, bb, 1, 1500, -1500, 0);
+            w.ships[1].hold_fire = 1;
+            int id = 0;
+            order_attack(&w, &id, 1, 1, 1u << BAT_MAIN);
+            if (aimed) order_aim(&w, &id, 1, MOD_STEERING, 1u << BAT_MAIN);
+            for (int t = 0; t < 300 * SIM_HZ; t++) {
+                float before[MAX_COMPARTMENTS];
+                for (int k = 0; k < bb->comp_count; k++) before[k] = w.ships[1].comp[k].structure;
+                world_step(&w);
+                for (int k = 0; k < bb->comp_count; k++) {
+                    float loss = before[k] - w.ships[1].comp[k].structure;
+                    total += loss;
+                    if (k <= 1) aft += loss;
+                }
+                damage_init(&w.ships[1]);
+            }
+        }
+        aft_share[aimed] = total > 0 ? aft / total : 0;
+    }
+    CHECK(aft_share[1] > aft_share[0] * 2, "aiming at the steering: %.0f%% of damage aft vs %.0f%%",
+          aft_share[1] * 100, aft_share[0] * 100);
+
+    /* Evasion: combing a PT boat's spread saves hits. */
+    int torp_hits[2] = {0, 0};
+    for (int evade = 0; evade < 2; evade++)
+        for (unsigned seed = 1; seed <= 4; seed++) {
+            world_init(&w);
+            world_seed(&w, seed);
+            world_spawn(&w, pt, 0, 0, 0, 0);
+            world_spawn(&w, bb, 1, 1800, 0, 0);
+            w.ships[0].wp[0] = (waypoint){0, 1};      /* hold her bow-on to the target line */
+            w.ships[1].hold_fire = 1;
+            w.ships[1].speed = w.ships[1].max_speed;   /* steady, so the boat's lead is good */
+            w.ships[1].wp[0] = (waypoint){1800, 40000};
+            w.ships[1].wp_count = 1;
+            for (int t = 0; t < 110 * SIM_HZ; t++) {     /* the spreads run ~70 s */
+                float comb;
+                if (evade && w.ships[1].evade <= 0 && torpedo_threat(&w, 1, &comb)) { int id = 1; order_evade(&w, &id, 1, 60); }
+                world_step(&w);
+            }
+            torp_hits[evade] += w.torp_hits;
+        }
+    CHECK(torp_hits[1] < torp_hits[0], "evading: %d torpedo hits vs %d", torp_hits[1], torp_hits[0]);
+
+    /* Captain's reports: a fire by the magazine comes first; acting floods it. */
+    world_init(&w);
+    world_spawn(&w, bb, 0, 0, 0, 0);
+    int mag = module_index(bb, MOD_MAGAZINE), mk = bb->modules[mag].comp;
+    w.ships[0].comp[mk].fire = 0.6f;
+    w.ships[0].comp[(mk + 3) % bb->comp_count].fire = 0.3f;
+    /* An 8 degree list: past the report threshold, short of the crew's own counter-flooding. */
+    w.ships[0].comp[0].flood[1] = 0.9f;
+    world_step(&w);
+    captain_report rep[16];
+    int n = captain_reports(&w, 0, rep, 16);
+    CHECK(n >= 3 && rep[0].kind == REP_FLOOD_MAGAZINE, "reports %d, first kind %d", n, n ? (int)rep[0].kind : -1);
+    captain_act(&w, &rep[0]);
+    CHECK(w.ships[0].comp[mk].mag_flooded, "acting on the report flooded that magazine");
+    n = captain_reports(&w, 0, rep, 16);
+    int still_mag = 0, has_list = -1;
+    for (int k = 0; k < n; k++) { still_mag |= rep[k].kind == REP_FLOOD_MAGAZINE; if (rep[k].kind == REP_COUNTER_FLOOD) has_list = k; }
+    CHECK(!still_mag && has_list >= 0, "magazine report gone, list report pending");
+    if (has_list >= 0) {
+        captain_act(&w, &rep[has_list]);
+        int counter = 0;
+        for (int k = 0; k < bb->comp_count; k++) counter |= w.ships[0].comp[k].counter_flood >= 0;
+        CHECK(counter, "acting on the list report counter-floods");
+    }
+}
+
 int main(int argc, char **argv)
 {
     const char *assets = argc > 1 ? argv[1] : "assets";
@@ -628,6 +780,7 @@ int main(int argc, char **argv)
     test_combat(&ct);
     test_air(&ct);
     test_damage(&ct);
+    test_command(&ct);
     printf("%d failures\n", failures);
     return failures != 0;
 }
