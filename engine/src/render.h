@@ -45,6 +45,8 @@ void renderer_draw(renderer *r, const camera *cam, int w, int h, const world *wd
 void ui_rect(float x0, float y0, float x1, float y1, float r, float g, float b, float a);
 float ui_text(float x, float y, const char *str, float r, float g, float b, float a);  /* returns width */
 float ui_text_width(const char *str);
+/* A 32x32 HUD icon (tools/bakeicons.py; ids are the ICON_* names in hud.c) in one colour. */
+void ui_icon(int id, float x, float y, float r, float g, float b, float a);
 int ui_mark(void);                          /* vertex index of the next ui_rect */
 void ui_set_bottom(int mark, float y1);     /* resize that rect once its contents are laid out */
 float ui_line_height(void);

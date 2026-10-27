@@ -8,6 +8,11 @@
 
 #include "asset.h"
 #include "font_atlas.h"
+#include "icon_atlas.h"
+
+/* The UI texture: font glyphs on top, HUD icons below. */
+#define UI_ATLAS_W (FONT_ATLAS_W > ICON_ATLAS_W ? FONT_ATLAS_W : ICON_ATLAS_W)
+#define UI_ATLAS_H (FONT_ATLAS_H + ICON_ATLAS_H)
 #include "genship.h"
 #include "gl.h"
 
@@ -711,7 +716,13 @@ renderer *renderer_create(const char *files_dir)
     glGenTextures(1, &r->font_tex);
     glBindTexture(GL_TEXTURE_2D, r->font_tex);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, FONT_ATLAS_W, FONT_ATLAS_H, 0, GL_RED, GL_UNSIGNED_BYTE, FONT_ATLAS);
+    {   /* one texture: the font glyphs, and the HUD icons below them */
+        static unsigned char atlas[UI_ATLAS_W * UI_ATLAS_H];
+        for (int y = 0; y < FONT_ATLAS_H; y++) memcpy(atlas + y * UI_ATLAS_W, FONT_ATLAS + y * FONT_ATLAS_W, FONT_ATLAS_W);
+        for (int y = 0; y < ICON_ATLAS_H; y++)
+            memcpy(atlas + (FONT_ATLAS_H + y) * UI_ATLAS_W, ICON_ATLAS + y * ICON_ATLAS_W, ICON_ATLAS_W);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, UI_ATLAS_W, UI_ATLAS_H, 0, GL_RED, GL_UNSIGNED_BYTE, atlas);
+    }
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
@@ -719,6 +730,7 @@ renderer *renderer_create(const char *files_dir)
 }
 
 /* ---- UI batch ------------------------------------------------------------------------ */
+
 
 #define UI_MAX_VERTS 24576
 static float g_ui[UI_MAX_VERTS * 8];
@@ -751,16 +763,28 @@ float ui_text(float x, float y, const char *str, float r, float g, float b, floa
      * fractional position would pick up the neighbouring glyph's edge column. */
     x = floorf(x + 0.5f);
     y = floorf(y + 0.5f);
-    float x0 = x, hu = 0.5f / FONT_ATLAS_W, hv = 0.5f / FONT_ATLAS_H;
+    float x0 = x, hu = 0.5f / UI_ATLAS_W, hv = 0.5f / UI_ATLAS_H;
     for (const unsigned char *p = (const unsigned char *)str; *p; p++) {
         if (*p > 32 && *p < 127) {
             int i = *p - 32, cx = i % FONT_COLS * FONT_CELL_W, cy = i / FONT_COLS * FONT_CELL_H;
-            ui_quad(x, y, x + FONT_CELL_W, y + FONT_CELL_H, (float)cx / FONT_ATLAS_W + hu, (float)cy / FONT_ATLAS_H + hv,
-                    (float)(cx + FONT_CELL_W) / FONT_ATLAS_W - hu, (float)(cy + FONT_CELL_H) / FONT_ATLAS_H - hv, c);
+            ui_quad(x, y, x + FONT_CELL_W, y + FONT_CELL_H, (float)cx / UI_ATLAS_W + hu, (float)cy / UI_ATLAS_H + hv,
+                    (float)(cx + FONT_CELL_W) / UI_ATLAS_W - hu, (float)(cy + FONT_CELL_H) / UI_ATLAS_H - hv, c);
         }
         x += FONT_CELL_W;
     }
     return x - x0;
+}
+
+void ui_icon(int id, float x, float y, float r, float g, float b, float a)
+{
+    if (id < 0 || id >= ICON_COUNT) return;
+    const float c[4] = {r, g, b, a};
+    x = floorf(x + 0.5f);
+    y = floorf(y + 0.5f);
+    float hu = 0.5f / UI_ATLAS_W, hv = 0.5f / UI_ATLAS_H;
+    int cx = id % ICON_COLS * ICON_CELL, cy = FONT_ATLAS_H + id / ICON_COLS * ICON_CELL;
+    ui_quad(x, y, x + ICON_CELL, y + ICON_CELL, (float)cx / UI_ATLAS_W + hu, (float)cy / UI_ATLAS_H + hv,
+            (float)(cx + ICON_CELL) / UI_ATLAS_W - hu, (float)(cy + ICON_CELL) / UI_ATLAS_H - hv, c);
 }
 
 int ui_mark(void) { return g_ui_count; }

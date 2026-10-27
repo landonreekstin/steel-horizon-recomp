@@ -92,7 +92,10 @@ withdraw/evade tuning. Original list:
 - **Final UI art** *(requested)*: icon buttons in the controls toolbar (War Thunder
   style) instead of text, and Captain's reports that show a thumbnail of the ship
   reflecting her current damage and afflictions (fires, flooding, list, lost turrets).
-  The current text UI is a placeholder.
+  Done: icon buttons with key letters and hover tooltips in the controls toolbar, and an
+  icon per report kind on the Captain's cards (16 vector icons baked by
+  `tools/bakeicons.py` into `engine/src/icon_atlas.h`, drawn from the UI font texture).
+  Still to do: the damage thumbnail on the Captain's cards.
 - **Controls toolbar** *(requested, War Thunder style)*, alongside the Captain's Command bar: an on-screen bar listing
   every control and hotkey for the current selection (move, focus/split/hold fire,
   launch strikes, damage control), with tooltips; clickable as an alternative to keys.

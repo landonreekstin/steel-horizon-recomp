@@ -11,6 +11,13 @@
 
 #define PAD 8.0f
 
+/* Icons in engine/src/icon_atlas.h, in tools/bakeicons.py order. */
+enum {
+    ICON_HOLD_FIRE, ICON_FIRE_AT_WILL, ICON_AIM, ICON_EVASIVE, ICON_STOP, ICON_CREW_PRIORITY, ICON_COUNTER_FLOOD,
+    ICON_FLOOD_MAGAZINES, ICON_STRIKE, ICON_PATROL, ICON_RECALL, ICON_FIRE, ICON_TORPEDO, ICON_WATER, ICON_WITHDRAW,
+    ICON_BRIDGE_LOST
+};
+
 static const float PANEL[4] = {0.04f, 0.06f, 0.08f, 0.82f};
 static const float TEXT[3] = {0.92f, 0.94f, 0.96f};
 static const float DIM[3] = {0.6f, 0.65f, 0.7f};
@@ -88,6 +95,22 @@ static void report_text(const world *w, const captain_report *r, char *msg, int 
     }
 }
 
+static int report_icon(int kind)
+{
+    switch (kind) {
+    case REP_FLOOD_MAGAZINE: return ICON_FLOOD_MAGAZINES;
+    case REP_EVADE_TORPEDO: return ICON_TORPEDO;
+    case REP_COUNTER_FLOOD: return ICON_COUNTER_FLOOD;
+    case REP_FIGHT_FLOODING: return ICON_WATER;
+    case REP_FIGHT_FIRES: return ICON_FIRE;
+    case REP_WITHDRAW: return ICON_WITHDRAW;
+    case REP_LAUNCH_STRIKE: return ICON_STRIKE;
+    case REP_BRIDGE_LOST: return ICON_BRIDGE_LOST;
+    case REP_RETURN_TO_YARD: return ICON_CREW_PRIORITY;
+    default: return -1;
+    }
+}
+
 void hud_issue(command_queue *q, const world *w, const command *c)
 {
     cmdq_push(q, c, w->tick);
@@ -146,7 +169,7 @@ static void captain_bar(hud *h, world *w, command_queue *q, int sw, float t)
         if (clicked(h, x, 10, (float)sw - 10, 10 + lh + 10)) h->show_captain = 1;
         return;
     }
-    float bw = 430, x0 = (float)sw - bw - 10, y = 10;
+    float bw = 470, x0 = (float)sw - bw - 10, y = 10;
     int cap = h->show_fleet ? 4 : 7, shown = n < cap ? n : cap;
     float height = lh + 14 + (float)(shown ? shown : 1) * (2 * lh + 16) + (n > shown ? lh + 6 : 0);
     box(h, x0, y, x0 + bw, y + height, PANEL);
@@ -163,8 +186,9 @@ static void captain_bar(hud *h, world *w, command_queue *q, int sw, float t)
         int urgent = rep[i].urgency >= 90;
         const float card[4] = {urgent ? 0.35f : 0.12f, urgent ? 0.1f : 0.15f, urgent ? 0.08f : 0.18f, 0.9f};
         box(h, x0 + 4, cy, x0 + bw - 4, cy + 2 * lh + 12, card);
-        ui_text(x0 + PAD + 4, cy + 4, who, 0.65f, 0.85f, 1, 1);
-        ui_text(x0 + PAD + 4, cy + lh + 6, msg, action ? TEXT[0] : DIM[0], action ? TEXT[1] : DIM[1], action ? TEXT[2] : DIM[2], 1);
+        ui_icon(report_icon(rep[i].kind), x0 + 8, cy + lh + 6 - 16, urgent ? 1 : 0.85f, urgent ? 0.6f : 0.9f, urgent ? 0.4f : 1, 1);
+        ui_text(x0 + PAD + 40, cy + 4, who, 0.65f, 0.85f, 1, 1);
+        ui_text(x0 + PAD + 40, cy + lh + 6, msg, action ? TEXT[0] : DIM[0], action ? TEXT[1] : DIM[1], action ? TEXT[2] : DIM[2], 1);
         if (!action) continue;
         float bx = x0 + bw - 4 - PAD - (ui_text_width(action) + 2 * PAD) - 30;
         if (button(h, bx, cy + lh / 2, action, 0.2f, 0.45f, 0.25f)) report_cmd(q, w, h->player, &rep[i], CMD_CAPTAIN_ACT);
@@ -179,7 +203,30 @@ static void captain_bar(hud *h, world *w, command_queue *q, int sw, float t)
 
 /* ---- controls toolbar (top left) ------------------------------------------------------ */
 
-typedef struct { SDL_Keycode key; const char *label; } control;
+typedef struct { SDL_Keycode key; int icon; const char *name, *tip; } control;
+
+#define ICON_BTN 40.0f   /* icon button: a 32 px icon and its key letter under it */
+
+/* One row of icon buttons; returns the key of the one clicked, and leaves the one under
+ * the mouse in *hover for the tooltip. */
+static int icon_row(hud *h, float x, float y, const control *c, int n, const float *col, const control **hover)
+{
+    int key = 0;
+    float lh = ui_line_height();
+    for (int i = 0; i < n; i++, x += ICON_BTN + 6) {
+        float x1 = x + ICON_BTN, y1 = y + ICON_BTN + lh - 2;
+        int over = h->mouse_x >= x && h->mouse_x <= x1 && h->mouse_y >= y && h->mouse_y <= y1;
+        float k = over ? 1.35f : 1;
+        const float bg[4] = {col[0] * k, col[1] * k, col[2] * k, 0.92f};
+        box(h, x, y, x1, y1, bg);
+        ui_icon(c[i].icon, x + (ICON_BTN - 32) / 2, y + 3, 1, 1, 1, 1);
+        char letter[2] = {(char)(c[i].key >= 'a' && c[i].key <= 'z' ? c[i].key - 32 : '?'), 0};
+        ui_text(x + (ICON_BTN - ui_text_width(letter)) / 2, y + 34, letter, 1, 0.85f, 0.5f, 1);
+        if (over) *hover = &c[i];
+        if (clicked(h, x, y, x1, y1)) key = (int)c[i].key;
+    }
+    return key;
+}
 
 static int controls_bar(hud *h, const world *w, const unsigned char *selected)
 {
@@ -193,15 +240,25 @@ static int controls_bar(hud *h, const world *w, const unsigned char *selected)
         return 0;
     }
     static const control orders[] = {
-        {SDLK_h, "[H] Hold fire"}, {SDLK_f, "[F] Fire at will"}, {SDLK_t, "[T] Aim: next part"},
-        {SDLK_z, "[Z] Evasive"}, {SDLK_s, "[S] Stop"}};
-    static const control dc[] = {{SDLK_p, "[P] Crew priority"}, {SDLK_x, "[X] Counter-flood"}, {SDLK_m, "[M] Flood magazines"}};
-    static const control air[] = {{SDLK_b, "[B] Strike (Shift torp/Ctrl dive)"}, {SDLK_g, "[G] Fighter patrol"}, {SDLK_r, "[R] Recall"}};
+        {SDLK_h, ICON_HOLD_FIRE, "Hold fire", "Guns stop firing until ordered"},
+        {SDLK_f, ICON_FIRE_AT_WILL, "Fire at will", "Engage the best target in range"},
+        {SDLK_t, ICON_AIM, "Aim", "Cycle the part aimed at: ship, engines, magazines, steering, bridge, guns"},
+        {SDLK_z, ICON_EVASIVE, "Evasive", "Zig-zag or comb torpedoes; costs own accuracy"},
+        {SDLK_s, ICON_STOP, "Stop", "All stop, clear queued moves"}};
+    static const control dc[] = {
+        {SDLK_p, ICON_CREW_PRIORITY, "Crew priority", "Damage-control teams: cycle fires / flooding / modules first"},
+        {SDLK_x, ICON_COUNTER_FLOOD, "Counter-flood", "Flood the opposite side to correct the list"},
+        {SDLK_m, ICON_FLOOD_MAGAZINES, "Flood magazines", "Saves the ship from a magazine fire; those guns go silent"}};
+    static const control air[] = {
+        {SDLK_b, ICON_STRIKE, "Air strike", "On the focus target or nearest; Shift: torpedo bombers, Ctrl: dive bombers"},
+        {SDLK_g, ICON_PATROL, "Fighter patrol", "Fighters circle the carrier against incoming strikes"},
+        {SDLK_r, ICON_RECALL, "Recall", "All aircraft return to land and rearm"}};
     static const char *hints[] = {
         "LMB select / drag box   Shift add", "RMB sea: move   Shift: queue",
         "RMB enemy: focus fire   Ctrl: secondaries", "1-9 groups   Ctrl+1-9 set",
         "WASD/QE/wheel/MMB camera", "Space pause   +/- speed", "Enter: top captain's report", "C captain's bar",
-        "V recon plane to the cursor"};
+        "V recon plane to the cursor", "U special ability (cursor target)"};
+    static const float ORDERS[3] = {0.18f, 0.3f, 0.42f}, DC[3] = {0.4f, 0.25f, 0.15f}, AIR[3] = {0.2f, 0.38f, 0.3f};
     float bw = 400;
     int mark = ui_mark(), rect = h->rect_count;
     box(h, x0, y, x0 + bw, y + 10, PANEL);          /* bottom edge set once laid out */
@@ -218,34 +275,26 @@ static int controls_bar(hud *h, const world *w, const unsigned char *selected)
         h->controls_bottom = y + lh + 10;
         return 0;
     }
-    float bx = x0 + PAD;
-    for (size_t i = 0; i < sizeof orders / sizeof *orders; i++) {
-        float bwid = ui_text_width(orders[i].label) + 2 * PAD;
-        if (bx + bwid > x0 + bw - PAD) { bx = x0 + PAD; y += lh + 10; }
-        if (button(h, bx, y, orders[i].label, 0.18f, 0.3f, 0.42f)) key = orders[i].key;
-        bx += bwid + 6;
+    const control *hover = NULL;
+    float row = ICON_BTN + lh + 4;
+    int k;
+    /* Orders and damage control share a row when they fit; aircraft get their own. */
+    if ((k = icon_row(h, x0 + PAD, y, orders, 5, ORDERS, &hover))) key = k;
+    y += row;
+    if ((k = icon_row(h, x0 + PAD, y, dc, 3, DC, &hover))) key = k;
+    if (carrier && (k = icon_row(h, x0 + PAD + 3 * (ICON_BTN + 6) + 12, y, air, 3, AIR, &hover))) key = k;
+    y += row;
+    ui_set_bottom(mark, y + 4);
+    h->rects[rect][3] = y + 4;
+    h->controls_bottom = y + 4;
+    if (hover) {                                    /* tooltip under the cursor */
+        char title[64];
+        snprintf(title, sizeof title, "%s  [%c]", hover->name, (char)(hover->key - 32));
+        float tw = fmaxf(ui_text_width(title), ui_text_width(hover->tip)), tx = h->mouse_x + 16, ty = h->mouse_y + 20;
+        ui_rect(tx - 6, ty - 4, tx + tw + 6, ty + 2 * lh + 6, 0.03f, 0.04f, 0.05f, 0.95f);
+        ui_text(tx, ty, title, 1, 0.85f, 0.5f, 1);
+        ui_text(tx, ty + lh + 2, hover->tip, TEXT[0], TEXT[1], TEXT[2], 1);
     }
-    y += lh + 14;
-    bx = x0 + PAD;
-    for (size_t i = 0; i < sizeof dc / sizeof *dc; i++) {
-        float bwid = ui_text_width(dc[i].label) + 2 * PAD;
-        if (bx + bwid > x0 + bw - PAD) { bx = x0 + PAD; y += lh + 10; }
-        if (button(h, bx, y, dc[i].label, 0.4f, 0.25f, 0.15f)) key = dc[i].key;
-        bx += bwid + 6;
-    }
-    if (carrier) {
-        y += lh + 14;
-        bx = x0 + PAD;
-        for (size_t i = 0; i < sizeof air / sizeof *air; i++) {
-            float bwid = ui_text_width(air[i].label) + 2 * PAD;
-            if (bx + bwid > x0 + bw - PAD) { bx = x0 + PAD; y += lh + 10; }
-            if (button(h, bx, y, air[i].label, 0.2f, 0.38f, 0.3f)) key = air[i].key;
-            bx += bwid + 6;
-        }
-    }
-    ui_set_bottom(mark, y + lh + 16);
-    h->rects[rect][3] = y + lh + 16;
-    h->controls_bottom = y + lh + 16;
     return key;
 }
 
@@ -357,6 +406,14 @@ static void ship_readout(hud *h, renderer *r, const world *w, command_queue *q, 
     } else {
         snprintf(l2, sizeof l2, "Main battery: no target%s   aim: %s [T]", s->hold_fire ? " (holding fire)" : "",
                  aim_name(s->aim[BAT_MAIN]));
+    }
+    special_kind sk = special_of(s->cls);
+    if (sk != SP_NONE) {
+        char sp[80];
+        if (s->special_left > 0) snprintf(sp, sizeof sp, "   %s ACTIVE %.0fs", special_name(sk), s->special_left);
+        else if (s->special_cool > 0) snprintf(sp, sizeof sp, "   %s in %.0fs", special_name(sk), s->special_cool);
+        else snprintf(sp, sizeof sp, "   %s READY [U]", special_name(sk));
+        strncat(l2, sp, sizeof l2 - strlen(l2) - 1);
     }
     float lh = ui_line_height(), pw = fminf(760, (float)sw - 40), x0 = ((float)sw - pw) / 2, y0 = (float)sh - 170;
     float wtext = fmaxf(ui_text_width(l1), ui_text_width(l2)) + 2 * PAD;
