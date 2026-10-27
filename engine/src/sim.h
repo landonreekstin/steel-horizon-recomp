@@ -253,7 +253,7 @@ float shell_speed(const class_weapon *w);
 /* 1 if mount m of ship i could engage ship j now: an afloat enemy in range, inside the
  * mount's arc, and of the right kind (only depth charges reach a submerged boat). */
 int can_engage(const world *w, int i, int m, int j);
-/* Side with ships still afloat if the other has none, else -1. */
+/* 0 or 1: that side has won; 2: a draw (neither side can fight on); -1: undecided. */
 int world_winner(const world *w);
 
 /* Damage model (src/damage.c). damage_hit resolves one hit at world point (x, z):

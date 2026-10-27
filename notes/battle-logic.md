@@ -292,3 +292,8 @@ each kill planes (fighters more); Japan won all 4 after the fighter fix.
   within 900; Evasive Action 20 s, 1.5× spread against her and 1.5× turning; AA Blast
   15 s at 3× rate, 1.5× damage, 1.3× range; Ace Pilot 60 s of fighters hitting 2× as
   often. AI ships use theirs when they'd count.
+- **Ending stalemates**: carriers only run from ships that outgun them (gun damage per
+  second ×1.2), otherwise they stand and fight; a battle where neither side has a
+  weapon that can still hurt the other (ammunition, a mount intact, depth charges only
+  against submarines, strike aircraft left) is a draw; skirmishes end after 90 minutes
+  on points (value of enemy ships sunk), level points a draw.

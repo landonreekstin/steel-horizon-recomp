@@ -13,7 +13,8 @@
 
 #define INCOME 4.0f            /* build points per second */
 #define START_BUDGET 1200.0f
-#define MOORED_SPEED 4.0f      /* slower than this counts as alongside for repairs */
+#define MOORED_SPEED 4.0f
+#define SKIRMISH_LIMIT (90 * 60.0f)   /* seconds */      /* slower than this counts as alongside for repairs */
 
 int is_shore(const ship *s)
 {
@@ -168,8 +169,37 @@ void base_step(world *w)
     }
 }
 
+/* Can side still hurt the enemy: a gun, tube or rack with ammunition, or a strike
+ * aircraft not lost? */
+static int can_fight(const world *w, int side)
+{
+    int enemy_subs = 0;
+    for (int j = 0; j < w->count; j++)
+        enemy_subs |= w->ships[j].alive && w->ships[j].side != side && w->ships[j].cls->submerged;
+    for (int i = 0; i < w->count; i++) {
+        const ship *s = &w->ships[i];
+        if (!s->alive || s->side != side) continue;
+        for (int m = 0; m < s->cls->mount_count; m++) {
+            ammo_kind a = s->cls->weapons[s->cls->mounts[m].weapon].ammo;
+            if (s->turrets[m].ammo <= 0 || a == AMMO_NONE || module_health(s, MOD_TURRET, m) <= 0) continue;
+            if (a == AMMO_DC && !enemy_subs) continue;       /* racks can't hurt surface ships */
+            return 1;
+        }
+    }
+    for (int k = 0; k < w->air_count; k++)
+        if (w->air[k].side == side && is_strike_plane(w->air[k].type) && w->air[k].state != AIR_LOST &&
+            w->air[k].state != AIR_FALLING) return 1;
+    return 0;
+}
+
 int world_winner(const world *w)
 {
+    /* Neither side has anything left to fight with: a draw (2). */
+    if (!can_fight(w, 0) && !can_fight(w, 1)) {
+        int afloat = 0;
+        for (int i = 0; i < w->count; i++) afloat += w->ships[i].alive;
+        if (afloat) return 2;
+    }
     int alive[2] = {0, 0};
     for (int i = 0; i < w->count; i++)
         if (w->ships[i].alive && !is_shore(&w->ships[i])) alive[w->ships[i].side & 1]++;
@@ -193,7 +223,13 @@ int world_winner(const world *w)
         if (!alive[a] || mode_time_left(w) <= 0) return d;
         return -1;
     }
-    default:
-        return alive[0] && !alive[1] ? 0 : alive[1] && !alive[0] ? 1 : -1;
+    default: {
+        int r = alive[0] && !alive[1] ? 0 : alive[1] && !alive[0] ? 1 : -1;
+        /* A safety net for chases nobody can finish: after 90 minutes, points
+         * (the value of enemy ships sunk) decide; level points are a draw. */
+        if (r < 0 && (float)w->tick * SIM_DT >= SKIRMISH_LIMIT)
+            r = w->score[0] > w->score[1] ? 0 : w->score[1] > w->score[0] ? 1 : 2;
+        return r;
+    }
     }
 }

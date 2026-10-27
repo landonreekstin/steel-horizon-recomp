@@ -737,7 +737,7 @@ int hud_draw(hud *h, renderer *r, world *w, command_queue *q, int player, unsign
     ship_readout(h, r, w, q, selected, sw, sh);
     int result = world_winner(w);
     if (result >= 0) {
-        const char *msg = result == 0 ? "VICTORY" : "DEFEAT";
+        const char *msg = result == 2 ? "DRAW" : result == 0 ? "VICTORY" : "DEFEAT";
         float tw = ui_text_width(msg);
         ui_rect((float)sw / 2 - tw / 2 - 20, 60, (float)sw / 2 + tw / 2 + 20, 90, 0, 0, 0, 0.7f);
         ui_text((float)sw / 2 - tw / 2, 67, msg, 1, 0.85f, 0.4f, 1);

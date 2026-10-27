@@ -7,6 +7,8 @@
 #include "math3d.h"
 #include "sim.h"
 
+
+
 #define STRIKE_RANGE 12000.0f /* carriers launch at targets this close */
 
 static float engage_range(const ship_class *c)
@@ -60,6 +62,17 @@ static void ai_command(world *w)
                 order_officer(w, p, k, to);
             }
     }
+}
+
+/* Weight of a ship's gunfire: damage per second of every shell-firing mount. */
+static float firepower(const ship *s)
+{
+    float f = 0;
+    for (int m = 0; m < s->cls->mount_count; m++) {
+        const class_weapon *wp = &s->cls->weapons[s->cls->mounts[m].weapon];
+        if (wp->ammo == AMMO_SHELL && wp->fire_rate > 0) f += wp->damage / (wp->fire_rate * RELOAD_SCALE);
+    }
+    return f;
 }
 
 /* AI specials: used when they'd count. */
@@ -294,7 +307,9 @@ void ai_step(world *w)
                     hypotf(a->x - s->x, a->z - s->z) < 5000) { order_cap(w, i); break; }
             }
             float d = hypotf(t->x - s->x, t->z - s->z);
-            if (d < 5000) {
+            /* Run from ships that outgun her; another carrier, or anything no better
+             * armed, she stands and fights with her own guns while the planes work. */
+            if (d < 5000 && firepower(t) > 1.2f * firepower(s)) {
                 float away = atan2f(s->x - t->x, s->z - t->z);
                 order_move(w, &i, 1, s->x + sinf(away) * 800, s->z + cosf(away) * 800, 0);
             } else if (s->wp_count == 0 && d > STRIKE_RANGE * 0.9f) {
