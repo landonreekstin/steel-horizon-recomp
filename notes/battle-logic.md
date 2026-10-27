@@ -276,3 +276,19 @@ each kill planes (fighters more); Japan won all 4 after the fighter fix.
   they block sight between ships (aircraft see over); move orders get up to four
   detour waypoints round islands in the way. Scenario `archipelago` (the fleet action
   among ten islands); custom battles can add islands. Shown on the minimap.
+
+## Special abilities (original names and pairings; effects are design)
+- BOOT.BIN lists eight: AABlast, AccurateFire, AcePilot, EvasiveAction, FocusedFire,
+  HedgeHog, RapidFire, TargetingTorp; the constructors give special ids 1 CV, 2 BB,
+  3 SS, 4 DE, 6 CB, 7 CA, 8 DD, 9 PT with recharges 10–20 s, and the training text
+  (maps/*.csv, lines 26360–27080) pairs them: BB Focus Fire, DD Rapid Fire, SS
+  Targeting Torpedo, CB Accurate Fire, DE Hedgehog, PT Evasive Action, CA AA Blast,
+  CV Ace Pilot. Special 9 halves the hit chance against the PT boat in the original's
+  gunnery (FUN_088e94fc), consistent with Evasive Action.
+- Here (U, on the enemy under the cursor): recharge ×6 (60–120 s). Focus Fire 25 s,
+  all batteries on one target at 0.6× spread; Rapid Fire reloads now and ×0.4 for 15 s;
+  Targeting Torpedo reloads the tubes and the next spread homes (6°/s); Accurate Fire
+  20 s at 0.5× spread; Hedgehog throws 12 contact-fused bombs (45) in a ring on a sub
+  within 900; Evasive Action 20 s, 1.5× spread against her and 1.5× turning; AA Blast
+  15 s at 3× rate, 1.5× damage, 1.3× range; Ace Pilot 60 s of fighters hitting 2× as
+  often. AI ships use theirs when they'd count.

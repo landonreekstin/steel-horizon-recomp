@@ -62,6 +62,35 @@ static void ai_command(world *w)
     }
 }
 
+/* AI specials: used when they'd count. */
+static void ai_special(world *w, int i, int target)
+{
+    ship *s = &w->ships[i];
+    special_kind k = special_of(s->cls);
+    if (k == SP_NONE || s->special_cool > 0) return;
+    int in_range = 0;
+    for (int m = 0; target >= 0 && m < s->cls->mount_count && !in_range; m++) in_range = can_engage(w, i, m, target);
+    switch (k) {
+    case SP_FOCUS_FIRE: case SP_RAPID_FIRE: case SP_ACCURATE_FIRE: case SP_TARGETING_TORPEDO:
+        if (in_range) order_special(w, i, target);
+        break;
+    case SP_HEDGEHOG: order_special(w, i, -1); break;   /* goes only with a submarine near */
+    case SP_EVASIVE_ACTION: {
+        float comb;
+        if (torpedo_threat(w, i, &comb) || (target >= 0 && s->hp < 0.8f * s->cls->max_health && in_range)) order_special(w, i, -1);
+        break;
+    }
+    case SP_AA_BLAST: case SP_ACE_PILOT:
+        for (int k2 = 0; k2 < w->air_count; k2++) {
+            const aircraft *a = &w->air[k2];
+            if (a->side != s->side && (a->state == AIR_OUT || a->state == AIR_ATTACK) &&
+                hypotf(a->x - s->x, a->z - s->z) < (k == SP_AA_BLAST ? 1300 : 6000)) { order_special(w, i, -1); break; }
+        }
+        break;
+    default: break;
+    }
+}
+
 /* AI captains act on their own reports, as an attentive player would. */
 static void ai_captains(world *w)
 {
@@ -183,6 +212,7 @@ void ai_step(world *w)
             continue;
         }
         const ship *t = &w->ships[best];
+        ai_special(w, i, best);
         /* Objectives. Attacking (assault, or the attacker in defend mode): make for the
          * enemy shipyard, fighting only ships that come within 3,500. In assault every
          * fourth ship stays home as a guard. */

@@ -186,7 +186,7 @@ static void gun_solution(const world *w, int i, int m, int j, float *ax, float *
     float sigma = d * DISPERSION * 85.0f / hit_chance(s->cls->hull_type, t->cls->hull_type, d);
     sigma *= fire_control_factor(s) * (1 + 0.6f * (1 - crew_factor(s))) * (s->aim[mt->bat] >= 0 ? 1.25f : 1)
            * (s->evade > 0 ? 1.3f : 1) * (1 + 0.5f * fabsf(s->rudder) * s->speed / fmaxf(s->max_speed, 1));
-    sigma *= command_accuracy(w, i) / (1 + 0.15f * officer_level(s, OFF_FIRE_CONTROL));
+    sigma *= command_accuracy(w, i) / (1 + 0.15f * officer_level(s, OFF_FIRE_CONTROL)) * special_spread(w, i, j);
     float rel = hypotf(tvx - fvx, tvz - fvz);
     float lead = T * LEAD_ERROR * fmaxf(rel, t->speed * 0.5f);
     float turn = 0.25f * fabsf(t->rudder) * t->max_yaw * t->speed * T * T;
@@ -255,6 +255,7 @@ projectile *new_projectile(world *w)
     for (int k = 0; k < MAX_PROJECTILES; k++)
         if (!w->proj[k].active) {
             memset(&w->proj[k], 0, sizeof w->proj[k]);
+            w->proj[k].homing = -1;
             w->proj[k].active = 1;
             w->proj[k].tick0 = w->tick;
             return &w->proj[k];
@@ -301,10 +302,13 @@ static void fire(world *w, int i, int m, int j, float aim_yaw)
             p->vx = sinf(hd) * TORP_SPEED;
             p->vz = cosf(hd) * TORP_SPEED;
             p->flight = wp->max_range / TORP_SPEED;
+            /* Targeting Torpedo: this spread homes on the chosen ship. */
+            p->homing = s->special_left > 0 && special_of(s->cls) == SP_TARGETING_TORPEDO ? s->special_target : -1;
             w->torps++;
         }
         tu->reload = wp->fire_rate * TORP_RELOAD_SCALE * (module_health(s, MOD_TURRET, m) < 0.5f ? 1.8f : 1);
         tu->ammo--;
+        if (special_of(s->cls) == SP_TARGETING_TORPEDO) s->special_left = 0;
         fx(w, FX_TORP_LAUNCH, mx, my, mz);
         return;
     }
@@ -331,7 +335,8 @@ static void fire(world *w, int i, int m, int j, float aim_yaw)
     }
     /* Damaged turrets and thinned-out gun crews load slower. */
     tu->reload = fmaxf(2.0f, wp->fire_rate * RELOAD_SCALE) * (module_health(s, MOD_TURRET, m) < 0.5f ? 1.8f : 1)
-               / (0.4f + 0.6f * crew_factor(s)) / (1 + 0.2f * officer_level(s, OFF_GUNNERY));
+               / (0.4f + 0.6f * crew_factor(s)) / (1 + 0.2f * officer_level(s, OFF_GUNNERY))
+               * (s->special_left > 0 && special_of(s->cls) == SP_RAPID_FIRE ? 0.4f : 1);
     tu->ammo--;
     if (wp->ammo == AMMO_DC) fx(w, FX_DC_LAUNCH, mx, my, mz);
     else fx_mag(w, FX_MUZZLE, mx, my, mz, wp->damage);
@@ -415,6 +420,20 @@ static void projectiles_step(world *w)
                 p->active = 0;
             }
         } else if (p->ammo == AMMO_TORPEDO) {
+            if (p->homing >= 0 && p->homing < w->count && w->ships[p->homing].alive) {
+                /* Homing: turn toward the target's lead point (6 deg/s), integrate the
+                 * path, and keep x0/z0 such that x0 + v*t is where she is. */
+                const ship *tg = &w->ships[p->homing];
+                float hx = p->px, hz = p->pz;
+                float T = intercept(hx, hz, tg->x, tg->z, sinf(tg->heading) * tg->speed, cosf(tg->heading) * tg->speed, TORP_SPEED);
+                float want = atan2f(tg->x + sinf(tg->heading) * tg->speed * T - hx, tg->z + cosf(tg->heading) * tg->speed * T - hz);
+                float hd = atan2f(p->vx, p->vz), turn = 6 * PI_F / 180 * SIM_DT;
+                hd += clampf(wrap_angle(want - hd), -turn, turn);
+                p->vx = sinf(hd) * TORP_SPEED;
+                p->vz = cosf(hd) * TORP_SPEED;
+                p->x0 = hx + p->vx * SIM_DT - p->vx * t;
+                p->z0 = hz + p->vz * SIM_DT - p->vz * t;
+            }
             float x = p->x0 + p->vx * t, z = p->z0 + p->vz * t;
             if (w->isle_count && island_at(w, x, z, 0) >= 0) {   /* runs onto a beach */
                 fx(w, FX_SPLASH, x, 0, z);
@@ -439,7 +458,17 @@ static void projectiles_step(world *w)
         } else if (p->ammo == AMMO_DC) {
             float x = p->x0 + p->vx * p->flight, z = p->z0 + p->vz * p->flight;
             if (t - SIM_DT < p->flight && t >= p->flight) fx(w, FX_SPLASH, x, 0, z);
-            if (t >= p->flight + DC_SINK_S) {
+            if (p->homing == -2 && t >= p->flight + 0.5f) {   /* hedgehog: contact fuze, no blast */
+                for (int j = 0; j < w->count; j++) {
+                    const ship *s = &w->ships[j];
+                    if (s->alive && s->cls->submerged && s->side != p->side && hull_distance(s, x, z) <= 12) {
+                        damage_hit(w, j, HIT_DEPTH_CHARGE, s->x, s->z, p->damage, 0, 0);
+                        w->dc_hits++;
+                        fx(w, FX_DC_BLAST, x, 0, z);
+                    }
+                }
+                p->active = 0;
+            } else if (p->homing != -2 && t >= p->flight + DC_SINK_S) {
                 for (int j = 0; j < w->count; j++) {
                     const ship *s = &w->ships[j];
                     if (s->alive && s->cls->submerged && s->side != p->side && hull_distance(s, x, z) <= DC_RADIUS) {

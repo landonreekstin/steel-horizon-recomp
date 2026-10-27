@@ -115,7 +115,8 @@ withdraw/evade tuning. Original list:
   - *Attack vs defend*: only the defender has a shipyard (repairs, reinforcements,
     coastal batteries); the attacker brings a larger fixed fleet and must destroy it
     within a time limit, the defender wins by holding out.
-- Recon planes *(done: fog of war, radar, recon floatplanes and scouts)* and the original's special abilities (`special_id`, recharge times).
+- Recon planes *(done: fog of war, radar, recon floatplanes and scouts)* and the original's special abilities *(done: all eight, paired by the game's own
+  training text; U)*.
 - Scenario setup, fleet picker, maps *(done: front end, custom battles, islands /
   archipelago; reinforcement waves; victory on yards, time or points)*.
 - Fleet-level AI commander (targeting, formations, strike timing).

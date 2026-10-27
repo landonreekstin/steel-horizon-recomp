@@ -151,7 +151,7 @@ void hud_act_top(hud *h, command_queue *q, const world *w)
 
 /* ---- Captain's Command bar (top right) ------------------------------------------------ */
 
-static void captain_bar(hud *h, world *w, command_queue *q, int sw, float t)
+static void captain_bar(hud *h, renderer *r, world *w, command_queue *q, int sw, float t)
 {
     captain_report rep[32];
     int n = my_reports(w, h->player, rep, 32), pending = 0;
@@ -169,7 +169,7 @@ static void captain_bar(hud *h, world *w, command_queue *q, int sw, float t)
         if (clicked(h, x, 10, (float)sw - 10, 10 + lh + 10)) h->show_captain = 1;
         return;
     }
-    float bw = 470, x0 = (float)sw - bw - 10, y = 10;
+    float bw = 560, x0 = (float)sw - bw - 10, y = 10;
     int cap = h->show_fleet ? 4 : 7, shown = n < cap ? n : cap;
     float height = lh + 14 + (float)(shown ? shown : 1) * (2 * lh + 16) + (n > shown ? lh + 6 : 0);
     box(h, x0, y, x0 + bw, y + height, PANEL);
@@ -187,8 +187,9 @@ static void captain_bar(hud *h, world *w, command_queue *q, int sw, float t)
         const float card[4] = {urgent ? 0.35f : 0.12f, urgent ? 0.1f : 0.15f, urgent ? 0.08f : 0.18f, 0.9f};
         box(h, x0 + 4, cy, x0 + bw - 4, cy + 2 * lh + 12, card);
         ui_icon(report_icon(rep[i].kind), x0 + 8, cy + lh + 6 - 16, urgent ? 1 : 0.85f, urgent ? 0.6f : 0.9f, urgent ? 0.4f : 1, 1);
-        ui_text(x0 + PAD + 40, cy + 4, who, 0.65f, 0.85f, 1, 1);
-        ui_text(x0 + PAD + 40, cy + lh + 6, msg, action ? TEXT[0] : DIM[0], action ? TEXT[1] : DIM[1], action ? TEXT[2] : DIM[2], 1);
+        ui_ship_profile(r, &w->ships[rep[i].ship], x0 + 44, cy + 3, 86, 2 * lh + 6, 0, t);   /* her damage now */
+        ui_text(x0 + PAD + 130, cy + 4, who, 0.65f, 0.85f, 1, 1);
+        ui_text(x0 + PAD + 130, cy + lh + 6, msg, action ? TEXT[0] : DIM[0], action ? TEXT[1] : DIM[1], action ? TEXT[2] : DIM[2], 1);
         if (!action) continue;
         float bx = x0 + bw - 4 - PAD - (ui_text_width(action) + 2 * PAD) - 30;
         if (button(h, bx, cy + lh / 2, action, 0.2f, 0.45f, 0.25f)) report_cmd(q, w, h->player, &rep[i], CMD_CAPTAIN_ACT);
@@ -729,7 +730,7 @@ int hud_draw(hud *h, renderer *r, world *w, command_queue *q, int player, unsign
     mode_banner(w, sw);
     int key = controls_bar(h, w, selected);
     shipyard_panel(h, w, q, h->controls_bottom + 8);
-    captain_bar(h, w, q, sw, t);
+    captain_bar(h, r, w, q, sw, t);
     fleet_bar(h, r, w, q, selected, sw, sh, t);
     minimap(h, w, sh);
     hover_tooltip(h, w, selected);

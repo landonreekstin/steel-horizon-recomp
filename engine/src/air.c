@@ -292,7 +292,9 @@ static void fighter_step(world *w, int k)
         if (d < GUN_RANGE && off < GUN_CONE && a->gun_reload <= 0) {
             a->gun_reload = GUN_INTERVAL;
             if ((w->tick & 3) == 0) fx(w, FX_AIR_GUN, a->x, a->y, a->z);
-            if (rand01(w) < GUN_HIT) plane_damage(w, b, GUN_DAMAGE, 1);
+            const ship *cv = &w->ships[a->carrier];
+            float ace = cv->special_left > 0 && special_of(cv->cls) == SP_ACE_PILOT ? 2 : 1;
+            if (rand01(w) < GUN_HIT * ace) plane_damage(w, b, GUN_DAMAGE, 1);
         }
     } else {
         /* Orbit the guarded point. */
@@ -347,8 +349,9 @@ static void aa_step(world *w, int i)
     if (!s->alive || s->cls->submerged || s->cls->aa_damage <= 0 || s->hold_fire) return;
     s->aa_reload -= SIM_DT;
     if (s->aa_reload > 0) return;
+    int blast = s->special_left > 0 && special_of(s->cls) == SP_AA_BLAST;
     int best = -1;
-    float bd = AA_RANGE;
+    float bd = AA_RANGE * (blast ? 1.3f : 1);
     for (int k = 0; k < w->air_count; k++) {
         const aircraft *a = &w->air[k];
         if (a->side == s->side || !airborne(a)) continue;
@@ -356,12 +359,12 @@ static void aa_step(world *w, int i)
         if (d < bd) { bd = d; best = k; }
     }
     if (best < 0) return;
-    s->aa_reload = AA_INTERVAL / (1 + 0.3f * officer_level(s, OFF_AA));
+    s->aa_reload = AA_INTERVAL / (1 + 0.3f * officer_level(s, OFF_AA)) / (blast ? 3 : 1);
     aircraft *a = &w->air[best];
     fx(w, FX_FLAK, a->x + gauss(w) * 18, a->y + gauss(w) * 10, a->z + gauss(w) * 18);
     float low = a->y < 60 ? 2.0f : 1;                    /* a torpedo run is low and steady */
     if (rand01(w) < AA_HIT * low * (1 - 0.5f * bd / AA_RANGE))
-        plane_damage(w, a, s->cls->aa_damage * module_health(s, MOD_AA, -1) * (1 + 0.3f * officer_level(s, OFF_AA)), 0);
+        plane_damage(w, a, s->cls->aa_damage * module_health(s, MOD_AA, -1) * (1 + 0.3f * officer_level(s, OFF_AA)) * (blast ? 1.5f : 1), 0);
 }
 
 void air_step(world *w)

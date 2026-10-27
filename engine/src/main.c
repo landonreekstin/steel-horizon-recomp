@@ -863,6 +863,20 @@ int main(int argc, char **argv)
                     c.z = vz;
                     issue(&g, &c);
                 }
+            } else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_u) {
+                /* U: special ability, on the enemy under the cursor, else her current target. */
+                int mx, my;
+                SDL_GetMouseState(&mx, &my);
+                int ids[MAX_SHIPS], n = selected_ids(&g, ids), tgt = enemy_at(&g, mx, my, w, h);
+                for (int q = 0; q < n; q++) {
+                    command c = sel_cmd(&g, CMD_SPECIAL);
+                    memset(c.ships, 0, sizeof c.ships);
+                    cmd_set_ship(&c, ids[q]);
+                    c.a = tgt >= 0 ? tgt : g.w.ships[ids[q]].order_target[BAT_MAIN];
+                    if (c.a < 0)
+                        for (int m = 0; m < g.w.ships[ids[q]].cls->mount_count && c.a < 0; m++) c.a = g.w.ships[ids[q]].turrets[m].target;
+                    issue(&g, &c);
+                }
             } else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_y && g.net) {
                 g.typing = 1;                            /* Y: say something */
                 g.chat_in[0] = 0;

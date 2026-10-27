@@ -1303,6 +1303,76 @@ static void test_islands(const class_table *ct)
           hypotf(w.ships[ram].x, w.ships[ram].z - 600));
 }
 
+static void test_specials(const class_table *ct)
+{
+    const ship_class *bb = class_find(ct, "AmericanBattleship"), *dd = class_find(ct, "AmericanDestroyer");
+    const ship_class *ss = class_find(ct, "AmericanSubmarine"), *cb = class_find(ct, "AmericanBattlecruiser");
+    const ship_class *de = class_find(ct, "AmericanDestroyerEscort"), *pt = class_find(ct, "AmericanTorpedoBoat");
+    const ship_class *ca = class_find(ct, "AmericanCruiser"), *cv = class_find(ct, "AmericanAircraftCarrier");
+    const ship_class *jbb = class_find(ct, "JapaneseBattleship"), *jss = class_find(ct, "JapaneseSubmarine");
+    if (!bb || !dd || !ss || !cb || !de || !pt || !ca || !cv || !jbb || !jss) { CHECK(0, "special classes"); return; }
+    CHECK(special_of(bb) == SP_FOCUS_FIRE && special_of(dd) == SP_RAPID_FIRE && special_of(ss) == SP_TARGETING_TORPEDO &&
+          special_of(cb) == SP_ACCURATE_FIRE && special_of(de) == SP_HEDGEHOG && special_of(pt) == SP_EVASIVE_ACTION &&
+          special_of(ca) == SP_AA_BLAST && special_of(cv) == SP_ACE_PILOT, "the original's specials by hull");
+    world w;
+    /* Focus Fire: tighter on the chosen target, once per recharge. */
+    world_init(&w);
+    world_spawn(&w, bb, 0, 0, 0, 0);
+    world_spawn(&w, jbb, 1, 2000, 0, 0);
+    CHECK(order_special(&w, 0, 1) == 0 && order_special(&w, 0, 1) == -1, "Focus Fire goes, then recharges");
+    CHECK(special_spread(&w, 0, 1) < 0.65f && w.ships[0].order_target[BAT_MAIN] == 1, "Focus Fire tightens the spread on her target");
+    /* Rapid Fire: more shells in the same quarter-minute. */
+    int shots[2];
+    for (int pass = 0; pass < 2; pass++) {
+        world_init(&w);
+        world_spawn(&w, dd, 0, 0, 0, 0);
+        world_spawn(&w, jbb, 1, 1500, 0, 0);
+        w.ships[1].hold_fire = 1;
+        run(&w, 10);
+        if (pass) order_special(&w, 0, 1);
+        int before = w.shots;
+        run(&w, 15);
+        shots[pass] = w.shots - before;
+    }
+    CHECK(shots[1] > shots[0] * 3 / 2, "Rapid Fire: %d shells vs %d", shots[1], shots[0]);
+    /* Hedgehog: a ring of bombs on a nearby submarine. */
+    world_init(&w);
+    world_spawn(&w, de, 0, 0, 0, 0);
+    world_spawn(&w, jss, 1, 0, 500, 0);
+    w.ships[0].hold_fire = w.ships[1].hold_fire = 1;
+    CHECK(order_special(&w, 0, -1) == 0, "Hedgehog thrown");
+    run(&w, 10);
+    CHECK(w.dc_hits > 0 && w.ships[1].hp < jss->max_health, "Hedgehog hits (%d)", w.dc_hits);
+    /* Evasive Action: harder to hit. */
+    world_init(&w);
+    world_spawn(&w, jbb, 1, 0, 0, 0);
+    world_spawn(&w, pt, 0, 1500, 0, 0);
+    order_special(&w, 1, -1);
+    CHECK(special_spread(&w, 0, 1) > 1.4f, "Evasive Action widens the spread against her");
+    /* Targeting Torpedo: a spread that follows a ship turning away. */
+    int hits[2];
+    for (int pass = 0; pass < 2; pass++) {
+        world_init(&w);
+        world_spawn(&w, ss, 0, 0, 0, 0);
+        world_spawn(&w, jbb, 1, 0, 1600, PI_F / 2);
+        w.ships[1].hold_fire = 1;
+        w.ships[1].speed = w.ships[1].max_speed * 0.4f;   /* slow enough for the bow tubes' lead */
+        w.ships[1].max_speed *= 0.4f;
+        w.ships[1].wp[0] = (waypoint){20000, 1600};
+        w.ships[1].wp_count = 1;
+        if (pass) order_special(&w, 0, 1);
+        for (int t = 0; t < 120 * SIM_HZ; t++) {
+            world_step(&w);
+            if (w.torps > 0 && w.ships[1].wp[0].z < 2000) {   /* torpedoes away: she turns hard */
+                w.ships[1].wp[0] = (waypoint){20000, 20000};
+            }
+        }
+        hits[pass] = w.torp_hits;
+        if (!w.torps) hits[pass] = -100;
+    }
+    CHECK(hits[1] > hits[0] && hits[0] >= 0, "Targeting Torpedo: %d hits vs %d unguided", hits[1], hits[0]);
+}
+
 int main(int argc, char **argv)
 {
     const char *assets = argc > 1 ? argv[1] : "assets";
@@ -1351,6 +1421,7 @@ int main(int argc, char **argv)
     test_vision(&ct);
     test_standalone();
     test_islands(&ct);
+    test_specials(&ct);
     printf("%d failures\n", failures);
     return failures != 0;
 }

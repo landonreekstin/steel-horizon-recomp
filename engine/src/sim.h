@@ -103,6 +103,7 @@ typedef struct {
     float px, pz;                  /* torpedo: position at the previous tick */
     float pen;                     /* shell/bomb penetration (shell_pen) */
     int plunging;                  /* falls on the deck rather than the belt */
+    int homing;                    /* Targeting Torpedo: ship it steers for, -1 none */
 } projectile;
 
 typedef enum { DC_AUTO, DC_FIRES, DC_FLOODING, DC_WEAPONS, DC_POLICIES } dc_policy;
@@ -157,7 +158,10 @@ typedef struct {
     float evade_base;          /* the course she was on when told to evade */
     float report_cool[REP_KINDS_MAX];
     float reveal;              /* seconds her gun flashes still give her away */
-    float recon_cool;          /* seconds until her floatplane / scout can go again */  /* per report_kind: seconds before the captain raises it again */
+    float recon_cool;          /* seconds until her floatplane / scout can go again */
+    float special_cool;        /* seconds until her special is charged */
+    float special_left;        /* seconds her special still runs */
+    int special_target;  /* per report_kind: seconds before the captain raises it again */
     float list, trim;          /* radians: + list to starboard, + trim bow down */
     float water;               /* flooded fraction of the whole hull */
     dc_policy policy;
@@ -317,6 +321,18 @@ void base_step(world *w);    /* part of world_step: income, production, repairs,
 float repair_radius(const ship *yard);
 int at_yard(const world *w, int i);          /* moored in reach of her side's working drydock */
 float mode_time_left(const world *w);        /* MODE_DEFEND, seconds; else 0 */
+
+/* Special abilities (src/specials.c): the original's eight, one per hull type. */
+typedef enum { SP_NONE, SP_FOCUS_FIRE, SP_RAPID_FIRE, SP_TARGETING_TORPEDO, SP_ACCURATE_FIRE, SP_HEDGEHOG,
+               SP_EVASIVE_ACTION, SP_AA_BLAST, SP_ACE_PILOT, SP_KINDS } special_kind;
+special_kind special_of(const ship_class *c);
+const char *special_name(special_kind k);
+float special_recharge(special_kind k);          /* seconds */
+/* Use the ship's special (target: a ship for Focus Fire / Targeting Torpedo, else -1).
+ * Returns 0 if it went. */
+int order_special(world *w, int ship, int target);
+void specials_step(world *w);                    /* part of world_step */
+float special_spread(const world *w, int i, int j);   /* gunnery spread factor from specials */
 
 /* Fog of war (src/vision.c). Ships of one's own side, shore installations, and
  * everything with fog off are always visible. */

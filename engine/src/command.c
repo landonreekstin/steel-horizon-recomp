@@ -77,6 +77,9 @@ void world_apply(world *w, const command *c)
         for (int k = 0; k < n; k++)
             if (!order_recon(w, ids[k], c->x, c->z)) break;
         break;
+    case CMD_SPECIAL:                                /* a: target (or -1) */
+        for (int k = 0; k < n; k++) order_special(w, ids[k], c->a);
+        break;
     case CMD_DC_PRIORITY:
         if (n == 1) order_dc_priority(w, ids[0], c->a);
         break;

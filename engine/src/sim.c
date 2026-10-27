@@ -107,6 +107,7 @@ void world_step(world *w)
 {
     /* Damage first, so this tick's movement and gunnery see its effects. */
     for (int i = 0; i < w->count; i++) damage_step(w, i);
+    specials_step(w);
     for (int i = 0; i < w->count; i++) {
         ship *s = &w->ships[i];
         s->prev_x = s->x;
@@ -123,7 +124,8 @@ void world_step(world *w)
         /* A ship needs way on to turn: rudder authority scales with speed. */
         float authority = clampf(s->speed / fmaxf(s->max_speed, 1e-3f) * 1.5f, 0.15f, 1.0f);
         s->heading = wrap_angle(s->heading + s->rudder * s->max_yaw * authority * SIM_DT
-                                * (1 + 0.25f * officer_level(s, OFF_NAVIGATION)));
+                                * (1 + 0.25f * officer_level(s, OFF_NAVIGATION))
+                                * (s->special_left > 0 && special_of(s->cls) == SP_EVASIVE_ACTION ? 1.5f : 1));
         s->x += sinf(s->heading) * s->speed * SIM_DT;
         s->z += cosf(s->heading) * s->speed * SIM_DT;
     }
