@@ -71,13 +71,15 @@ python3 -I tools/preview.py assets/files MODEL.pingu out.png [GUN.pingu]
 - Command and crew (7b): accuracy model + HUD readout (calibrated against fired
   shells), macro targeting, crew casualties, repair limits, hangar lifts, evasive
   manoeuvres, Captain's Command bar, clickable controls toolbar, baked font.
+- Shipyards and modes (8): scenarios `assault`, `attack`, `defend`; build panel,
+  drydock repairs, reinforcement waves, AI waves; `--trace N` prints the battle state.
 
 Build/run the engine:
 
 ```
 cmake -S engine -B engine/build -G Ninja && ninja -C engine/build
 engine/build/test_engine assets && python3 -I tests/test_engine_port.py
-engine/build/shrts --assets assets [--scenario m01|fleet|carriers]
+engine/build/shrts --assets assets [--scenario m01|fleet|carriers|assault|attack|defend]
 #   LMB select, RMB move (Shift queues), RMB enemy focus fire (Ctrl: secondaries only),
 #   H hold fire, F fire at will, S stop, WASD/QE/wheel camera, Space pause, +/- speed
 #   carrier selected: B air strike (focus target or nearest), G fighter patrol, R recall

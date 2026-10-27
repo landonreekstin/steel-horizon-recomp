@@ -18,6 +18,10 @@ Full plan: `~/.claude/plans/i-want-to-recompile-snoopy-pearl.md`. Status per pha
   evasive manoeuvres (Z); Captain's Command bar (reports, one-click actions, dismiss,
   collapsed alert, bridge-out ships listed); clickable controls toolbar (F1); text
   rendering (DejaVu Sans Mono baked by tools/bakefont.py).
+- 8 (shipyards): shore shipyards with coastal batteries, drydock repairs, slipway
+  production on a budget, the assault and attack/defend modes with reinforcement
+  waves, AI that builds, repairs, guards and attacks in escalating waves, a shipyard
+  build panel and a mode banner. Placeholder generated yard model.
 
 ## Next
 
@@ -71,6 +75,10 @@ withdraw/evade tuning. Original list:
   zig-zag against gunfire, at the cost of your own accuracy.
 
 ### 8. Battle layer
+- **Final UI art** *(requested)*: icon buttons in the controls toolbar (War Thunder
+  style) instead of text, and Captain's reports that show a thumbnail of the ship
+  reflecting her current damage and afflictions (fires, flooding, list, lost turrets).
+  The current text UI is a placeholder.
 - **Controls toolbar** *(requested, War Thunder style)*, alongside the Captain's Command bar: an on-screen bar listing
   every control and hotkey for the current selection (move, focus/split/hold fire,
   launch strikes, damage control), with tooltips; clickable as an alternative to keys.

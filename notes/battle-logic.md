@@ -154,3 +154,28 @@ each kill planes (fighters more); Japan won all 4 after the fighter fix.
   carrier with bombers and a target in range → strike. Acting quiets that report for
   45 s, dismissing for 60 s. A ship with her bridge destroyed reports nothing and is
   listed as such.
+
+## Shipyards and game modes (phase 8, `engine/src/base.c`) — design
+- **Shipyard:** a shore "ship" (hull type 30): 8 waterfront sections, 6,000 HP,
+  concrete armour (belt 2.6 / deck 2.0), two coastal batteries of the nation's
+  battleship gun plus two of its secondary, AA, headquarters (bridge) and radar, an
+  ammunition dump (magazine), a **drydock** and a **slipway**. It can't flood, list or
+  sink by water; it falls to structure failure or its dump exploding. Ships are kept
+  off its ground. The model is generated in code (placeholder; there is no original).
+- **Economy:** 1,200 points to start, +4/s while the yard stands. Costs: BB 1,500,
+  CV 1,400, CB 1,100, CA 800, DD 400, SS 350, DE 300, PT 120; build time = cost/10 s
+  (scaled by slipway health; nothing below 30%). New ships launch seaward of the yard.
+- **Drydock repairs** for friendly ships moored (< 4 u/s) within half-length + 900:
+  structure, fires, leaks and water, modules back to 100% (even ones lost at sea,
+  slowly), crew replacements; scaled by drydock health, none below 30%.
+- **Modes:** *assault*: a yard each, first to destroy the other's wins (a side with a
+  standing yard isn't beaten by losing its fleet). *attack / defend*: one yard; the
+  attacker gets a cruiser + destroyer wave every 5 min, the defender 70% income, 30 min
+  limit; the attacker wins by destroying the yard, the defender on time or when the
+  attacker has nothing left afloat.
+- **AI:** yards keep two ships queued, cycling their options; ships below 35% go home
+  to the drydock until 85%; attackers make for the enemy yard and fight only ships
+  within 3,500; in assault every fourth ship guards home and the rest muster off the
+  yard, sailing in waves of 4, then 6, 8, … so stalled assaults escalate.
+- Measured, both sides AI: assault 40–63 min, 2 of 3 decided within 80 min; attack and
+  defend split 2–2 over four seeds each (decided in 14–20 min or on time).
