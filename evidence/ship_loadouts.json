@@ -1,0 +1,2972 @@
+{
+ "source": "BOOT.BIN (USA) relocated at 0x08804000 by tools/prx2exec.py; Ghidra 12.1.4 MIPS:LE:32:default",
+ "method": "Each class constructor installs a vtable at obj+0xc; vtable slot 0x104 is the weapon-setup routine, a list of calls AddSurfaceWeapon 0x088c9324 / AddAirWeapon 0x088c91f0 / AddSubmergedWeapon 0x088c9458 (ship, owner, type, mount_group). Surface type -> SetGun switch 0x088ecc58 (0..9 = 18in..3in, gunValues.xml order). Submerged type -> switch 0x088eabf8.",
+ "mount_groups": "inferred: 1 fore, 2 aft, 3/4 secondary sides, 5/6 torpedo, 7 depth charge, 8 hedgehog, 9 AA (air weapons force 9)",
+ "classes": {
+  "AmericanAircraftCarrier": {
+   "setup_fn": "0x8955844",
+   "ctor": "0x08955790",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 1,
+    "max_health": 1400,
+    "special_id": 1,
+    "attack_mod": 100,
+    "size_mod": 100,
+    "blocking": 1,
+    "exposure_mod": 75,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 50,
+    "special_recharge": 15,
+    "turn_rate": 3,
+    "speed": 33
+   },
+   "ds_model": "AL_CV01.nsbmd"
+  },
+  "AmericanBattlecruiser": {
+   "setup_fn": "0x8955d18",
+   "ctor": "0x08955c5c",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 3,
+     "weapon": "12 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 3,
+     "weapon": "12 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 3,
+     "weapon": "12 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 6,
+     "weapon": "6 Inch",
+     "mount_group": 3
+    },
+    {
+     "kind": "surface",
+     "type": 6,
+     "weapon": "6 Inch",
+     "mount_group": 4
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "air",
+     "type": 1,
+     "weapon": "AA anti-recon? (inferred)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 2,
+    "max_health": 1200,
+    "special_id": 6,
+    "attack_mod": 100,
+    "size_mod": 90,
+    "blocking": 1,
+    "exposure_mod": 65,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 70,
+    "special_recharge": 20,
+    "turn_rate": 3,
+    "speed": 33
+   },
+   "ds_model": "AL_CB01.nsbmd"
+  },
+  "AmericanBattleship": {
+   "setup_fn": "0x8956038",
+   "ctor": "0x08955f84",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 1,
+     "weapon": "16 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 1,
+     "weapon": "16 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 1,
+     "weapon": "16 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 3
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 4
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 3,
+    "max_health": 1600,
+    "special_id": 2,
+    "attack_mod": 100,
+    "size_mod": 100,
+    "blocking": 1,
+    "exposure_mod": 70,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 40,
+    "special_recharge": 15,
+    "turn_rate": 3,
+    "speed": 33
+   },
+   "ds_model": "AL_BB01.nsbmd"
+  },
+  "AmericanCargoShip": {
+   "setup_fn": "0x8956344",
+   "ctor": "0x0895628c",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 4,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "AL_AK01.nsbmd"
+  },
+  "AmericanCruiser": {
+   "setup_fn": "0x89565b8",
+   "ctor": "0x08956500",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 3
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 4
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "air",
+     "type": 1,
+     "weapon": "AA anti-recon? (inferred)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 5,
+    "max_health": 1000,
+    "special_id": 7,
+    "attack_mod": 100,
+    "size_mod": 80,
+    "blocking": 1,
+    "exposure_mod": 60,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 100,
+    "special_recharge": 10,
+    "turn_rate": 3,
+    "speed": 37
+   },
+   "ds_model": "AL_CA01.nsbmd"
+  },
+  "AmericanDestroyer": {
+   "setup_fn": "0x89568e4",
+   "ctor": "0x08956824",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "submerged",
+     "type": 5,
+     "weapon": "600 lbs DC",
+     "mount_group": 7
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 6,
+    "max_health": 700,
+    "special_id": 8,
+    "attack_mod": 100,
+    "size_mod": 70,
+    "blocking": 0,
+    "exposure_mod": 55,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 20,
+    "special_recharge": 10,
+    "turn_rate": 2,
+    "speed": 41
+   },
+   "ds_model": "AL_DD01.nsbmd"
+  },
+  "AmericanDestroyerEscort": {
+   "setup_fn": "0x8956bdc",
+   "ctor": "0x08956b20",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 8,
+     "weapon": "4 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 8,
+     "weapon": "4 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "submerged",
+     "type": 5,
+     "weapon": "600 lbs DC",
+     "mount_group": 7
+    },
+    {
+     "kind": "submerged",
+     "type": 6,
+     "weapon": "Hedgehog? (unnamed, inferred)",
+     "mount_group": 8
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 7,
+    "max_health": 600,
+    "special_id": 4,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 45,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 20,
+    "special_recharge": 15,
+    "turn_rate": 2,
+    "speed": 45
+   },
+   "ds_model": "AL_DE01.nsbmd"
+  },
+  "AmericanFlagshipBattleship": {
+   "setup_fn": "0x8956ed8",
+   "ctor": "0x08956df4",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 0,
+     "weapon": "18 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 0,
+     "weapon": "18 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 0,
+     "weapon": "18 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 4,
+     "weapon": "11 Inch",
+     "mount_group": 3
+    },
+    {
+     "kind": "surface",
+     "type": 4,
+     "weapon": "11 Inch",
+     "mount_group": 4
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 14,
+    "max_health": 2200,
+    "special_id": 2,
+    "attack_mod": 100,
+    "size_mod": 100,
+    "blocking": 1,
+    "exposure_mod": 70,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 40,
+    "special_recharge": 15,
+    "turn_rate": 3,
+    "speed": 33
+   },
+   "ds_model": "AL_BBF01.nsbmd"
+  },
+  "AmericanFlagshipDestroyer": {
+   "setup_fn": "0x8957218",
+   "ctor": "0x0895712c",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "submerged",
+     "type": 5,
+     "weapon": "600 lbs DC",
+     "mount_group": 7
+    },
+    {
+     "kind": "submerged",
+     "type": 5,
+     "weapon": "600 lbs DC",
+     "mount_group": 7
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 15,
+    "max_health": 1500,
+    "special_id": 8,
+    "attack_mod": 100,
+    "size_mod": 70,
+    "blocking": 0,
+    "exposure_mod": 55,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 40,
+    "special_recharge": 10,
+    "turn_rate": 2,
+    "speed": 41
+   },
+   "ds_model": "AL_DDF01.nsbmd"
+  },
+  "AmericanFlagshipSub": {
+   "setup_fn": "0x8957568",
+   "ctor": "0x08957470",
+   "weapons": [
+    {
+     "kind": "submerged",
+     "type": 0,
+     "weapon": "24 Inch T",
+     "mount_group": 5
+    },
+    {
+     "kind": "submerged",
+     "type": 0,
+     "weapon": "24 Inch T",
+     "mount_group": 5
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 1,
+    "hull_type": 16,
+    "max_health": 1200,
+    "special_id": 3,
+    "attack_mod": 100,
+    "size_mod": 70,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 0,
+    "special_recharge": 20,
+    "turn_rate": 0,
+    "speed": 16
+   },
+   "ds_model": "AL_SSF01.nsbmd"
+  },
+  "AmericanGerste": {
+   "setup_fn": "0x89577fc",
+   "ctor": "0x08957744",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 750,
+    "hull_type": 18,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "AX_GTN01.nsbmd"
+  },
+  "AmericanHospitalShip": {
+   "setup_fn": null,
+   "ctor": "0x089579b8",
+   "weapons": [],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 8,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "AL_AH01.nsbmd",
+   "note": "weapon-setup slot adds no weapons: unarmed"
+  },
+  "AmericanLandingCraft": {
+   "setup_fn": "0x8957c98",
+   "ctor": "0x08957be0",
+   "weapons": [
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 9,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "AL_LCI01.nsbmd"
+  },
+  "AmericanMineLayer": {
+   "setup_fn": "0x8957ee0",
+   "ctor": "0x08957e2c",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 10,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "AL_CM01.nsbmd"
+  },
+  "AmericanRepairShip": {
+   "setup_fn": "0x8958154",
+   "ctor": "0x0895809c",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 11,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "AL_AR01.nsbmd"
+  },
+  "AmericanSubmarine": {
+   "setup_fn": "0x89583f4",
+   "ctor": "0x0895832c",
+   "weapons": [
+    {
+     "kind": "submerged",
+     "type": 0,
+     "weapon": "24 Inch T",
+     "mount_group": 5
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 1,
+    "hull_type": 12,
+    "max_health": 450,
+    "special_id": 3,
+    "attack_mod": 100,
+    "size_mod": 70,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 0,
+    "special_recharge": 20,
+    "turn_rate": 0,
+    "speed": 16
+   },
+   "ds_model": "AL_SS01.nsbmd"
+  },
+  "AmericanTorpedoBoat": {
+   "setup_fn": "0x8958648",
+   "ctor": "0x0895858c",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 2,
+     "weapon": "18 Inch T",
+     "mount_group": 5
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 13,
+    "max_health": 250,
+    "special_id": 9,
+    "attack_mod": 100,
+    "size_mod": 35,
+    "blocking": 0,
+    "exposure_mod": 30,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 15,
+    "turn_rate": 1,
+    "speed": 53
+   },
+   "ds_model": "AL_PT01.nsbmd"
+  },
+  "BritishAircraftCarrier": {
+   "setup_fn": "0x89537a0",
+   "ctor": "0x089536ec",
+   "weapons": [
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 1,
+    "max_health": 1400,
+    "special_id": 1,
+    "attack_mod": 100,
+    "size_mod": 100,
+    "blocking": 1,
+    "exposure_mod": 75,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 50,
+    "special_recharge": 15,
+    "turn_rate": 3,
+    "speed": 33
+   },
+   "ds_model": "AL_CV01.nsbmd"
+  },
+  "BritishBattleship": {
+   "setup_fn": "0x8953bf0",
+   "ctor": "0x08953b3c",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 2,
+     "weapon": "14 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 2,
+     "weapon": "14 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 2,
+     "weapon": "14 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 6,
+     "weapon": "6 Inch",
+     "mount_group": 3
+    },
+    {
+     "kind": "surface",
+     "type": 6,
+     "weapon": "6 Inch",
+     "mount_group": 4
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 3,
+    "max_health": 1600,
+    "special_id": 2,
+    "attack_mod": 100,
+    "size_mod": 100,
+    "blocking": 1,
+    "exposure_mod": 70,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 40,
+    "special_recharge": 15,
+    "turn_rate": 3,
+    "speed": 33
+   },
+   "ds_model": "AL_BB01.nsbmd"
+  },
+  "BritishCargoShip": {
+   "setup_fn": "0x8953f00",
+   "ctor": "0x08953e48",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 4,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "AL_AK01.nsbmd"
+  },
+  "BritishCruiser": {
+   "setup_fn": "0x8954174",
+   "ctor": "0x089540bc",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 3
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 4
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 5,
+    "max_health": 1000,
+    "special_id": 7,
+    "attack_mod": 100,
+    "size_mod": 80,
+    "blocking": 1,
+    "exposure_mod": 60,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 100,
+    "special_recharge": 10,
+    "turn_rate": 3,
+    "speed": 37
+   },
+   "ds_model": "AL_CA01.nsbmd"
+  },
+  "BritishDestroyer": {
+   "setup_fn": "0x8954488",
+   "ctor": "0x089543c8",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "submerged",
+     "type": 5,
+     "weapon": "600 lbs DC",
+     "mount_group": 7
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 6,
+    "max_health": 700,
+    "special_id": 8,
+    "attack_mod": 100,
+    "size_mod": 70,
+    "blocking": 0,
+    "exposure_mod": 55,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 20,
+    "special_recharge": 10,
+    "turn_rate": 2,
+    "speed": 41
+   },
+   "ds_model": "AL_DD01.nsbmd"
+  },
+  "BritishDestroyerEscort": {
+   "setup_fn": "0x8954780",
+   "ctor": "0x089546c4",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 8,
+     "weapon": "4 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 8,
+     "weapon": "4 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "submerged",
+     "type": 5,
+     "weapon": "600 lbs DC",
+     "mount_group": 7
+    },
+    {
+     "kind": "submerged",
+     "type": 6,
+     "weapon": "Hedgehog? (unnamed, inferred)",
+     "mount_group": 8
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 7,
+    "max_health": 600,
+    "special_id": 4,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 45,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 20,
+    "special_recharge": 15,
+    "turn_rate": 2,
+    "speed": 45
+   },
+   "ds_model": "AL_DE01.nsbmd"
+  },
+  "BritishLandingCraft": {
+   "setup_fn": "0x8954a50",
+   "ctor": "0x08954998",
+   "weapons": [
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 9,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "AL_LCI01.nsbmd"
+  },
+  "BritishMineLayer": {
+   "setup_fn": "0x8954c98",
+   "ctor": "0x08954be4",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 10,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "AL_CM01.nsbmd"
+  },
+  "BritishRepairShip": {
+   "setup_fn": "0x8954f0c",
+   "ctor": "0x08954e54",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 11,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "AL_AR01.nsbmd"
+  },
+  "BritishSubmarine": {
+   "setup_fn": "0x89551ac",
+   "ctor": "0x089550e4",
+   "weapons": [
+    {
+     "kind": "submerged",
+     "type": 0,
+     "weapon": "24 Inch T",
+     "mount_group": 5
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 1,
+    "hull_type": 12,
+    "max_health": 450,
+    "special_id": 3,
+    "attack_mod": 100,
+    "size_mod": 70,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 0,
+    "special_recharge": 20,
+    "turn_rate": 0,
+    "speed": 16
+   },
+   "ds_model": "AL_SS01.nsbmd"
+  },
+  "BritishTorpedoBoat": {
+   "setup_fn": "0x8955400",
+   "ctor": "0x08955344",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 2,
+     "weapon": "18 Inch T",
+     "mount_group": 5
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 13,
+    "max_health": 250,
+    "special_id": 9,
+    "attack_mod": 100,
+    "size_mod": 35,
+    "blocking": 0,
+    "exposure_mod": 30,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 15,
+    "turn_rate": 1,
+    "speed": 53
+   },
+   "ds_model": "AL_PT01.nsbmd"
+  },
+  "GermanBattlecruiser": {
+   "setup_fn": "0x8951830",
+   "ctor": "0x08951774",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 4,
+     "weapon": "11 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 4,
+     "weapon": "11 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 6,
+     "weapon": "6 Inch",
+     "mount_group": 3
+    },
+    {
+     "kind": "surface",
+     "type": 6,
+     "weapon": "6 Inch",
+     "mount_group": 4
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 2,
+    "max_health": 1200,
+    "special_id": 6,
+    "attack_mod": 100,
+    "size_mod": 90,
+    "blocking": 1,
+    "exposure_mod": 65,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 70,
+    "special_recharge": 20,
+    "turn_rate": 3,
+    "speed": 33
+   },
+   "ds_model": "AX_CB01.nsbmd"
+  },
+  "GermanBattleship": {
+   "setup_fn": "0x8951b18",
+   "ctor": "0x08951a64",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 2,
+     "weapon": "14 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 2,
+     "weapon": "14 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 2,
+     "weapon": "14 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 2,
+     "weapon": "14 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 6,
+     "weapon": "6 Inch",
+     "mount_group": 3
+    },
+    {
+     "kind": "surface",
+     "type": 6,
+     "weapon": "6 Inch",
+     "mount_group": 4
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 3,
+    "max_health": 1600,
+    "special_id": 2,
+    "attack_mod": 100,
+    "size_mod": 100,
+    "blocking": 1,
+    "exposure_mod": 70,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 40,
+    "special_recharge": 15,
+    "turn_rate": 3,
+    "speed": 33
+   },
+   "ds_model": "AX_BB01.nsbmd"
+  },
+  "GermanBossShip": {
+   "setup_fn": "0x8951e44",
+   "ctor": "0x08951d8c",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 4
+    },
+    {
+     "kind": "submerged",
+     "type": 0,
+     "weapon": "24 Inch T",
+     "mount_group": 5
+    },
+    {
+     "kind": "submerged",
+     "type": 0,
+     "weapon": "24 Inch T",
+     "mount_group": 6
+    },
+    {
+     "kind": "submerged",
+     "type": 5,
+     "weapon": "600 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 1,
+    "max_health": 2000,
+    "hull_type": 21,
+    "attack_mod": 100,
+    "size_mod": 70,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 0,
+    "special_recharge": 40,
+    "turn_rate": 0,
+    "speed": 35
+   },
+   "ds_model": "AX_GBS01.nsbmd"
+  },
+  "GermanCargoShip": {
+   "setup_fn": "0x89520f4",
+   "ctor": "0x0895203c",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 4,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "AX_AK01.nsbmd"
+  },
+  "GermanCruiser": {
+   "setup_fn": "0x8952368",
+   "ctor": "0x089522b0",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 3
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 4
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 5,
+    "max_health": 1000,
+    "special_id": 7,
+    "attack_mod": 100,
+    "size_mod": 80,
+    "blocking": 1,
+    "exposure_mod": 60,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 100,
+    "special_recharge": 10,
+    "turn_rate": 3,
+    "speed": 37
+   },
+   "ds_model": "AX_CA01.nsbmd"
+  },
+  "GermanDestroyer": {
+   "setup_fn": "0x895267c",
+   "ctor": "0x089525bc",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "submerged",
+     "type": 5,
+     "weapon": "600 lbs DC",
+     "mount_group": 7
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 6,
+    "max_health": 700,
+    "special_id": 8,
+    "attack_mod": 100,
+    "size_mod": 70,
+    "blocking": 0,
+    "exposure_mod": 55,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 20,
+    "special_recharge": 10,
+    "turn_rate": 2,
+    "speed": 41
+   },
+   "ds_model": "AX_DD01.nsbmd"
+  },
+  "GermanDestroyerEscort": {
+   "setup_fn": "0x8952974",
+   "ctor": "0x089528b8",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 8,
+     "weapon": "4 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 8,
+     "weapon": "4 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "submerged",
+     "type": 5,
+     "weapon": "600 lbs DC",
+     "mount_group": 7
+    },
+    {
+     "kind": "submerged",
+     "type": 6,
+     "weapon": "Hedgehog? (unnamed, inferred)",
+     "mount_group": 8
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 7,
+    "max_health": 600,
+    "special_id": 4,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 45,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 20,
+    "special_recharge": 15,
+    "turn_rate": 2,
+    "speed": 45
+   },
+   "ds_model": "AX_DE01.nsbmd"
+  },
+  "GermanLandingCraft": {
+   "setup_fn": "0x8952c44",
+   "ctor": "0x08952b8c",
+   "weapons": [
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 9,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "AX_LCI01.nsbmd"
+  },
+  "GermanMineLayer": {
+   "setup_fn": "0x8952e8c",
+   "ctor": "0x08952dd8",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 10,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "AX_CM01.nsbmd"
+  },
+  "GermanRepairShip": {
+   "setup_fn": "0x8953100",
+   "ctor": "0x08953048",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 11,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "AX_AR01.nsbmd"
+  },
+  "GermanSubmarine": {
+   "setup_fn": "0x89533a0",
+   "ctor": "0x089532d8",
+   "weapons": [
+    {
+     "kind": "submerged",
+     "type": 0,
+     "weapon": "24 Inch T",
+     "mount_group": 5
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 1,
+    "hull_type": 12,
+    "max_health": 450,
+    "special_id": 3,
+    "attack_mod": 100,
+    "size_mod": 70,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 0,
+    "special_recharge": 20,
+    "turn_rate": 0,
+    "speed": 16
+   },
+   "ds_model": "AX_SS01.nsbmd"
+  },
+  "JapaneseAircraftCarrier": {
+   "setup_fn": "0x8958a8c",
+   "ctor": "0x089589d8",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 1,
+    "max_health": 1400,
+    "special_id": 1,
+    "attack_mod": 100,
+    "size_mod": 100,
+    "blocking": 1,
+    "exposure_mod": 75,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 50,
+    "special_recharge": 15,
+    "turn_rate": 3,
+    "speed": 33
+   },
+   "ds_model": "AX_CV01.nsbmd"
+  },
+  "JapaneseBattleship": {
+   "setup_fn": "0x8958f58",
+   "ctor": "0x08958ea4",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 0,
+     "weapon": "18 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 0,
+     "weapon": "18 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 0,
+     "weapon": "18 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 6,
+     "weapon": "6 Inch",
+     "mount_group": 3
+    },
+    {
+     "kind": "surface",
+     "type": 6,
+     "weapon": "6 Inch",
+     "mount_group": 4
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 3,
+    "max_health": 1600,
+    "special_id": 2,
+    "attack_mod": 100,
+    "size_mod": 100,
+    "blocking": 1,
+    "exposure_mod": 70,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 40,
+    "special_recharge": 15,
+    "turn_rate": 3,
+    "speed": 33
+   },
+   "ds_model": "AX_BB01.nsbmd"
+  },
+  "JapaneseBossShip": {
+   "setup_fn": "0x895925c",
+   "ctor": "0x089591ac",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 0,
+     "weapon": "18 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 0,
+     "weapon": "18 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 0,
+     "weapon": "18 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 6,
+     "weapon": "6 Inch",
+     "mount_group": 3
+    },
+    {
+     "kind": "surface",
+     "type": 6,
+     "weapon": "6 Inch",
+     "mount_group": 4
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 5000,
+    "hull_type": 20,
+    "attack_mod": 100,
+    "size_mod": 100,
+    "blocking": 1,
+    "exposure_mod": 70,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 50,
+    "special_recharge": 30,
+    "turn_rate": 3,
+    "speed": 28
+   },
+   "ds_model": "AX_JBS01.nsbmd"
+  },
+  "JapaneseCargoShip": {
+   "setup_fn": "0x895955c",
+   "ctor": "0x089594a4",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 4,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "AX_AK01.nsbmd"
+  },
+  "JapaneseCruiser": {
+   "setup_fn": "0x89597d0",
+   "ctor": "0x08959718",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 3
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 4
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 5,
+    "max_health": 1000,
+    "special_id": 7,
+    "attack_mod": 100,
+    "size_mod": 80,
+    "blocking": 1,
+    "exposure_mod": 60,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 100,
+    "special_recharge": 10,
+    "turn_rate": 3,
+    "speed": 37
+   },
+   "ds_model": "AX_CA01.nsbmd"
+  },
+  "JapaneseDestroyer": {
+   "setup_fn": "0x8959b04",
+   "ctor": "0x08959a44",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "submerged",
+     "type": 5,
+     "weapon": "600 lbs DC",
+     "mount_group": 7
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 6,
+    "max_health": 700,
+    "special_id": 8,
+    "attack_mod": 100,
+    "size_mod": 70,
+    "blocking": 0,
+    "exposure_mod": 55,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 20,
+    "special_recharge": 10,
+    "turn_rate": 2,
+    "speed": 41
+   },
+   "ds_model": "AX_DD01.nsbmd"
+  },
+  "JapaneseLandingCraft": {
+   "setup_fn": "0x8959df8",
+   "ctor": "0x08959d40",
+   "weapons": [
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 9,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "AX_LCI01.nsbmd"
+  },
+  "JapaneseMineLayer": {
+   "setup_fn": "0x895a040",
+   "ctor": "0x08959f8c",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 10,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "AX_CM01.nsbmd"
+  },
+  "JapaneseRepairShip": {
+   "setup_fn": "0x895a2b4",
+   "ctor": "0x0895a1fc",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 11,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "AX_AR01.nsbmd"
+  },
+  "JapaneseShadowSubmarine": {
+   "setup_fn": "0x895a554",
+   "ctor": "0x0895a48c",
+   "weapons": [
+    {
+     "kind": "submerged",
+     "type": 0,
+     "weapon": "24 Inch T",
+     "mount_group": 5
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 1,
+    "hull_type": 19,
+    "max_health": 900,
+    "special_id": 3,
+    "attack_mod": 100,
+    "size_mod": 70,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 0,
+    "special_recharge": 15,
+    "turn_rate": 0,
+    "speed": 20
+   },
+   "ds_model": "SH_SS01.nsbmd"
+  },
+  "JapaneseSubmarine": {
+   "setup_fn": "0x895a7b4",
+   "ctor": "0x0895a6ec",
+   "weapons": [
+    {
+     "kind": "submerged",
+     "type": 0,
+     "weapon": "24 Inch T",
+     "mount_group": 5
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 1,
+    "hull_type": 12,
+    "max_health": 450,
+    "special_id": 3,
+    "attack_mod": 100,
+    "size_mod": 70,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 0,
+    "special_recharge": 20,
+    "turn_rate": 0,
+    "speed": 16
+   },
+   "ds_model": "AX_SS01.nsbmd"
+  },
+  "JapaneseTorpedoBoat": {
+   "setup_fn": "0x895aa08",
+   "ctor": "0x0895a94c",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 2,
+     "weapon": "18 Inch T",
+     "mount_group": 5
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "hull_type": 13,
+    "max_health": 250,
+    "special_id": 9,
+    "attack_mod": 100,
+    "size_mod": 35,
+    "blocking": 0,
+    "exposure_mod": 30,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 15,
+    "turn_rate": 1,
+    "speed": 53
+   },
+   "ds_model": "AX_PT01.nsbmd"
+  },
+  "ShadowAircraftCarrier": {
+   "setup_fn": "0x894f0a8",
+   "ctor": "0x0894eff8",
+   "weapons": [
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 1400,
+    "hull_type": 1,
+    "attack_mod": 100,
+    "size_mod": 100,
+    "blocking": 1,
+    "exposure_mod": 75,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 50,
+    "special_recharge": 15,
+    "turn_rate": 3,
+    "speed": 33
+   },
+   "ds_model": "SH_CV01.nsbmd"
+  },
+  "ShadowBattlecruiser": {
+   "setup_fn": "0x894f4f8",
+   "ctor": "0x0894f444",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 3,
+     "weapon": "12 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 3,
+     "weapon": "12 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 3,
+     "weapon": "12 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 6,
+     "weapon": "6 Inch",
+     "mount_group": 3
+    },
+    {
+     "kind": "surface",
+     "type": 6,
+     "weapon": "6 Inch",
+     "mount_group": 4
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 1200,
+    "hull_type": 2,
+    "attack_mod": 100,
+    "size_mod": 90,
+    "blocking": 1,
+    "exposure_mod": 65,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 70,
+    "special_recharge": 20,
+    "turn_rate": 3,
+    "speed": 33
+   },
+   "ds_model": "SH_CB01.nsbmd"
+  },
+  "ShadowBattleship": {
+   "setup_fn": "0x894f7f8",
+   "ctor": "0x0894f74c",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 1,
+     "weapon": "16 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 1,
+     "weapon": "16 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 1,
+     "weapon": "16 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 6,
+     "weapon": "6 Inch",
+     "mount_group": 3
+    },
+    {
+     "kind": "surface",
+     "type": 6,
+     "weapon": "6 Inch",
+     "mount_group": 4
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 1600,
+    "hull_type": 3,
+    "attack_mod": 100,
+    "size_mod": 100,
+    "blocking": 1,
+    "exposure_mod": 70,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 40,
+    "special_recharge": 15,
+    "turn_rate": 3,
+    "speed": 33
+   },
+   "ds_model": "SH_BB01.nsbmd"
+  },
+  "ShadowBossShip": {
+   "setup_fn": "0x894fb08",
+   "ctor": "0x0894fa4c",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 0,
+     "weapon": "18 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 0,
+     "weapon": "18 Inch",
+     "mount_group": 3
+    },
+    {
+     "kind": "surface",
+     "type": 0,
+     "weapon": "18 Inch",
+     "mount_group": 4
+    },
+    {
+     "kind": "surface",
+     "type": 0,
+     "weapon": "18 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 0,
+     "weapon": "24 Inch T",
+     "mount_group": 5
+    },
+    {
+     "kind": "submerged",
+     "type": 0,
+     "weapon": "24 Inch T",
+     "mount_group": 6
+    },
+    {
+     "kind": "submerged",
+     "type": 5,
+     "weapon": "600 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 7500,
+    "hull_type": 17,
+    "attack_mod": 100,
+    "size_mod": 100,
+    "blocking": 1,
+    "exposure_mod": 95,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 175,
+    "special_recharge": 30,
+    "turn_rate": 0,
+    "speed": 20
+   },
+   "ds_model": "SH_MS01.nsbmd"
+  },
+  "ShadowCargoShip": {
+   "setup_fn": "0x894ff0c",
+   "ctor": "0x0894fe54",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 4,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "SH_AK01.nsbmd"
+  },
+  "ShadowCruiser": {
+   "setup_fn": "0x8950178",
+   "ctor": "0x089500c8",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 5,
+     "weapon": "8 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 3
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 4
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 4,
+     "weapon": "300 lbs DC",
+     "mount_group": 7
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 1000,
+    "hull_type": 5,
+    "attack_mod": 100,
+    "size_mod": 80,
+    "blocking": 1,
+    "exposure_mod": 60,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 100,
+    "special_recharge": 10,
+    "turn_rate": 3,
+    "speed": 37
+   },
+   "ds_model": "SH_CA01.nsbmd"
+  },
+  "ShadowDestroyer": {
+   "setup_fn": "0x8950484",
+   "ctor": "0x089503cc",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "surface",
+     "type": 7,
+     "weapon": "5 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "submerged",
+     "type": 5,
+     "weapon": "600 lbs DC",
+     "mount_group": 7
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 700,
+    "hull_type": 6,
+    "attack_mod": 100,
+    "size_mod": 70,
+    "blocking": 0,
+    "exposure_mod": 55,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 20,
+    "special_recharge": 10,
+    "turn_rate": 2,
+    "speed": 41
+   },
+   "ds_model": "SH_DD01.nsbmd"
+  },
+  "ShadowDestroyerEscort": {
+   "setup_fn": "0x8950774",
+   "ctor": "0x089506c0",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 8,
+     "weapon": "4 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 8,
+     "weapon": "4 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "submerged",
+     "type": 5,
+     "weapon": "600 lbs DC",
+     "mount_group": 7
+    },
+    {
+     "kind": "submerged",
+     "type": 6,
+     "weapon": "Hedgehog? (unnamed, inferred)",
+     "mount_group": 8
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 600,
+    "hull_type": 7,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 45,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 20,
+    "special_recharge": 15,
+    "turn_rate": 2,
+    "speed": 45
+   },
+   "ds_model": "SH_DE01.nsbmd"
+  },
+  "ShadowLandingCraft": {
+   "setup_fn": "0x8950a44",
+   "ctor": "0x0895098c",
+   "weapons": [
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 9,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "SH_LCI01.nsbmd"
+  },
+  "ShadowMineLayer": {
+   "setup_fn": "0x8950c8c",
+   "ctor": "0x08950bd8",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 10,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "SH_CM01.nsbmd"
+  },
+  "ShadowRepairShip": {
+   "setup_fn": "0x8950f00",
+   "ctor": "0x08950e48",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 2
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 500,
+    "hull_type": 11,
+    "attack_mod": 100,
+    "size_mod": 60,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 0,
+    "turn_rate": 2,
+    "speed": 33
+   },
+   "ds_model": "SH_AR01.nsbmd"
+  },
+  "ShadowSubmarine": {
+   "setup_fn": "0x89511a0",
+   "ctor": "0x089510d8",
+   "weapons": [
+    {
+     "kind": "submerged",
+     "type": 0,
+     "weapon": "24 Inch T",
+     "mount_group": 5
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 1,
+    "hull_type": 12,
+    "max_health": 450,
+    "special_id": 3,
+    "attack_mod": 100,
+    "size_mod": 70,
+    "blocking": 0,
+    "exposure_mod": 50,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 0,
+    "special_recharge": 20,
+    "turn_rate": 0,
+    "speed": 16
+   },
+   "ds_model": "SH_SS01.nsbmd"
+  },
+  "ShadowTorpedoBoat": {
+   "setup_fn": "0x89513ec",
+   "ctor": "0x08951338",
+   "weapons": [
+    {
+     "kind": "surface",
+     "type": 9,
+     "weapon": "3 Inch",
+     "mount_group": 1
+    },
+    {
+     "kind": "submerged",
+     "type": 2,
+     "weapon": "18 Inch T",
+     "mount_group": 5
+    },
+    {
+     "kind": "air",
+     "type": 0,
+     "weapon": "AA (ship aa_damage)",
+     "mount_group": 1
+    }
+   ],
+   "ctor_defaults": {
+    "submerged": 0,
+    "max_health": 250,
+    "hull_type": 13,
+    "attack_mod": 100,
+    "size_mod": 35,
+    "blocking": 0,
+    "exposure_mod": 30,
+    "defense_mod": 100,
+    "toughness": 1,
+    "aa_damage": 10,
+    "special_recharge": 15,
+    "turn_rate": 1,
+    "speed": 53
+   },
+   "ds_model": "SH_PT01.nsbmd"
+  }
+ },
+ "ctor_fields": "object offsets: 0xb0=hull_type, 0xb4=special_id, 0xb8=submerged, 0xc0=max_health, 0xc4=attack_mod, 0xc6=size_mod, 0xc8=blocking, 0xca=exposure_mod, 0xcc=defense_mod, 0xce=toughness, 0xd0=aa_damage, 0xd2=special_recharge, 0xd4=turn_rate, 0xd6=speed; hull_type and submerged read from constructors, special_id meaning inferred"
+}
