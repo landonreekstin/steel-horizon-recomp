@@ -61,6 +61,8 @@ typedef struct {
 int bnk_load(const char *path, sound_bank *out);
 void bnk_free(sound_bank *b);
 int bnk_find(const sound_bank *b, const char *name);   /* -1 if absent */
+/* Synthesised stand-ins for the battle sounds (synth.c), for running without the bank. */
+void synth_bank(sound_bank *b);
 
 /* Reads a whole file; caller frees. */
 uint8_t *read_file(const char *path, long *size);

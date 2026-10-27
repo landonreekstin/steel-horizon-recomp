@@ -49,7 +49,10 @@ audio *audio_open(const char *bank_path)
 {
     if (SDL_InitSubSystem(SDL_INIT_AUDIO)) { fprintf(stderr, "audio: %s (silent)\n", SDL_GetError()); return NULL; }
     audio *a = calloc(1, sizeof *a);
-    if (bnk_load(bank_path, &a->bank)) { fprintf(stderr, "audio: no bank at %s (silent)\n", bank_path); free(a); return NULL; }
+    if (bnk_load(bank_path, &a->bank)) {
+        printf("audio: no sound bank at %s, using synthesised effects\n", bank_path);
+        synth_bank(&a->bank);
+    }
     SDL_AudioSpec want = {0}, have;
     want.freq = BANK_RATE;
     want.format = AUDIO_S16SYS;

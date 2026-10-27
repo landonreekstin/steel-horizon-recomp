@@ -154,6 +154,16 @@ static void test_sound(const char *assets)
     for (int k = 0; i >= 0 && k < b.length[i]; k++) peak = abs(b.pcm[i][k]) > peak ? abs(b.pcm[i][k]) : peak;
     CHECK(peak > 8000, "16in report peak %d", peak);
     bnk_free(&b);
+    /* The synthesised stand-ins cover every effect sound (not the voices). */
+    synth_bank(&b);
+    for (size_t k = 0; k < sizeof used / sizeof *used; k++) {
+        if (strstr(used[k], "_USA_") || strstr(used[k], "_JAPAN_") || strstr(used[k], "_BRIT_")) continue;
+        int j = bnk_find(&b, used[k]);
+        int pk = 0;
+        for (int q = 0; j >= 0 && q < b.length[j]; q++) pk = abs(b.pcm[j][q]) > pk ? abs(b.pcm[j][q]) : pk;
+        CHECK(j >= 0 && pk > 3000, "synth %s present and audible (peak %d)", used[k], pk);
+    }
+    bnk_free(&b);
 }
 
 static void run(world *w, float seconds)
@@ -1297,6 +1307,25 @@ int main(int argc, char **argv)
 {
     const char *assets = argc > 1 ? argv[1] : "assets";
     char path[1024];
+    if (argc > 3 && !strcmp(argv[2], "--synth-wav")) {   /* write the synthesised sounds as WAVs */
+        sound_bank b;
+        synth_bank(&b);
+        for (int i = 0; i < b.count; i++) {
+            snprintf(path, sizeof path, "%s/%s.wav", argv[3], b.names[i]);
+            FILE *f = fopen(path, "wb");
+            if (!f) continue;
+            uint32_t data = (uint32_t)b.length[i] * 2, riff = 36 + data, fmt = 16, rate = BANK_RATE, bps = BANK_RATE * 2;
+            uint16_t pcm = 1, ch = 1, align = 2, bits = 16;
+            fwrite("RIFF", 1, 4, f); fwrite(&riff, 4, 1, f); fwrite("WAVEfmt ", 1, 8, f); fwrite(&fmt, 4, 1, f);
+            fwrite(&pcm, 2, 1, f); fwrite(&ch, 2, 1, f); fwrite(&rate, 4, 1, f); fwrite(&bps, 4, 1, f);
+            fwrite(&align, 2, 1, f); fwrite(&bits, 2, 1, f); fwrite("data", 1, 4, f); fwrite(&data, 4, 1, f);
+            fwrite(b.pcm[i], 2, (size_t)b.length[i], f);
+            fclose(f);
+        }
+        printf("%d synthesised sounds written\n", b.count);
+        bnk_free(&b);
+        return 0;
+    }
     if (argc > 3 && !strcmp(argv[2], "--hashes")) {
         FILE *out = fopen(argv[3], "w");
         snprintf(path, sizeof path, "%s/files", assets);
