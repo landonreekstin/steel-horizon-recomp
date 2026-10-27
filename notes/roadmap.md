@@ -24,6 +24,9 @@ Full plan: `~/.claude/plans/i-want-to-recompile-snoopy-pearl.md`. Status per pha
   build panel and a mode banner. Placeholder generated yard model.
 - 8b: command stream, flagships, distinguished officers, fleet toolbar with live
   damage thumbnails, ship-profile cross-section, dive and torpedo bombers.
+- 8c (first pass): online lockstep multiplayer, teams of several players each with a
+  fleet, desync detection (`tests/test_multiplayer.py`). Still to do: lobby screen,
+  chat, reconnect.
 
 ## Next
 

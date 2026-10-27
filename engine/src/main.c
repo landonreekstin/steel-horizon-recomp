@@ -16,11 +16,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "data.h"
 #include "gl.h"
 #include "command.h"
 #include "hud.h"
+#include "net.h"
 #include "math3d.h"
 #include "render.h"
 #include "sim.h"
@@ -35,6 +37,7 @@ typedef struct {
     int paused, time_scale;
     int player, side;          /* the local player (command.h) and his team */
     command_queue q;
+    net *net;                  /* online game, or NULL */
 } game;
 
 static int spawn(game *g, const char *cls, int side, float x, float z, float heading)
@@ -314,7 +317,97 @@ static command sel_cmd(const game *g, cmd_kind kind)
 /* Everything the player orders goes through the command stream (command.h). */
 static void issue(game *g, const command *c)
 {
-    hud_issue(&g->q, &g->w, c);
+    if (g->net) net_send_command(g->net, c);
+    else hud_issue(&g->q, &g->w, c);
+}
+
+/* Online: share each team's ships among its human players (round robin; the yard to
+ * the first); a team without humans is left to the AI. */
+static void assign_players(game *g, const net_game *ng)
+{
+    for (int side = 0; side < 2; side++) {
+        int humans[MAX_PLAYERS], nh = 0;
+        for (int p = 0; p < ng->players; p++)
+            if (ng->team[p] == side) humans[nh++] = p;
+        int k = 0;
+        for (int i = 0; i < g->w.count; i++) {
+            ship *s = &g->w.ships[i];
+            if (s->side != side) continue;
+            if (!nh) { s->owner = 8 + side; s->ai = 1; continue; }   /* AI admiral */
+            s->owner = is_shore(s) ? humans[0] : humans[k++ % nh];
+            s->ai = 0;
+        }
+    }
+    for (int p = 0; p < FLEET_PLAYERS; p++) g->w.flagship_of[p] = -1;
+    for (int i = 0; i < g->w.count; i++) g->w.ships[i].flagship = 0;
+    for (int p = 0; p < ng->players; p++) {
+        int best = -1;
+        float bc = -1;
+        for (int i = 0; i < g->w.count; i++)
+            if (g->w.ships[i].owner == p && !is_shore(&g->w.ships[i]) && class_cost(g->w.ships[i].cls) > bc) {
+                bc = class_cost(g->w.ships[i].cls);
+                best = i;
+            }
+        if (best >= 0) order_flagship(&g->w, p, best);
+    }
+}
+
+/* One tick, lockstep: at a turn boundary apply that turn's commands (the host first
+ * closes the turn NET_DELAY ahead); without the turn yet, don't step. 1 if stepped. */
+static int mp_step(game *g)
+{
+    if (!g->net) {
+        cmdq_apply_due(&g->q, &g->w);
+        world_step(&g->w);
+        return 1;
+    }
+    long t = g->w.tick;
+    if (t % NET_TURN == 0) {
+        long k = t / NET_TURN;
+        if (net_is_host(g->net)) net_make_turn(g->net, k + NET_DELAY);
+        if (!net_have_turn(g->net, k)) return 0;
+        command cmds[NET_MAX_TURN_CMDS];
+        int n = net_turn_commands(g->net, k, cmds, NET_MAX_TURN_CMDS);
+        for (int i = 0; i < n; i++) world_apply(&g->w, &cmds[i]);
+    }
+    world_step(&g->w);
+    if (g->w.tick % NET_TURN == 0) net_done_turn(g->net, g->w.tick / NET_TURN - 1, world_checksum(&g->w));
+    return 1;
+}
+
+/* --bot: scripted orders for testing online play: every 30 s each of the player's
+ * ships is sent at the nearest enemy and told to engage it. */
+static void bot_orders(game *g)
+{
+    static long last = -1;
+    if (g->w.tick % (30 * SIM_HZ) != 1 || g->w.tick == last) return;
+    last = g->w.tick;
+    for (int i = 0; i < g->w.count; i++) {
+        const ship *s = &g->w.ships[i];
+        if (s->owner != g->player || !s->alive || is_shore(s)) continue;
+        int best = -1;
+        float bd = INFINITY;
+        for (int j = 0; j < g->w.count; j++) {
+            const ship *t = &g->w.ships[j];
+            if (!t->alive || t->side == s->side || t->cls->submerged) continue;
+            float d = hypotf(t->x - s->x, t->z - s->z);
+            if (d < bd) { bd = d; best = j; }
+        }
+        if (best < 0) continue;
+        command c;
+        memset(&c, 0, sizeof c);
+        c.player = (uint8_t)g->player;
+        cmd_set_ship(&c, i);
+        c.kind = CMD_ATTACK;
+        c.a = best;
+        c.b = (1 << BAT_MAIN) | (1 << BAT_SECONDARY) | (1 << BAT_TORPEDO);
+        issue(g, &c);
+        c.kind = CMD_MOVE;
+        c.x = (s->x + g->w.ships[best].x) / 2;
+        c.z = (s->z + g->w.ships[best].z) / 2;
+        c.flag = 0;
+        issue(g, &c);
+    }
 }
 
 /* Orders from a key (or the controls toolbar, which sends the same keys). */
@@ -395,7 +488,9 @@ int main(int argc, char **argv)
 {
     const char *assets = "assets", *shot = NULL, *scenario = "m01";
     unsigned long long seed = 1;
-    int ai_both = 0;
+    int ai_both = 0, host_port = -1, mp_players = 2, teams[MAX_PLAYERS] = {0}, teams_given = 0, bot = 0;
+    long desync_at = -1;
+    const char *join_addr = NULL, *player_name = "Admiral";
     float trace = 0;
     int frames = 60;
     float headless = -1, cam_yaw = 0, cam_pitch = 0, cam_dist = 0;
@@ -406,6 +501,21 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--scenario") && i + 1 < argc) scenario = argv[++i];
         else if (!strcmp(argv[i], "--ai-both")) ai_both = 1;
+        else if (!strcmp(argv[i], "--host") && i + 1 < argc) host_port = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--players") && i + 1 < argc) mp_players = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--join") && i + 1 < argc) join_addr = argv[++i];
+        else if (!strcmp(argv[i], "--name") && i + 1 < argc) player_name = argv[++i];
+        else if (!strcmp(argv[i], "--bot")) bot = 1;
+        else if (!strcmp(argv[i], "--desync-test") && i + 1 < argc) desync_at = atol(argv[++i]);
+        else if (!strcmp(argv[i], "--teams") && i + 1 < argc) {
+            const char *p = argv[++i];
+            for (int k = 0; k < MAX_PLAYERS && *p; k++) {
+                teams[k] = atoi(p) & 1;
+                while (*p && *p != ',') p++;
+                if (*p == ',') p++;
+            }
+            teams_given = 1;
+        }
         else if (!strcmp(argv[i], "--trace") && i + 1 < argc) trace = (float)atof(argv[++i]);
         else if (!strcmp(argv[i], "--seed") && i + 1 < argc) seed = strtoull(argv[++i], NULL, 10);
         else if (!strcmp(argv[i], "--headless") && i + 1 < argc) headless = (float)atof(argv[++i]);
@@ -426,17 +536,49 @@ int main(int argc, char **argv)
     if (classes_load(path, &g.classes)) return 1;
     snprintf(path, sizeof path, "%s/files", assets);
     classes_load_layouts(&g.classes, path);
+    /* Online: host or join, wait in the lobby, take the host's scenario and seed. */
+    net_game ng;
+    if (host_port >= 0 || join_addr) {
+        g.net = host_port >= 0 ? net_host(host_port, mp_players, player_name) : NULL;
+        if (join_addr) {
+            char hostname[128];
+            int port = 0;
+            const char *colon = strrchr(join_addr, ':');
+            snprintf(hostname, sizeof hostname, "%.*s", colon ? (int)(colon - join_addr) : (int)strlen(join_addr), join_addr);
+            port = colon ? atoi(colon + 1) : 47800;
+            g.net = net_join(hostname, port, player_name);
+        }
+        if (!g.net) return 1;
+        if (net_is_host(g.net)) printf("hosting on port %d, waiting for %d players\n", net_port(g.net), mp_players);
+        fflush(stdout);
+        for (;;) {
+            if (net_poll(g.net)) { fprintf(stderr, "lost the connection\n"); return 1; }
+            if (net_is_host(g.net) && net_lobby_full(g.net) && !net_started(g.net, NULL)) net_start(g.net, scenario, seed, teams_given ? teams : NULL);
+            if (net_started(g.net, &ng) && net_player(g.net) >= 0) break;
+            usleep(2000);
+        }
+        scenario = ng.scenario;
+        seed = ng.seed;
+        g.player = net_player(g.net);
+        g.side = ng.team[g.player];
+        printf("player %d (%s) on team %d, %d players, scenario %s\n", g.player, ng.name[g.player], g.side, ng.players, scenario);
+    }
     if (setup_scenario(&g, scenario)) return 1;
     world_seed(&g.w, seed);
     for (int i = 0; ai_both && i < g.w.count; i++) g.w.ships[i].ai = 1;
+    if (g.net) assign_players(&g, &ng);
 
     if (headless >= 0) {
         /* Sim only: the player side holds its course, both sides fire at will;
          * runs until one side is sunk or the time is up. */
         int ticks = (int)(headless * SIM_HZ), t;
         int sunk_seen[MAX_SHIPS] = {0};
-        for (t = 0; t < ticks && world_winner(&g.w) < 0; t++) {
-            world_step(&g.w);
+        for (t = 0; t < ticks && world_winner(&g.w) < 0;) {
+            if (g.net && net_poll(g.net)) { fprintf(stderr, "lost the connection\n"); return 1; }
+            if (bot) bot_orders(&g);
+            if (!mp_step(&g)) { usleep(500); continue; }   /* waiting for the next turn */
+            t++;
+            if (desync_at >= 0 && g.w.tick == desync_at) g.w.ships[0].x += 1;   /* --desync-test */
             if (trace > 0 && t % (int)(trace * SIM_HZ) == 0) {
                 /* Ships afloat per side, yard condition, budget, closest approach to the enemy yard. */
                 printf("t=%6.0f", (double)t / SIM_HZ);
@@ -475,6 +617,13 @@ int main(int argc, char **argv)
                g.w.bombs, g.w.bomb_hits, g.w.planes_lost_aa, g.w.planes_lost_fighters, g.w.planes_ditched,
                g.w.penetrations, g.w.ricochets, g.w.fires_started, g.w.magazine_explosions);
         print_state(&g.w);
+        if (g.net) {
+            /* Let the last acknowledgements arrive, then report for the test harness. */
+            for (int k = 0; k < 200; k++) { net_poll(g.net); usleep(2000); }
+            printf("final tick %ld checksum %08x desync %ld\n", g.w.tick, world_checksum(&g.w),
+                   net_is_host(g.net) ? net_desync(g.net) : -1L);
+            net_close(g.net);
+        }
         return 0;
     }
 
@@ -543,8 +692,8 @@ int main(int argc, char **argv)
                 SDL_Keycode k = e.key.keysym.sym;
                 int ctrl = (e.key.keysym.mod & KMOD_CTRL) != 0;
                 if (k == SDLK_ESCAPE) running = 0;
-                else if (k == SDLK_SPACE) g.paused = !g.paused;
-                else if (k == SDLK_EQUALS || k == SDLK_PLUS || k == SDLK_KP_PLUS) g.time_scale = g.time_scale < 4 ? g.time_scale * 2 : 4;
+                else if (k == SDLK_SPACE && !g.net) g.paused = !g.paused;   /* online: no pause, real time */
+                else if ((k == SDLK_EQUALS || k == SDLK_PLUS || k == SDLK_KP_PLUS) && !g.net) g.time_scale = g.time_scale < 4 ? g.time_scale * 2 : 4;
                 else if (k == SDLK_MINUS || k == SDLK_KP_MINUS) g.time_scale = g.time_scale > 1 ? g.time_scale / 2 : 1;
                 else if (k == SDLK_F12) save_ppm("shrts_screenshot.ppm", w, h);
                 else order_key(&g, k, ctrl, &hd);
@@ -613,9 +762,9 @@ int main(int argc, char **argv)
 
         if (!g.paused) {
             acc += dt * g.time_scale;
+            if (g.net && net_poll(g.net)) { fprintf(stderr, "lost the connection\n"); running = 0; }
             while (acc >= SIM_DT) {
-                cmdq_apply_due(&g.q, &g.w);
-                world_step(&g.w);
+                if (!mp_step(&g)) { acc = SIM_DT; break; }     /* waiting for the next turn */
                 acc -= SIM_DT;
                 sim_time += SIM_DT;
             }
@@ -636,6 +785,11 @@ int main(int argc, char **argv)
         renderer_draw(r, &g.cam, w, h, &g.w, g.paused ? 1.0f : (float)(acc / SIM_DT),
                       g.selected, &g.box, (float)sim_time);
         int key = hud_draw(&hd, r, &g.w, &g.q, g.player, g.selected, w, h, (float)sim_time);
+        while (g.net && g.q.count) {                     /* online: HUD orders go out too */
+            net_send_command(g.net, &g.q.items[g.q.head]);
+            g.q.head = (g.q.head + 1) % CMD_QUEUE;
+            g.q.count--;
+        }
         if (hd.focus >= 0 && hd.focus < g.w.count) {     /* double-clicked a fleet card */
             g.cam.target = v3(g.w.ships[hd.focus].x, 0, g.w.ships[hd.focus].z);
             hd.focus = -1;

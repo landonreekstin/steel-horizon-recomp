@@ -198,3 +198,20 @@ each kill planes (fighters more); Japan won all 4 after the fighter fix.
   AP bomb pen 2.6. Torpedo bombers: down to 25 at 2,500 out, 70% speed, drop the
   original's 18" torpedo (195) at 750 on the lead point; AA hits twice as often below
   60. AI ships comb torpedoes they detect.
+
+## Online multiplayer (8c) — `engine/src/net.c`
+- Deterministic lockstep, star topology over TCP. Players send commands to the host;
+  every 4 ticks (200 ms) the host closes a turn, scheduled 2 turns ahead, and sends it
+  to everyone; each peer applies turn k at tick 4k and waits if it doesn't have it.
+  The host also waits for any peer more than 8 turns behind.
+- Peers report an FNV checksum of ship and plane state per turn; the host flags the
+  first turn where they differ. Built with `-ffp-contract=off` so every build does the
+  same float arithmetic; peers must run the same build (structs go on the wire raw,
+  little-endian).
+- Teams: `--teams 0,1,0` (default alternating); each team's ships are shared among its
+  humans round-robin (the yard to the first), a team without humans is AI. Online
+  games run in real time: no pause or time compression.
+- `tests/test_multiplayer.py`: host + 2 clients, 240 s of the fleet battle with
+  scripted orders over the network: identical final checksums, no desync; a client
+  perturbed at tick 2000 is caught at turn 500.
+- Not yet: lobby UI, chat, reconnect, NAT traversal (play over LAN/VPN or a forwarded port).

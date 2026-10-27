@@ -87,6 +87,10 @@ engine/build/shrts --assets assets [--scenario m01|fleet|carriers|assault|attack
 #   carrier selected: B air strike (focus target or nearest), G fighter patrol, R recall
 #   damage control: P crew priority, X counter-flood, M flood magazines
 #   T aim (ship/engines/magazines/steering/bridge/guns), Z evasive, Enter top report,
-#   C Captain's Command bar, F1 controls toolbar (both clickable)
+#   C Captain's Command bar, F1 controls toolbar (both clickable), F2 fleet bar, L flagship
+# online (LAN/forwarded port): one host, the others join; teams default 0,1,0,1...
+engine/build/shrts --assets assets --host 47800 --players 3 --teams 0,1,0 --scenario fleet --name Me
+engine/build/shrts --assets assets --join HOSTADDR:47800 --name Friend
+python3 -I tests/test_multiplayer.py     # lockstep check: host + 2 clients, same checksum
 engine/build/shrts --assets assets --scenario fleet --ai-both --headless 900   # balance run
 ```

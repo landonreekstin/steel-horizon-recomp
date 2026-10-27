@@ -7,11 +7,15 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
+# Lockstep multiplayer needs bit-identical floating point on every peer: no fused
+# multiply-adds that one build would use and another wouldn't.
+add_compile_options(-ffp-contract=off)
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
 
 # Everything except main.c and render/gl, so the simulation can be tested headless.
-add_library(shcore STATIC src/asset.c src/data.c src/json.c src/sim.c src/combat.c src/layout.c src/ai.c src/air.c src/damage.c src/captain.c src/base.c src/fleet.c src/command.c)
+add_library(shcore STATIC src/asset.c src/data.c src/json.c src/sim.c src/combat.c src/layout.c src/ai.c src/air.c src/damage.c src/captain.c src/base.c src/fleet.c src/command.c src/net.c)
 target_compile_options(shcore PRIVATE -Wall -Wextra)
 target_link_libraries(shcore PUBLIC m)
 
