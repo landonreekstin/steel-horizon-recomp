@@ -196,7 +196,7 @@ static int controls_bar(hud *h, const world *w, const unsigned char *selected)
         {SDLK_h, "[H] Hold fire"}, {SDLK_f, "[F] Fire at will"}, {SDLK_t, "[T] Aim: next part"},
         {SDLK_z, "[Z] Evasive"}, {SDLK_s, "[S] Stop"}};
     static const control dc[] = {{SDLK_p, "[P] Crew priority"}, {SDLK_x, "[X] Counter-flood"}, {SDLK_m, "[M] Flood magazines"}};
-    static const control air[] = {{SDLK_b, "[B] Air strike"}, {SDLK_g, "[G] Fighter patrol"}, {SDLK_r, "[R] Recall"}};
+    static const control air[] = {{SDLK_b, "[B] Strike (Shift torp/Ctrl dive)"}, {SDLK_g, "[G] Fighter patrol"}, {SDLK_r, "[R] Recall"}};
     static const char *hints[] = {
         "LMB select / drag box   Shift add", "RMB sea: move   Shift: queue",
         "RMB enemy: focus fire   Ctrl: secondaries", "1-9 groups   Ctrl+1-9 set",

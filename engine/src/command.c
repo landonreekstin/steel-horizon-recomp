@@ -47,7 +47,8 @@ void world_apply(world *w, const command *c)
     case CMD_COUNTER_FLOOD: order_counter_flood(w, ids, n); break;
     case CMD_STRIKE:
         for (int k = 0; k < n; k++)
-            if (is_carrier(&w->ships[ids[k]]) && c->a >= 0 && c->a < w->count) order_strike(w, ids[k], c->a);
+            if (is_carrier(&w->ships[ids[k]]) && c->a >= 0 && c->a < w->count)   /* b: plane-type mask, 0 = all */
+                order_strike_types(w, ids[k], c->a, c->b ? (unsigned)c->b : (1u << PLANE_BOMBER) | (1u << PLANE_TORPEDO));
         break;
     case CMD_CAP: for (int k = 0; k < n; k++) if (is_carrier(&w->ships[ids[k]])) order_cap(w, ids[k]); break;
     case CMD_RECALL: for (int k = 0; k < n; k++) if (is_carrier(&w->ships[ids[k]])) order_recall(w, ids[k]); break;

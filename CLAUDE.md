@@ -73,6 +73,8 @@ python3 -I tools/preview.py assets/files MODEL.pingu out.png [GUN.pingu]
   manoeuvres, Captain's Command bar, clickable controls toolbar, baked font.
 - Shipyards and modes (8): scenarios `assault`, `attack`, `defend`; build panel,
   drydock repairs, reinforcement waves, AI waves; `--trace N` prints the battle state.
+- Fleet command (8b): command stream (replayable), flagships (L), officers, fleet bar
+  (F2) with damage thumbnails, real-profile cross-section, dive/torpedo bombers.
 
 Build/run the engine:
 

@@ -38,7 +38,9 @@ typedef enum { OFF_GUNNERY, OFF_FIRE_CONTROL, OFF_DAMAGE_CONTROL, OFF_ENGINEERIN
  * constructors, the same for every nation); speeds, AA and the air group are design. */
 #define AIR_SPEED_SCALE 0.15f  /* original plane speed (fighter 400, bomber 300) -> u/s */
 #define AIR_GROUP_FIGHTERS 6   /* per carrier */
-#define AIR_GROUP_BOMBERS 6
+#define AIR_GROUP_DIVE 4       /* dive bombers */
+#define AIR_GROUP_TORPEDO 4    /* torpedo bombers */
+#define AIR_GROUP_BOMBERS (AIR_GROUP_DIVE + AIR_GROUP_TORPEDO)
 #define CRUISE_ALT 250.0f
 #define AA_RANGE 1200.0f
 #define REARM_S 40.0f
@@ -46,7 +48,7 @@ typedef enum { OFF_GUNNERY, OFF_FIRE_CONTROL, OFF_DAMAGE_CONTROL, OFF_ENGINEERIN
 typedef enum { FX_NONE, FX_MUZZLE, FX_SPLASH, FX_HIT, FX_NEAR_MISS, FX_TORP_HIT, FX_DC_BLAST, FX_SINK,
                FX_FLAK, FX_AIR_GUN, FX_PLANE_DOWN, FX_RICOCHET, FX_MAGAZINE } fx_kind;
 
-typedef enum { PLANE_FIGHTER, PLANE_BOMBER } plane_type;
+typedef enum { PLANE_FIGHTER, PLANE_BOMBER /* dive bomber */, PLANE_TORPEDO } plane_type;
 typedef enum { AIR_HANGAR, AIR_OUT, AIR_ATTACK, AIR_RETURN, AIR_DECK, AIR_FALLING, AIR_LOST } air_state;
 typedef enum { MISSION_NONE, MISSION_CAP, MISSION_ESCORT, MISSION_STRIKE } air_mission;
 
@@ -178,6 +180,7 @@ typedef struct {
     int air_count;
     int bombs, bomb_hits, planes_lost_aa, planes_lost_fighters, planes_ditched;
     int penetrations, ricochets, fires_started, magazine_explosions;
+    int air_torps;             /* aerial torpedoes dropped */
     game_mode mode;
     side_state sides[2];
     /* Each team's officers: speciality and the ship they serve on (-1 ashore, -2 lost). */
@@ -262,6 +265,10 @@ void order_strike(world *w, int carrier, int target);
 void order_cap(world *w, int carrier);
 void order_recall(world *w, int carrier);
 int hangar_count(const world *w, int carrier, plane_type type);
+int strike_ready(const world *w, int carrier);   /* dive + torpedo bombers ready */
+/* A strike with only some types: mask of 1 << PLANE_BOMBER / 1 << PLANE_TORPEDO. */
+void order_strike_types(world *w, int carrier, int target, unsigned types);
+int is_strike_plane(plane_type t);
 int is_carrier(const ship *s);
 void air_step(world *w);     /* part of world_step */
 void air_spawn_group(world *w, int carrier);   /* world_spawn calls it for carriers */

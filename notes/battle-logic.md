@@ -179,3 +179,22 @@ each kill planes (fighters more); Japan won all 4 after the fighter fix.
   yard, sailing in waves of 4, then 6, 8, … so stalled assaults escalate.
 - Measured, both sides AI: assault 40–63 min, 2 of 3 decided within 80 min; attack and
   defend split 2–2 over four seeds each (decided in 14–20 min or on time).
+
+## Fleet command and carrier attack types (8b) — design
+- **Commands** (`command.c`): every player order is a fixed-size record (kind, player,
+  ship mask, args) applied at a tick boundary; a player can only order ships he owns.
+  The same stream drives local play, replays and network lockstep.
+- **Flagship** (one per player, L): her spread ×0.88 and damage control ×1.2; ships of
+  her fleet within 3,000 ×0.95; when she's lost the fleet's spread is ×1.15 for 120 s.
+- **Officers** (four per team in the scenarios: gunnery, fire control, damage control,
+  AA; also engineering, navigation, aviation): several per ship, each further one of a
+  speciality worth half the last. Gunnery: reload ÷(1+0.2L), training ×(1+0.3L); fire
+  control: spread ÷(1+0.15L); damage control: +1 team per officer, teams ×(1+0.4L);
+  engineering: speed +8%·L, acceleration +20%·L; AA: rate and damage +30%·L;
+  navigation: turning +25%·L; aviation: launches ×(1+0.6L), rearming ×(1+0.4L).
+  Officers die with their ship. AI admirals put them on their biggest ship.
+- **Air group**: 6 fighters, 4 dive bombers, 4 torpedo bombers per carrier (B all,
+  Shift+B torpedo, Ctrl+B dive). Dive bombers: steep dive to 130, spread 6 + 0.03·alt,
+  AP bomb pen 2.6. Torpedo bombers: down to 25 at 2,500 out, 70% speed, drop the
+  original's 18" torpedo (195) at 750 on the lead point; AA hits twice as often below
+  60. AI ships comb torpedoes they detect.

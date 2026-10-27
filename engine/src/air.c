@@ -21,11 +21,20 @@
 #define GUN_DAMAGE 30.0f
 #define GUN_INTERVAL 0.2f
 #define BOMB_DAMAGE 100.0f
-#define BOMB_PEN 2.4f          /* through cruiser and carrier decks, sometimes a battleship's */
+#define BOMB_PEN 2.6f          /* dive bombers' heavy AP bomb: cruiser and carrier decks, often a battleship's */
+#define AIR_TORP_DAMAGE 195.0f /* the original's 18 Inch T, carried by torpedo bombers */
+#define TORP_RUN_ALT 25.0f
+#define TORP_DROP_RANGE 750.0f
+#define TORP_ATTACK_RUN 2500.0f
 #define AA_HIT 0.30f
 #define AA_INTERVAL 0.5f
 #define INTERCEPT_RADIUS 2500.0f
 #define CAP_RADIUS 600.0f
+
+int is_strike_plane(plane_type t)
+{
+    return t == PLANE_BOMBER || t == PLANE_TORPEDO;
+}
 
 int is_carrier(const ship *s)
 {
@@ -43,14 +52,19 @@ void air_spawn_group(world *w, int carrier)
     for (int k = 0; k < AIR_GROUP_FIGHTERS + AIR_GROUP_BOMBERS && w->air_count < MAX_AIRCRAFT; k++) {
         aircraft *a = &w->air[w->air_count++];
         memset(a, 0, sizeof *a);
-        a->type = k < AIR_GROUP_FIGHTERS ? PLANE_FIGHTER : PLANE_BOMBER;
+        a->type = k < AIR_GROUP_FIGHTERS ? PLANE_FIGHTER : k < AIR_GROUP_FIGHTERS + AIR_GROUP_DIVE ? PLANE_BOMBER : PLANE_TORPEDO;
         a->state = AIR_HANGAR;
         a->carrier = carrier;
         a->side = c->side;
         a->target = -1;
-        a->max_hp = a->hp = a->type == PLANE_FIGHTER ? 600 : 800;
+        a->max_hp = a->hp = a->type == PLANE_FIGHTER ? 600 : 800;   /* CFighterPlane / CBomberPlane */
         a->stage = 1;
     }
+}
+
+int strike_ready(const world *w, int carrier)
+{
+    return hangar_count(w, carrier, PLANE_BOMBER) + hangar_count(w, carrier, PLANE_TORPEDO);
 }
 
 int hangar_count(const world *w, int carrier, plane_type type)
@@ -67,12 +81,17 @@ int hangar_count(const world *w, int carrier, plane_type type)
 
 void order_strike(world *w, int carrier, int target)
 {
+    order_strike_types(w, carrier, target, (1u << PLANE_BOMBER) | (1u << PLANE_TORPEDO));
+}
+
+void order_strike_types(world *w, int carrier, int target, unsigned types)
+{
     if (target < 0 || !w->ships[target].alive || w->ships[target].cls->submerged) return;
     int fighters = hangar_count(w, carrier, PLANE_FIGHTER), escorts = (fighters + 1) / 2;
     for (int k = 0; k < w->air_count; k++) {
         aircraft *a = &w->air[k];
         if (a->carrier != carrier || a->state != AIR_HANGAR || a->mission != MISSION_NONE) continue;
-        if (a->type == PLANE_BOMBER) {
+        if (is_strike_plane(a->type) && (types >> a->type) & 1) {
             a->mission = MISSION_STRIKE;
             a->target = target;
         } else if (escorts > 0) {
@@ -180,7 +199,7 @@ static void bomber_step(world *w, aircraft *a)
     if (a->state == AIR_ATTACK && a->y < DIVE_ALT + 30 && err < 10 * DEG && d <= a->speed * tf + 15) {
         projectile *p = new_projectile(w);
         if (p) {
-            float sigma = 10 + 0.05f * a->y;
+            float sigma = 6 + 0.03f * a->y;           /* a steep dive: the accurate attack */
             p->ammo = AMMO_BOMB;
             p->owner = -1;
             p->side = a->side;
@@ -189,6 +208,40 @@ static void bomber_step(world *w, aircraft *a)
             p->plunging = 1;
             launch_ballistic(p, a->x, a->y, a->z, px + gauss(w) * sigma, pz + gauss(w) * sigma, tf);
             w->bombs++;
+        }
+        a->state = AIR_RETURN;
+    }
+}
+
+/* Torpedo bombers: down to 25 at 2,500 out, a slower steady run at the torpedo's lead
+ * point, drop at 750, then away. Low and slow makes them easy meat for AA. */
+static void torpedo_bomber_step(world *w, aircraft *a)
+{
+    if (a->target < 0 || !w->ships[a->target].alive) a->target = nearest_enemy_ship(w, a, 3000);
+    if (a->target < 0) { a->state = AIR_RETURN; return; }
+    const ship *t = &w->ships[a->target];
+    float tvx = sinf(t->heading) * t->speed, tvz = cosf(t->heading) * t->speed;
+    float T = intercept(a->x, a->z, t->x, t->z, tvx, tvz, TORP_SPEED);
+    float px = t->x + tvx * T, pz = t->z + tvz * T;
+    float d = hypotf(t->x - a->x, t->z - a->z);
+    if (a->state == AIR_OUT && d < TORP_ATTACK_RUN) a->state = AIR_ATTACK;
+    int run = a->state == AIR_ATTACK;
+    fly_to(a, px, run ? TORP_RUN_ALT : CRUISE_ALT, pz, run ? 60 : 30, plane_speed(a) * (run ? 0.7f : 1));
+    float err = fabsf(wrap_angle(atan2f(px - a->x, pz - a->z) - a->heading));
+    if (run && a->y < TORP_RUN_ALT + 15 && d < TORP_DROP_RANGE && err < 8 * DEG) {
+        projectile *p = new_projectile(w);
+        if (p) {
+            p->ammo = AMMO_TORPEDO;
+            p->owner = -1;
+            p->side = a->side;
+            p->damage = AIR_TORP_DAMAGE;
+            p->x0 = p->px = a->x;
+            p->z0 = p->pz = a->z;
+            p->vx = sinf(a->heading) * TORP_SPEED;
+            p->vz = cosf(a->heading) * TORP_SPEED;
+            p->flight = 2 * TORP_DROP_RANGE / TORP_SPEED;
+            w->torps++;
+            w->air_torps++;
         }
         a->state = AIR_RETURN;
     }
@@ -203,7 +256,7 @@ static void fighter_step(world *w, int k)
     if (a->mission == MISSION_ESCORT)
         for (int q = 0; q < w->air_count; q++) {
             const aircraft *b = &w->air[q];
-            if (b->carrier == a->carrier && b->mission == MISSION_STRIKE && b->type == PLANE_BOMBER &&
+            if (b->carrier == a->carrier && b->mission == MISSION_STRIKE && is_strike_plane(b->type) &&
                 (b->state == AIR_OUT || b->state == AIR_ATTACK)) { gx += b->x; gz += b->z; n++; }
         }
     if (n) { gx /= (float)n; gz /= (float)n; }
@@ -223,7 +276,7 @@ static void fighter_step(world *w, int k)
         for (int q = 0; q < w->air_count; q++) {
             const aircraft *b = &w->air[q];
             if (b->side == a->side || !airborne(b) || hypotf(b->x - gx, b->z - gz) > INTERCEPT_RADIUS) continue;
-            float d = hypotf(b->x - a->x, b->z - a->z) + (b->type == PLANE_BOMBER ? 0 : 300);  /* bombers first */
+            float d = hypotf(b->x - a->x, b->z - a->z) + (is_strike_plane(b->type) ? 0 : 300);  /* bombers first */
             if (d < bd) { bd = d; best = q; }
         }
         a->target = best;
@@ -285,7 +338,8 @@ static void aa_step(world *w, int i)
     s->aa_reload = AA_INTERVAL / (1 + 0.3f * officer_level(s, OFF_AA));
     aircraft *a = &w->air[best];
     fx(w, FX_FLAK, a->x + gauss(w) * 18, a->y + gauss(w) * 10, a->z + gauss(w) * 18);
-    if (rand01(w) < AA_HIT * (1 - 0.5f * bd / AA_RANGE))
+    float low = a->y < 60 ? 2.0f : 1;                    /* a torpedo run is low and steady */
+    if (rand01(w) < AA_HIT * low * (1 - 0.5f * bd / AA_RANGE))
         plane_damage(w, a, s->cls->aa_damage * module_health(s, MOD_AA, -1) * (1 + 0.3f * officer_level(s, OFF_AA)), 0);
 }
 
@@ -329,6 +383,7 @@ void air_step(world *w)
             if (a->state != AIR_RETURN && (a->fuel < 90 || home_carrier(w, a) < 0)) a->state = AIR_RETURN;
             if (a->state == AIR_RETURN) return_step(w, a);
             else if (a->type == PLANE_BOMBER) bomber_step(w, a);
+            else if (a->type == PLANE_TORPEDO) torpedo_bomber_step(w, a);
             else fighter_step(w, k);
             break;
         case AIR_DECK:

@@ -69,6 +69,11 @@ void ai_step(world *w)
     for (int i = 0; i < w->count; i++) {
         ship *s = &w->ships[i];
         if (!s->ai || !s->alive || is_shore(s)) continue;
+        float comb;
+        if (s->evade <= 0 && torpedo_threat(w, i, &comb)) {   /* AI captains comb torpedoes too */
+            order_evade(w, &i, 1, 30);
+            continue;
+        }
         /* Badly hurt: home to the drydock, back out once patched up. */
         int y = w->sides[s->side & 1].yard;
         int dock = y >= 0 && w->ships[y].alive && module_health(&w->ships[y], MOD_DRYDOCK, -1) >= 0.3f;
@@ -158,12 +163,12 @@ void ai_step(world *w)
         }
         int bombers_left = 0;
         for (int k = 0; k < w->air_count; k++)
-            bombers_left += w->air[k].carrier == i && w->air[k].type == PLANE_BOMBER &&
+            bombers_left += w->air[k].carrier == i && is_strike_plane(w->air[k].type) &&
                             w->air[k].state != AIR_LOST && w->air[k].state != AIR_FALLING;
         if (is_carrier(s) && bombers_left) {
             /* Strike anything within reach, cover the fleet when enemy planes are up,
              * and keep well clear of the gun line. */
-            int ready = hangar_count(w, i, PLANE_BOMBER);     /* a full deck load, or all that's left */
+            int ready = strike_ready(w, i);                   /* a full deck load, or all that's left */
             if (ready >= (bombers_left < 3 ? bombers_left : 3) && bd < STRIKE_RANGE) order_strike(w, i, best);
             for (int k = 0; k < w->air_count; k++) {
                 const aircraft *a = &w->air[k];

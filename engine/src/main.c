@@ -359,6 +359,9 @@ static void order_key(game *g, SDL_Keycode k, int ctrl, hud *hd)
                 }
             }
             one.a = t;
+            /* Shift+B: torpedo bombers only; Ctrl+B: dive bombers only. */
+            if (k == SDLK_b && (SDL_GetModState() & KMOD_SHIFT)) one.b = 1 << PLANE_TORPEDO;
+            else if (k == SDLK_b && ctrl) one.b = 1 << PLANE_BOMBER;
             issue(g, &one);
         }
     } else if (k == SDLK_p && n) {
@@ -655,7 +658,7 @@ int main(int argc, char **argv)
         for (int q = 0; q < nsel; q++)
             if (is_carrier(&g.w.ships[ids[q]])) {
                 snprintf(air_info, sizeof air_info, "  |  hangar: %d fighters %d bombers (B/G/R)",
-                         hangar_count(&g.w, ids[q], PLANE_FIGHTER), hangar_count(&g.w, ids[q], PLANE_BOMBER));
+                         hangar_count(&g.w, ids[q], PLANE_FIGHTER), strike_ready(&g.w, ids[q]));
                 break;
             }
         snprintf(title, sizeof title, "Steel Horizon RTS  |  %s x%d  |  %d selected%s%s%s  |  t=%.0fs%s",

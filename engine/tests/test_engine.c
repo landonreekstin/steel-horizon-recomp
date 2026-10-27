@@ -439,17 +439,17 @@ static void test_air(const class_table *ct)
     world_spawn(&w, bb, 1, 0, 5000, 0);
     w.ships[1].hold_fire = 1;
     order_strike(&w, 0, 1);
-    CHECK(count_state(&w, 0, PLANE_BOMBER, AIR_HANGAR) == AIR_GROUP_BOMBERS &&
-          hangar_count(&w, 0, PLANE_BOMBER) == 0, "strike queues every bomber");
-    run(&w, 20);
-    int up = count_state(&w, 0, PLANE_BOMBER, AIR_OUT) + count_state(&w, 0, PLANE_FIGHTER, AIR_OUT);
+    CHECK(count_state(&w, 0, PLANE_BOMBER, AIR_HANGAR) + count_state(&w, 0, PLANE_TORPEDO, AIR_HANGAR) == AIR_GROUP_BOMBERS &&
+          strike_ready(&w, 0) == 0, "strike queues every bomber");
+    run(&w, 26);                                  /* 11 launches, 2 s apart */
+    int up = count_state(&w, 0, PLANE_BOMBER, AIR_OUT) + count_state(&w, 0, PLANE_TORPEDO, AIR_OUT) +
+             count_state(&w, 0, PLANE_FIGHTER, AIR_OUT);
     CHECK(up == AIR_GROUP_BOMBERS + AIR_GROUP_FIGHTERS / 2, "bombers plus half the fighters launched (%d)", up);
     run(&w, 400);
-    CHECK(w.bombs == AIR_GROUP_BOMBERS && w.bomb_hits >= 2 && w.ships[1].hp < bb->max_health,
-          "%d bombs, %d hit, BB hp %.0f", w.bombs, w.bomb_hits, w.ships[1].hp);
+    CHECK(w.bombs == AIR_GROUP_DIVE && w.air_torps == AIR_GROUP_TORPEDO && w.bomb_hits >= 1 && w.ships[1].hp < bb->max_health,
+          "%d bombs (%d hit), %d aerial torpedoes, BB hp %.0f", w.bombs, w.bomb_hits, w.air_torps, w.ships[1].hp);
     run(&w, REARM_S + 5);
-    CHECK(hangar_count(&w, 0, PLANE_BOMBER) == AIR_GROUP_BOMBERS, "all bombers back and rearmed (%d)",
-          hangar_count(&w, 0, PLANE_BOMBER));
+    CHECK(strike_ready(&w, 0) == AIR_GROUP_BOMBERS, "all bombers back and rearmed (%d)", strike_ready(&w, 0));
 
     /* AA: the same strike into three cruisers costs bombers. */
     world_init(&w);
@@ -471,7 +471,7 @@ static void test_air(const class_table *ct)
     order_cap(&w, 1);
     run(&w, 30);
     for (int k = 0; k < w.air_count; k++)       /* strike with bombers only */
-        if (w.air[k].carrier == 0 && w.air[k].type == PLANE_BOMBER) { w.air[k].mission = MISSION_STRIKE; w.air[k].target = 1; }
+        if (w.air[k].carrier == 0 && is_strike_plane(w.air[k].type)) { w.air[k].mission = MISSION_STRIKE; w.air[k].target = 1; }
     run(&w, 300);
     CHECK(w.planes_lost_fighters >= 2, "fighters shot down %d bombers", w.planes_lost_fighters);
 
@@ -488,6 +488,29 @@ static void test_air(const class_table *ct)
     for (int k = 0; k < w.air_count; k++)
         airborne_left += w.air[k].state == AIR_OUT || w.air[k].state == AIR_ATTACK || w.air[k].state == AIR_RETURN;
     CHECK(airborne_left == 0 && w.bombs == 0, "recalled strike landed without bombing (%d still up)", airborne_left);
+
+    /* Dive bombers set her afire; torpedo bombers flood her, and pay more to AA. */
+    float water[2] = {0, 0};
+    int lost[2] = {0, 0}, fires[2] = {0, 0};
+    for (int type = 0; type < 2; type++)
+        for (unsigned seed = 1; seed <= 3; seed++) {
+            world_init(&w);
+            world_seed(&w, seed);
+            world_spawn(&w, cv, 0, 0, 0, 0);
+            world_spawn(&w, bb, 1, 0, 5000, 0);          /* a battleship alone: weak AA */
+            w.ships[1].wp[0] = (waypoint){0, 40000};
+            w.ships[1].wp_count = 1;
+            order_strike_types(&w, 0, 1, 1u << (type ? PLANE_TORPEDO : PLANE_BOMBER));
+            float peak = 0;
+            for (int t = 0; t < 400 * SIM_HZ; t++) { world_step(&w); peak = fmaxf(peak, w.ships[1].water); }
+            water[type] += peak;
+            lost[type] += w.planes_lost_aa;
+            fires[type] += w.fires_started;
+        }
+    printf("strikes on a lone BB, 3 seeds: dive bombers water %.2f fires %d lost %d; torpedo bombers water %.2f fires %d lost %d\n",
+           water[0], fires[0], lost[0], water[1], fires[1], lost[1]);
+    CHECK(water[1] > water[0] + 0.02f, "torpedo bombers flood her (%.2f vs %.2f)", water[1], water[0]);
+    CHECK(lost[1] > lost[0], "torpedo bombers lose more to AA (%d vs %d)", lost[1], lost[0]);
 
     /* Deterministic with aircraft. */
     float hp[2][8];
@@ -678,9 +701,8 @@ static void test_command(const class_table *ct)
     for (int m = 0; m < cv->module_count; m++)
         if (cv->modules[m].kind == MOD_HANGAR_LIFT) { w.ships[0].module_hp[m] = 0; w.ships[0].module_lost[m] = 1; }
     run(&w, 420 + REARM_S + 30);
-    CHECK(hangar_count(&w, 0, PLANE_BOMBER) == 0 && count_state(&w, 0, PLANE_BOMBER, AIR_DECK) >= 3,
-          "no lifts: %d bombers stuck on deck, %d rearmed", count_state(&w, 0, PLANE_BOMBER, AIR_DECK),
-          hangar_count(&w, 0, PLANE_BOMBER));
+    int on_deck = count_state(&w, 0, PLANE_BOMBER, AIR_DECK) + count_state(&w, 0, PLANE_TORPEDO, AIR_DECK);
+    CHECK(strike_ready(&w, 0) == 0 && on_deck >= 3, "no lifts: %d bombers stuck on deck, %d rearmed", on_deck, strike_ready(&w, 0));
 
     /* Macro targeting: aiming for the steering gear puts the damage aft. */
     float aft_share[2];

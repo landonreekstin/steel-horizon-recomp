@@ -83,7 +83,7 @@ int captain_reports(const world *w, int side, captain_report *out, int max)
             module_health(&w->ships[y], MOD_DRYDOCK, -1) >= 0.3f && cool[REP_RETURN_TO_YARD] <= 0 &&
             hypotf(w->ships[y].x - s->x, w->ships[y].z - s->z) > repair_radius(&w->ships[y]))
             n = add(out, n, max, i, REP_RETURN_TO_YARD, 25);
-        if (is_carrier(s) && !s->ai && cool[REP_LAUNCH_STRIKE] <= 0 && hangar_count(w, i, PLANE_BOMBER) >= 3 &&
+        if (is_carrier(s) && !s->ai && cool[REP_LAUNCH_STRIKE] <= 0 && strike_ready(w, i) >= 3 &&
             nearest_enemy(w, i, 1, &d) >= 0 && d < 12000)
             n = add(out, n, max, i, REP_LAUNCH_STRIKE, 20);
     }

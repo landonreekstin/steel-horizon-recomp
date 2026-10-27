@@ -22,6 +22,8 @@ Full plan: `~/.claude/plans/i-want-to-recompile-snoopy-pearl.md`. Status per pha
   production on a budget, the assault and attack/defend modes with reinforcement
   waves, AI that builds, repairs, guards and attacks in escalating waves, a shipyard
   build panel and a mode banner. Placeholder generated yard model.
+- 8b: command stream, flagships, distinguished officers, fleet toolbar with live
+  damage thumbnails, ship-profile cross-section, dive and torpedo bombers.
 
 ## Next
 
