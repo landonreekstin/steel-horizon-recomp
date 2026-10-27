@@ -82,6 +82,8 @@ static void report_text(const world *w, const captain_report *r, char *msg, int 
     case REP_WITHDRAW: snprintf(msg, (size_t)n, "Badly hurt and under fire"); *action = "Withdraw"; break;
     case REP_LAUNCH_STRIKE: snprintf(msg, (size_t)n, "Bombers ready, target in range"); *action = "Launch strike"; break;
     case REP_BRIDGE_LOST: snprintf(msg, (size_t)n, "Bridge destroyed: no reports"); *action = NULL; break;
+    case REP_RETURN_TO_YARD: snprintf(msg, (size_t)n, "Needs the drydock (%.0f%%)", 100 * s->hp / s->cls->max_health);
+        *action = "Return to yard"; break;
     default: msg[0] = 0; *action = NULL; break;
     }
 }
@@ -157,6 +159,7 @@ static int controls_bar(hud *h, const world *w, const unsigned char *selected)
         if (selected[i] && w->ships[i].alive) { any = 1; carrier |= is_carrier(&w->ships[i]); }
     if (!h->show_controls) {
         if (button(h, x0, y, "Controls [F1]", 0.15f, 0.2f, 0.26f)) h->show_controls = 1;
+        h->controls_bottom = y + lh + 6;
         return 0;
     }
     static const control orders[] = {
@@ -181,6 +184,7 @@ static int controls_bar(hud *h, const world *w, const unsigned char *selected)
         ui_text(x0 + PAD, y, "Select ships for their orders", TEXT[0], TEXT[1], TEXT[2], 1);
         ui_set_bottom(mark, y + lh + 10);
         h->rects[rect][3] = y + lh + 10;
+        h->controls_bottom = y + lh + 10;
         return 0;
     }
     float bx = x0 + PAD;
@@ -210,6 +214,7 @@ static int controls_bar(hud *h, const world *w, const unsigned char *selected)
     }
     ui_set_bottom(mark, y + lh + 16);
     h->rects[rect][3] = y + lh + 16;
+    h->controls_bottom = y + lh + 16;
     return key;
 }
 
@@ -237,10 +242,14 @@ static void ship_readout(hud *h, const world *w, const unsigned char *selected, 
     static const char *policy[] = {"auto", "fires", "flooding", "weapons"};
     char who[64], l1[192], l2[192];
     ship_label(w, i, who, sizeof who);
-    snprintf(l1, sizeof l1, "%s   condition %.0f%%  water %.0f%%/%.0f%%  list %.0f deg  crew %.0f/%.0f  DC: %s%s",
-             who, 100 * s->hp / s->cls->max_health, 100 * s->water, 100 * s->cls->reserve_buoyancy,
-             s->list * 180 / PI_F, s->crew, s->cls->complement, policy[s->policy],
-             module_health(s, MOD_BRIDGE, -1) <= 0 && !s->cls->submerged ? "  BRIDGE OUT" : "");
+    if (is_shore(s))
+        snprintf(l1, sizeof l1, "%s   condition %.0f%%  crew %.0f/%.0f  DC: %s%s", who, 100 * s->hp / s->cls->max_health,
+                 s->crew, s->cls->complement, policy[s->policy], module_health(s, MOD_BRIDGE, -1) <= 0 ? "  HQ OUT" : "");
+    else
+        snprintf(l1, sizeof l1, "%s   condition %.0f%%  water %.0f%%/%.0f%%  list %.0f deg  crew %.0f/%.0f  DC: %s%s",
+                 who, 100 * s->hp / s->cls->max_health, 100 * s->water, 100 * s->cls->reserve_buoyancy,
+                 s->list * 180 / PI_F, s->crew, s->cls->complement, policy[s->policy],
+                 module_health(s, MOD_BRIDGE, -1) <= 0 && !s->cls->submerged ? "  BRIDGE OUT" : "");
     /* Accuracy readout: the main battery against its focus target, else what it's on. */
     int target = s->order_target[BAT_MAIN];
     if (target < 0 || !w->ships[target].alive) {
@@ -289,10 +298,75 @@ static void ship_readout(hud *h, const world *w, const unsigned char *selected, 
     ui_text(x0 + pw - 135, y0 + 90, "cond.", DIM[0], DIM[1], DIM[2], 1);
 }
 
+/* ---- shipyard (left, below the controls) and the game-mode banner ---------------------- */
+
+static float shipyard_panel(hud *h, world *w, float y)
+{
+    const side_state *st = &w->sides[0];
+    if (st->yard < 0) return y;
+    const ship *yard = &w->ships[st->yard];
+    float lh = ui_line_height(), x0 = 10, bw = 400;
+    int mark = ui_mark(), rect = h->rect_count;
+    box(h, x0, y, x0 + bw, y + 10, PANEL);
+    char line[128];
+    snprintf(line, sizeof line, "SHIPYARD  %s", yard->alive ? "" : "(destroyed)");
+    ui_text(x0 + PAD, y + 5, line, 1, 0.85f, 0.5f, 1);
+    y += lh + 10;
+    float slip = module_health(yard, MOD_SLIPWAY, -1), dock = module_health(yard, MOD_DRYDOCK, -1);
+    snprintf(line, sizeof line, "budget %.0f  +%.0f/s   slipway %.0f%%  drydock %.0f%%", st->budget, st->income,
+             100 * slip, 100 * dock);
+    ui_text(x0 + PAD, y, line, DIM[0], DIM[1], DIM[2], 1);
+    y += lh + 4;
+    for (int q = 0; q < st->queue_count; q++, y += lh + 2) {
+        char who[64];
+        const ship_class *c = st->queue[q];
+        snprintf(who, sizeof who, "%s", c->name + strlen(c->nation));
+        if (q == 0) snprintf(line, sizeof line, "building %-20s %3.0f%%", who, 100 * st->progress / build_time(c));
+        else snprintf(line, sizeof line, "queued   %s", who);
+        ui_text(x0 + PAD, y, line, q ? DIM[0] : TEXT[0], q ? DIM[1] : TEXT[1], q ? DIM[2] : TEXT[2], 1);
+    }
+    y += 4;
+    float bx = x0 + PAD;
+    for (int o = 0; o < st->option_count && yard->alive; o++) {
+        const ship_class *c = st->options[o];
+        char label[64];
+        snprintf(label, sizeof label, "%s %.0f", c->name + strlen(c->nation), class_cost(c));
+        float bwid = ui_text_width(label) + 2 * PAD;
+        if (bx + bwid > x0 + bw - PAD) { bx = x0 + PAD; y += lh + 10; }
+        int ok = st->budget >= class_cost(c) && st->queue_count < MAX_QUEUE;
+        if (button(h, bx, y, label, ok ? 0.22f : 0.2f, ok ? 0.36f : 0.2f, ok ? 0.5f : 0.22f) && ok) order_build(w, 0, c);
+        bx += bwid + 6;
+    }
+    y += lh + 16;
+    ui_set_bottom(mark, y);
+    h->rects[rect][3] = y;
+    return y + 8;
+}
+
+static void mode_banner(const world *w, int sw)
+{
+    char msg[128];
+    switch (w->mode) {
+    case MODE_ASSAULT: snprintf(msg, sizeof msg, "ASSAULT: destroy the enemy yard"); break;
+    case MODE_DEFEND: {
+        int left = (int)mode_time_left(w);
+        snprintf(msg, sizeof msg, w->defender == 0 ? "DEFEND the yard: %d:%02d left" : "ATTACK the yard: %d:%02d left",
+                 left / 60, left % 60);
+        break;
+    }
+    default: return;
+    }
+    float tw = ui_text_width(msg);
+    ui_rect((float)sw / 2 - tw / 2 - 12, 10, (float)sw / 2 + tw / 2 + 12, 36, 0.04f, 0.06f, 0.08f, 0.8f);
+    ui_text((float)sw / 2 - tw / 2, 15, msg, 1, 0.85f, 0.5f, 1);
+}
+
 int hud_draw(hud *h, renderer *r, world *w, const unsigned char *selected, int sw, int sh, float t)
 {
     h->rect_count = 0;
+    mode_banner(w, sw);
     int key = controls_bar(h, w, selected);
+    shipyard_panel(h, w, h->controls_bottom + 8);
     captain_bar(h, w, sw, t);
     ship_readout(h, w, selected, sw, sh);
     int result = world_winner(w);

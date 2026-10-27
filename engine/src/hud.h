@@ -11,6 +11,7 @@ typedef struct {
     int show_captain, show_controls;
     int click;                 /* a left click waiting to be handled this frame */
     float click_x, click_y;
+    float controls_bottom;     /* where the controls toolbar ended, for the panel below it */
     int rect_count;            /* last frame's UI boxes, for hud_over */
     float rects[HUD_MAX_RECTS][4];
 } hud;

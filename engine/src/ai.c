@@ -21,11 +21,38 @@ static float engage_range(const ship_class *c)
     return torp > 0 && torp * 0.5f > gun * 0.5f ? torp * 0.5f : gun > 0 ? gun * 0.8f : 1500;
 }
 
+/* An AI shipyard keeps two ships on the slipway, cycling through its options. */
+static void ai_build(world *w)
+{
+    for (int side = 0; side < 2; side++) {
+        side_state *st = &w->sides[side];
+        if (st->yard < 0 || !w->ships[st->yard].alive || !w->ships[st->yard].ai || !st->option_count) continue;
+        if (st->queue_count >= 2) continue;
+        const ship_class *c = st->options[(st->built + st->queue_count) % st->option_count];
+        order_build(w, side, c);
+    }
+}
+
 void ai_step(world *w)
 {
+    ai_build(w);
     for (int i = 0; i < w->count; i++) {
         ship *s = &w->ships[i];
-        if (!s->ai || !s->alive) continue;
+        if (!s->ai || !s->alive || is_shore(s)) continue;
+        /* Badly hurt: home to the drydock, back out once patched up. */
+        int y = w->sides[s->side & 1].yard;
+        int dock = y >= 0 && w->ships[y].alive && module_health(&w->ships[y], MOD_DRYDOCK, -1) >= 0.3f;
+        float cond = s->hp / s->cls->max_health;
+        if (dock && cond < 0.35f) s->returning = 1;
+        if (s->returning && (!dock || cond > 0.85f)) s->returning = 0;
+        if (s->returning) {
+            const ship *yd = &w->ships[y];
+            float fwd = yd->cls->half_length + 450;
+            float px = yd->x + sinf(yd->heading) * fwd, pz = yd->z + cosf(yd->heading) * fwd;
+            if (hypotf(px - s->x, pz - s->z) > 250) order_move(w, &i, 1, px, pz, 0);
+            else order_stop(w, &i, 1);
+            continue;
+        }
         int best = -1;
         float bd = INFINITY;
         for (int j = 0; j < w->count; j++) {
@@ -39,6 +66,66 @@ void ai_step(world *w)
             continue;
         }
         const ship *t = &w->ships[best];
+        /* Objectives. Attacking (assault, or the attacker in defend mode): make for the
+         * enemy shipyard, fighting only ships that come within 3,500. In assault every
+         * fourth ship stays home as a guard. */
+        int ey = w->sides[1 - (s->side & 1)].yard;
+        int attacking = ey >= 0 && w->ships[ey].alive &&
+                        (w->mode == MODE_ASSAULT || (w->mode == MODE_DEFEND && (s->side & 1) != (w->defender & 1)));
+        int guard = (w->mode == MODE_DEFEND && (s->side & 1) == (w->defender & 1)) ||
+                    (w->mode == MODE_ASSAULT && i % 4 == 0);
+        if (attacking && !guard && !s->committed && y >= 0 && w->ships[y].alive) {
+            /* Muster off the home yard; the wave sails when big enough (4, then 2 more
+             * each time, so a stalled assault escalates). */
+            const ship *hy = &w->ships[y];
+            float fwd = hy->cls->half_length + 2500;
+            float rx = hy->x + sinf(hy->heading) * fwd, rz = hy->z + cosf(hy->heading) * fwd;
+            int mustered = 0;
+            for (int j = 0; j < w->count; j++) {
+                const ship *o = &w->ships[j];
+                mustered += o->alive && o->ai && o->side == s->side && !is_shore(o) && !o->committed && !o->returning &&
+                            j % 4 != 0 && hypotf(o->x - rx, o->z - rz) < 1500;
+            }
+            side_state *own = &w->sides[s->side & 1];
+            if (mustered >= 4 + 2 * own->waves) {
+                own->waves++;
+                for (int j = 0; j < w->count; j++) {
+                    ship *o = &w->ships[j];
+                    if (o->alive && o->ai && o->side == s->side && !is_shore(o) && j % 4 != 0 && hypotf(o->x - rx, o->z - rz) < 1500)
+                        o->committed = 1;
+                }
+            } else {
+                if (hypotf(rx - s->x, rz - s->z) > 300) order_move(w, &i, 1, rx, rz, 0);
+                continue;
+            }
+        }
+        if (attacking && !guard) {
+            float near = INFINITY;
+            int nb = -1;
+            for (int j = 0; j < w->count; j++) {
+                const ship *o = &w->ships[j];
+                if (!o->alive || o->side == s->side || is_shore(o) || o->cls->submerged) continue;
+                float d = hypotf(o->x - s->x, o->z - s->z);
+                if (d < near) { near = d; nb = j; }
+            }
+            best = nb >= 0 && near < 3500 ? nb : ey;
+            t = &w->ships[best];
+            bd = hypotf(t->x - s->x, t->z - s->z);
+        }
+        /* Guarding: stay on station off the yard until the enemy comes within 6,000. */
+        if (guard && y >= 0 && w->ships[y].alive) {
+            const ship *yd = &w->ships[y];
+            float near = INFINITY;
+            for (int j = 0; j < w->count; j++)
+                if (w->ships[j].alive && w->ships[j].side != s->side)
+                    near = fminf(near, hypotf(w->ships[j].x - yd->x, w->ships[j].z - yd->z));
+            if (near > 6000) {
+                float fwd = yd->cls->half_length + 1500;
+                float px = yd->x + sinf(yd->heading) * fwd, pz = yd->z + cosf(yd->heading) * fwd;
+                if (hypotf(px - s->x, pz - s->z) > 400) order_move(w, &i, 1, px, pz, 0);
+                continue;
+            }
+        }
         int bombers_left = 0;
         for (int k = 0; k < w->air_count; k++)
             bombers_left += w->air[k].carrier == i && w->air[k].type == PLANE_BOMBER &&

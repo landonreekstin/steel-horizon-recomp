@@ -33,7 +33,9 @@ typedef struct {
 /* Damage model (src/damage.c): the hull is cut into compartments stern to bow;
  * modules are the parts that can be knocked out, each sitting in one compartment. */
 typedef enum { MOD_TURRET, MOD_MAGAZINE, MOD_ENGINE, MOD_STEERING, MOD_BRIDGE, MOD_RADAR, MOD_AA,
-               MOD_FLIGHT_DECK, MOD_HANGAR_LIFT, MOD_KINDS } module_kind;
+               MOD_FLIGHT_DECK, MOD_HANGAR_LIFT, MOD_DRYDOCK, MOD_SLIPWAY, MOD_KINDS } module_kind;
+
+#define HULL_SHIPYARD 30            /* shore installation (design; not an original hull type) */
 
 typedef struct {
     module_kind kind;
@@ -75,6 +77,11 @@ int classes_load(const char *data_dir, class_table *out);
 /* Hull footprints and weapon mounts from each class's intact .pingu/.pts under
  * files_dir. Returns the number of classes whose model failed to load. */
 int classes_load_layouts(class_table *t, const char *files_dir);
+/* Adds "<nation>Shipyard": a shore base armed with copies of the donor class's main
+ * and secondary guns. Returns it, or NULL if the table is full. */
+const ship_class *classes_add_shipyard(class_table *t, const char *nation, const ship_class *gun_donor);
+float class_cost(const ship_class *c);       /* build points */
+float build_time(const ship_class *c);       /* seconds on the slipway */
 const ship_class *class_find(const class_table *t, const char *name);
 
 #endif

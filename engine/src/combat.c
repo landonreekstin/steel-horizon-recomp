@@ -485,11 +485,3 @@ void order_hold_fire(world *w, const int *ids, int n, int hold)
 {
     for (int i = 0; i < n; i++) w->ships[ids[i]].hold_fire = hold;
 }
-
-int world_winner(const world *w)
-{
-    int alive[2] = {0, 0};
-    for (int i = 0; i < w->count; i++)
-        if (w->ships[i].alive) alive[w->ships[i].side & 1]++;
-    return alive[0] && !alive[1] ? 0 : alive[1] && !alive[0] ? 1 : -1;
-}

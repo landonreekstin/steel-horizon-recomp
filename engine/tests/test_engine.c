@@ -759,6 +759,113 @@ static void test_command(const class_table *ct)
     }
 }
 
+static void test_bases(class_table *ct)
+{
+    const ship_class *bb = class_find(ct, "AmericanBattleship"), *dd = class_find(ct, "AmericanDestroyer");
+    const ship_class *jdd = class_find(ct, "JapaneseDestroyer");
+    const ship_class *yard = classes_add_shipyard(ct, "Japanese", class_find(ct, "JapaneseBattleship"));
+    const ship_class *uyard = classes_add_shipyard(ct, "American", bb);
+    CHECK(yard && uyard && bb && dd && jdd, "shipyard classes");
+    if (!yard || !uyard || !bb || !dd || !jdd) return;
+    world w;
+
+    /* The class: four batteries, drydock, slipway, ammunition dump, no machinery. */
+    CHECK(yard->mount_count == 4 && count_modules(yard, MOD_DRYDOCK) == 1 && count_modules(yard, MOD_SLIPWAY) == 1 &&
+          count_modules(yard, MOD_MAGAZINE) == 1 && count_modules(yard, MOD_ENGINE) == 0,
+          "yard mounts %d", yard->mount_count);
+    CHECK(!strcmp(yard->weapons[0].name, "18 Inch"), "Japanese yard mounts the battleship's 18in (%s)", yard->weapons[0].name);
+
+    /* Ashore: torpedoes and near misses don't flood it; it doesn't move. */
+    world_init(&w);
+    int y = shipyard_spawn(&w, yard, 1, 0, 0, 0);
+    for (int k = 0; k < 4; k++) damage_hit(&w, y, HIT_TORPEDO, 100, 300, 240, 0, 0);
+    damage_hit(&w, y, HIT_NEAR_MISS, 0, 330, 90, 0, 0);
+    run(&w, 30);
+    CHECK(w.ships[y].alive && w.ships[y].water == 0 && w.ships[y].list == 0 && w.ships[y].x == 0 && w.ships[y].z == 0,
+          "yard dry and in place (water %.2f)", w.ships[y].water);
+
+    /* Repairs alongside: a battered BB moored by the drydock comes back; one far off doesn't. */
+    world_init(&w);
+    shipyard_spawn(&w, uyard, 0, 0, 0, 0);
+    int nearb = world_spawn(&w, bb, 0, 0, 900, 0), farb = world_spawn(&w, bb, 0, 6000, 6000, 0);
+    int eng = module_index(bb, MOD_ENGINE);
+    for (int q = 0; q < 2; q++) {
+        int id = q ? farb : nearb;
+        for (int k = 3; k < 6; k++) w.ships[id].comp[k].structure = 0.2f;
+        w.ships[id].module_hp[eng] = 0;
+        w.ships[id].module_lost[eng] = 1;
+        w.ships[id].crew = bb->complement * 0.5f;
+    }
+    CHECK(at_yard(&w, nearb) && !at_yard(&w, farb), "moored by the drydock: %d, far off: %d", at_yard(&w, nearb), at_yard(&w, farb));
+    run(&w, 200);
+    CHECK(w.ships[nearb].comp[4].structure > 0.9f && !w.ships[nearb].module_lost[eng] && w.ships[nearb].crew > bb->complement * 0.6f,
+          "yard repairs: structure %.2f, engine lost %d, crew %.0f", w.ships[nearb].comp[4].structure,
+          w.ships[nearb].module_lost[eng], w.ships[nearb].crew);
+    CHECK(w.ships[farb].comp[4].structure < 0.21f && w.ships[farb].module_lost[eng], "no repairs at sea");
+
+    /* Building: budget pays, the slipway launches, a wrecked slipway stops work. */
+    world_init(&w);
+    y = shipyard_spawn(&w, uyard, 0, 0, 0, 0);
+    float before = w.sides[0].budget;
+    CHECK(order_build(&w, 0, dd) == 0 && w.sides[0].budget == before - class_cost(dd), "queued a destroyer");
+    w.sides[0].budget = 10;
+    CHECK(order_build(&w, 0, bb) == -1, "can't afford a battleship");
+    int ships0 = w.count;
+    run(&w, build_time(dd) + 1);
+    CHECK(w.count == ships0 + 1 && w.ships[w.count - 1].cls == dd, "destroyer launched after %.0f s", build_time(dd));
+    const ship *nb = &w.ships[w.count - 1];
+    CHECK(hypotf(nb->x, nb->z) < 1200 && nb->z > 0, "launched seaward of the yard (%.0f, %.0f)", nb->x, nb->z);
+    w.sides[0].budget = 1000;
+    order_build(&w, 0, dd);
+    for (int m = 0; m < uyard->module_count; m++)
+        if (uyard->modules[m].kind == MOD_SLIPWAY) { w.ships[y].module_hp[m] = 0; w.ships[y].module_lost[m] = 1; }
+    ships0 = w.count;
+    run(&w, build_time(dd) * 2);
+    CHECK(w.count == ships0, "no slipway, no ships");
+
+    /* Ships can't sail through the yard. */
+    world_init(&w);
+    shipyard_spawn(&w, uyard, 0, 0, 0, 0);
+    int intr = world_spawn(&w, dd, 1, 0, -100, 0);
+    run(&w, 1);
+    CHECK(hypotf(w.ships[intr].x, w.ships[intr].z) > 360, "pushed off the land to %.0f", hypotf(w.ships[intr].x, w.ships[intr].z));
+
+    /* Modes. */
+    world_init(&w);
+    w.mode = MODE_ASSAULT;
+    shipyard_spawn(&w, uyard, 0, 0, -7000, 0);
+    int jy = shipyard_spawn(&w, yard, 1, 0, 7000, PI_F);
+    world_spawn(&w, dd, 0, 0, -5000, 0);
+    world_step(&w);
+    CHECK(world_winner(&w) == -1, "assault: undecided while both yards stand (no enemy ships is not a win)");
+    for (int k = 0; k < 400 && w.ships[jy].alive; k++) damage_hit(&w, jy, HIT_SHELL, 0, (float)(k % 8) * 70 - 280, 95, 9, 0);
+    world_step(&w);
+    CHECK(!w.ships[jy].alive && world_winner(&w) == 0, "assault: destroying the Japanese yard wins (alive %d)", w.ships[jy].alive);
+    world_init(&w);
+    w.mode = MODE_DEFEND;
+    w.defender = 1;
+    w.time_limit = 60;
+    shipyard_spawn(&w, yard, 1, 0, 7000, PI_F);
+    world_spawn(&w, dd, 0, 0, -5000, 0);
+    run(&w, 30);
+    CHECK(world_winner(&w) == -1 && mode_time_left(&w) > 29, "defend: undecided at 30 s");
+    run(&w, 31);
+    CHECK(world_winner(&w) == 1, "defend: the defender wins on time");
+
+    /* AI yard builds; the attacker's reinforcements arrive on schedule. */
+    world_init(&w);
+    y = shipyard_spawn(&w, yard, 1, 0, 0, 0);
+    w.ships[y].ai = 1;
+    w.sides[1].options[w.sides[1].option_count++] = jdd;
+    w.sides[0].options[w.sides[0].option_count++] = dd;
+    w.sides[0].reinforce_every = 100;
+    w.sides[0].entry_z = -6000;
+    run(&w, 150);
+    int jp = 0, us = 0;
+    for (int i = 0; i < w.count; i++) { jp += w.ships[i].side == 1 && !is_shore(&w.ships[i]); us += w.ships[i].side == 0; }
+    CHECK(jp >= 2 && us == 1, "AI yard built %d ships, reinforcements %d", jp, us);
+}
+
 int main(int argc, char **argv)
 {
     const char *assets = argc > 1 ? argv[1] : "assets";
@@ -781,6 +888,7 @@ int main(int argc, char **argv)
     test_air(&ct);
     test_damage(&ct);
     test_command(&ct);
+    test_bases(&ct);
     printf("%d failures\n", failures);
     return failures != 0;
 }

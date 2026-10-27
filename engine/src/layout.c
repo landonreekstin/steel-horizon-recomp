@@ -107,6 +107,27 @@ static void add_module(ship_class *c, module_kind kind, float z, int mount)
 static void build_damage_layout(ship_class *c)
 {
     int h = c->hull_type;
+    if (h == HULL_SHIPYARD) {
+        /* Eight sections of waterfront; modules placed by hand below. */
+        float L = c->half_length;
+        c->comp_count = 8;
+        for (int k = 0; k <= 8; k++) c->comp_z[k] = -L + 2 * L * (float)k / 8;
+        c->module_count = 0;
+        for (int m = 0; m < c->mount_count; m++) add_module(c, MOD_TURRET, c->mounts[m].pos[2], m);
+        add_module(c, MOD_MAGAZINE, -0.55f * L, -1);      /* ammunition dump */
+        add_module(c, MOD_DRYDOCK, -0.15f * L, -1);
+        add_module(c, MOD_SLIPWAY, 0.25f * L, -1);
+        add_module(c, MOD_BRIDGE, 0.05f * L, -1);         /* headquarters */
+        add_module(c, MOD_RADAR, 0.05f * L, -1);
+        add_module(c, MOD_AA, 0.6f * L, -1);
+        add_module(c, MOD_AA, -0.7f * L, -1);
+        c->belt = 2.6f;                                   /* concrete and earth */
+        c->deck = 2.0f;
+        c->reserve_buoyancy = 1;
+        c->dc_crews = 6;
+        c->complement = 3000;
+        return;
+    }
     int capital = h == 2 || h == 3 || h == 14 || h == 17 || h == 20 || h == 21;
     int small = h == 6 || h == 7 || h == 13 || h == 15 || c->submerged;
     c->comp_count = capital || h == 1 ? 10 : small ? (h == 13 ? 4 : 6) : 8;
@@ -149,6 +170,69 @@ static void build_damage_layout(ship_class *c)
     c->dc_crews = capital || h == 1 ? 4 : h == 5 ? 3 : small ? (h == 13 ? 1 : 2) : 2;
     c->complement = h == 1 ? 2600 : capital ? (h == 2 ? 1800 : 2500) : h == 5 ? 1100 : h == 6 || h == 15 ? 330
                   : h == 7 ? 220 : h == 13 ? 17 : c->submerged ? 80 : 300;
+}
+
+const ship_class *classes_add_shipyard(class_table *t, const char *nation, const ship_class *donor)
+{
+    if (t->count == MAX_CLASSES || !donor) return NULL;
+    ship_class *c = &t->classes[t->count++];
+    memset(c, 0, sizeof *c);
+    snprintf(c->name, sizeof c->name, "%sShipyard", nation);
+    snprintf(c->nation, sizeof c->nation, "%s", nation);
+    snprintf(c->code, sizeof c->code, "SY");
+    c->hull_type = HULL_SHIPYARD;
+    c->max_health = 6000;
+    c->size_mod = c->exposure_mod = 100;
+    c->aa_damage = 80;
+    for (int k = 0; k < 3; k++) snprintf(c->model[k], sizeof c->model[k], "@shipyard");
+    snprintf(c->gun_model, sizeof c->gun_model, "%s", donor->gun_model);
+    c->half_length = 320;           /* waterfront along its "bow" axis, facing the sea */
+    c->half_beam = 180;
+    /* Coastal batteries: the donor's main gun twice, its secondary twice. */
+    int main_w = -1, sec_w = -1;
+    for (int i = 0; i < donor->weapon_count; i++) {
+        const class_weapon *w = &donor->weapons[i];
+        if (w->ammo != AMMO_SHELL) continue;
+        if (main_w < 0 && w->mount_group <= 2) main_w = i;
+        if (sec_w < 0 && (w->mount_group == 3 || w->mount_group == 4)) sec_w = i;
+    }
+    if (main_w < 0) return NULL;
+    c->weapons[c->weapon_count++] = donor->weapons[main_w];
+    c->weapons[c->weapon_count - 1].mount_group = 1;
+    if (sec_w >= 0) {
+        c->weapons[c->weapon_count++] = donor->weapons[sec_w];
+        c->weapons[c->weapon_count - 1].mount_group = 3;
+    }
+    struct { const char *name; float x, z, center, half; int w; } m[] = {
+        {"F1", -200, 260, 0, 120 * DEG, 0}, {"F2", 200, 260, 0, 120 * DEG, 0},
+        {"P1", -160, 120, -PI_F / 2, 100 * DEG, 1}, {"S1", 160, 120, PI_F / 2, 100 * DEG, 1}};
+    for (int k = 0; k < 4; k++) {
+        if (m[k].w >= c->weapon_count) continue;
+        turret_mount *t2 = add_mount(c, m[k].name, m[k].x, 12, m[k].z, m[k].center, m[k].half, m[k].w);
+        if (t2 && m[k].w == 1) t2->bat = BAT_SECONDARY;
+    }
+    build_damage_layout(c);
+    return c;
+}
+
+float class_cost(const ship_class *c)
+{
+    switch (c->hull_type) {
+    case 1: return 1400;            /* carrier, with her air group */
+    case 2: return 1100;
+    case 3: case 14: return 1500;
+    case 5: return 800;
+    case 6: case 15: return 400;
+    case 7: return 300;
+    case 12: case 16: return 350;
+    case 13: return 120;
+    default: return 300;
+    }
+}
+
+float build_time(const ship_class *c)
+{
+    return class_cost(c) * 0.1f;    /* a battleship in 2.5 minutes, a PT boat in 12 s */
 }
 
 int classes_load_layouts(class_table *t, const char *files_dir)

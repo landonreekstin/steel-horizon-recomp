@@ -12,6 +12,7 @@ void world_init(world *w)
 {
     memset(w, 0, sizeof *w);
     world_seed(w, 1);
+    w->sides[0].yard = w->sides[1].yard = -1;
 }
 
 int world_spawn(world *w, const ship_class *cls, int side, float x, float z, float heading)
@@ -120,6 +121,7 @@ void world_step(world *w)
     }
     combat_step(w);
     air_step(w);
+    base_step(w);
     if (w->tick % (2 * SIM_HZ) == 0) ai_step(w);
     w->tick++;
 }

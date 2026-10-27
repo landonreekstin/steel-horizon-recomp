@@ -96,10 +96,10 @@ static const char *SHIP_VS = GLSL
 
 static const char *SHIP_FS = GLSL SKY_GLSL
     "in vec3 v_nrm; in vec2 v_uv; in vec3 v_wpos;\n"
-    "uniform sampler2D u_tex; uniform int u_textured; uniform vec3 u_eye; uniform vec4 u_tint;\n"
+    "uniform sampler2D u_tex; uniform int u_textured; uniform vec3 u_eye; uniform vec4 u_tint; uniform vec3 u_flat;\n"
     "out vec4 o;\n"
     "void main() {\n"
-    "  vec4 c = u_textured != 0 ? texture(u_tex, v_uv) : vec4(0.45, 0.47, 0.5, 1.0);\n"
+    "  vec4 c = u_textured != 0 ? texture(u_tex, v_uv) : vec4(u_flat, 1.0);\n"
     "  if (c.a < 0.5) discard;\n"
     "  vec3 n = normalize(v_nrm);\n"
     "  float l = 0.45 + 0.75 * abs(dot(n, SUN));\n"     /* two-sided: GE strips mix windings */
@@ -186,6 +186,7 @@ typedef struct {
     gpu_mesh meshes[16];
     GLuint textures[16];
     int textured[16];
+    float flat[16][3];          /* colour of untextured materials */
     mounts mts;
 } gpu_model;
 
@@ -256,6 +257,11 @@ static GLuint upload_texture(const image *img)
 static gpu_model *get_model(renderer *r, const char *rel)
 {
     if (!rel || !rel[0]) return NULL;
+    if (rel[0] == '@') {                       /* generated: built by renderer_load_class */
+        for (int i = 0; i < r->model_count; i++)
+            if (!strcmp(r->models[i].path, rel)) return &r->models[i];
+        return NULL;
+    }
     for (int i = 0; i < r->model_count; i++)
         if (!strcmp(r->models[i].path, rel)) return r->models[i].ok ? &r->models[i] : NULL;
     if (r->model_count == MAX_MODELS) return NULL;
@@ -267,6 +273,7 @@ static gpu_model *get_model(renderer *r, const char *rel)
     pingu p;
     if (pingu_load(path, &p)) return NULL;
     m->ok = 1;
+    for (int i = 0; i < 16; i++) { m->flat[i][0] = 0.45f; m->flat[i][1] = 0.47f; m->flat[i][2] = 0.5f; }
     m->radius = p.radius;
     memcpy(m->bbox_min, p.bbox_min, sizeof m->bbox_min);
     memcpy(m->bbox_max, p.bbox_max, sizeof m->bbox_max);
@@ -327,8 +334,129 @@ static const gpu_model *plane_model(renderer *r, const char *nation, int stage)
     return NULL;
 }
 
+/* ---- generated models (no original asset exists) ---------------------------------- */
+
+#define GEN_MAX_VERTS 4096
+typedef struct {
+    vertex v[GEN_MAX_VERTS];
+    uint32_t idx[GEN_MAX_VERTS * 2];
+    int nv, ni;
+} gen_mesh;
+
+static void gen_box(gen_mesh *g, float x0, float y0, float z0, float x1, float y1, float z1)
+{
+    static const float n[6][3] = {{1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1}};
+    if (g->nv + 24 > GEN_MAX_VERTS) return;
+    for (int f = 0; f < 6; f++) {
+        int a = f / 2, sgn = f % 2 == 0;           /* axis and side of this face */
+        int u = (a + 1) % 3, w = (a + 2) % 3;
+        float lo[3] = {x0, y0, z0}, hi[3] = {x1, y1, z1};
+        int base = g->nv;
+        for (int c = 0; c < 4; c++) {
+            float p[3];
+            p[a] = sgn ? hi[a] : lo[a];
+            p[u] = (c == 1 || c == 2) ? hi[u] : lo[u];
+            p[w] = (c >= 2) ? hi[w] : lo[w];
+            vertex *vx = &g->v[g->nv++];
+            memcpy(vx->pos, p, sizeof p);
+            memcpy(vx->normal, n[f], sizeof vx->normal);
+            vx->uv[0] = vx->uv[1] = 0;
+        }
+        uint32_t q[6] = {0, 1, 2, 0, 2, 3};
+        for (int k = 0; k < 6; k++) g->idx[g->ni++] = (uint32_t)base + q[k];
+    }
+}
+
+static void upload_gen(gpu_model *m, const gen_mesh *g, float r, float gr, float b)
+{
+    if (!g->ni || m->mesh_count == 16) return;
+    int k = m->mesh_count;
+    gpu_mesh *gm = &m->meshes[m->mesh_count++];
+    gm->material = k;
+    gm->index_count = g->ni;
+    m->textured[k] = 0;
+    m->flat[k][0] = r; m->flat[k][1] = gr; m->flat[k][2] = b;
+    glGenVertexArrays(1, &gm->vao);
+    glBindVertexArray(gm->vao);
+    glGenBuffers(1, &gm->vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, gm->vbo);
+    glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(sizeof(vertex) * (size_t)g->nv), g->v, GL_STATIC_DRAW);
+    glGenBuffers(1, &gm->ibo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gm->ibo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)(sizeof(uint32_t) * (size_t)g->ni), g->idx, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, pos));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, normal));
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(vertex), (void *)offsetof(vertex, uv));
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(2);
+}
+
+/* Placeholder shipyard (+Z faces the sea): ground, quay, drydock, slipway with a hull
+ * on it, cranes, workshops, HQ with a radar mast, ammunition bunkers; gun mounts from
+ * the class so the coastal batteries are drawn and trained like turrets. */
+static gpu_model *shipyard_model(renderer *r, const ship_class *cls)
+{
+    for (int i = 0; i < r->model_count; i++)
+        if (!strcmp(r->models[i].path, cls->model[0])) return &r->models[i];
+    if (r->model_count == MAX_MODELS) return NULL;
+    gpu_model *m = &r->models[r->model_count++];
+    memset(m, 0, sizeof *m);
+    snprintf(m->path, sizeof m->path, "%s", cls->model[0]);
+    m->ok = 1;
+    static gen_mesh ground, concrete, dark, steel, brick, bunker;
+    memset(&ground, 0, sizeof ground); memset(&concrete, 0, sizeof concrete); memset(&dark, 0, sizeof dark);
+    memset(&steel, 0, sizeof steel); memset(&brick, 0, sizeof brick); memset(&bunker, 0, sizeof bunker);
+    gen_box(&ground, -240, -6, -360, 240, 5, 260);
+    gen_box(&concrete, -240, -6, 260, 240, 7, 320);                  /* quay */
+    gen_box(&dark, -130, -6, -170, -20, 2, 262);                     /* drydock basin */
+    gen_box(&steel, -105, 2, -120, -45, 16, 200);                    /* a hull in the dock */
+    gen_box(&concrete, 30, 5, -60, 150, 8, 262);                     /* slipway */
+    gen_box(&steel, 60, 8, -30, 120, 24, 210);                       /* a hull building */
+    for (int k = 0; k < 4; k++) {                                    /* cranes */
+        float x = k < 2 ? -150 + (float)k * 140 : 20 + (float)(k - 2) * 140, z = k % 2 ? 40 : 180;
+        gen_box(&steel, x - 3, 5, z - 3, x + 3, 70, z + 3);
+        gen_box(&steel, x - 3, 64, z - 40, x + 3, 70, z + 30);
+    }
+    for (int k = 0; k < 5; k++)                                      /* workshops */
+        gen_box(&brick, -220 + (float)k * 90, 5, -330, -150 + (float)k * 90, 22 + (float)(k % 3) * 8, -230);
+    gen_box(&brick, -20, 5, -10, 20, 40, 40);                        /* headquarters */
+    gen_box(&steel, -2, 40, 10, 2, 70, 14);                          /* radar mast */
+    gen_box(&steel, -10, 66, 8, 10, 70, 16);
+    for (int k = 0; k < 4; k++)                                      /* ammunition bunkers */
+        gen_box(&bunker, -210 + (float)(k % 2) * 60, 5, -200 + (float)(k / 2) * 50, -170 + (float)(k % 2) * 60, 14,
+                -170 + (float)(k / 2) * 50);
+    for (int q = 0; q < cls->mount_count; q++)                       /* battery emplacements */
+        gen_box(&concrete, cls->mounts[q].pos[0] - 25, 5, cls->mounts[q].pos[2] - 25, cls->mounts[q].pos[0] + 25, 12,
+                cls->mounts[q].pos[2] + 25);
+    upload_gen(m, &ground, 0.36f, 0.42f, 0.27f);
+    upload_gen(m, &concrete, 0.62f, 0.62f, 0.6f);
+    upload_gen(m, &dark, 0.12f, 0.16f, 0.2f);
+    upload_gen(m, &steel, 0.38f, 0.4f, 0.43f);
+    upload_gen(m, &brick, 0.52f, 0.36f, 0.28f);
+    upload_gen(m, &bunker, 0.3f, 0.34f, 0.26f);
+    m->bbox_min[0] = -240; m->bbox_max[0] = 240;
+    m->bbox_min[2] = -360; m->bbox_max[2] = 320;
+    m->bbox_max[1] = 70;
+    m->radius = 420;
+    for (int q = 0; q < cls->mount_count && m->mts.count < 32; q++) {
+        mount_point *p = &m->mts.points[m->mts.count++];
+        snprintf(p->name, sizeof p->name, "%s", cls->mounts[q].name);
+        memcpy(p->pos, cls->mounts[q].pos, sizeof p->pos);
+        p->pos[1] = 12;
+        float a = cls->mounts[q].arc_center, c = cosf(a), sn = sinf(a);
+        float rot[9] = {c, 0, sn, 0, 1, 0, -sn, 0, c};
+        memcpy(p->rot, rot, sizeof rot);
+    }
+    return m;
+}
+
 int renderer_load_class(renderer *r, const ship_class *cls)
 {
+    if (cls->model[0][0] == '@') {
+        get_model(r, cls->gun_model);
+        return shipyard_model(r, cls) ? 0 : -1;
+    }
     if (cls->hull_type == 1)
         for (int st = 1; st <= 3; st++) plane_model(r, cls->nation, st);
     int ok = get_model(r, cls->model[0]) != NULL;
@@ -511,6 +639,8 @@ static void draw_model(renderer *r, const gpu_model *m, mat4 model, vec3 tint)
     for (int i = 0; i < m->mesh_count; i++) {
         const gpu_mesh *g = &m->meshes[i];
         glUniform1i(glGetUniformLocation(r->ship_prog, "u_textured"), m->textured[g->material]);
+        glUniform3f(glGetUniformLocation(r->ship_prog, "u_flat"), m->flat[g->material][0], m->flat[g->material][1],
+                    m->flat[g->material][2]);
         glBindTexture(GL_TEXTURE_2D, m->textures[g->material]);
         glBindVertexArray(g->vao);
         glDrawElements(GL_TRIANGLES, g->index_count, GL_UNSIGNED_INT, 0);
@@ -706,17 +836,18 @@ void renderer_draw(renderer *r, const camera *cam, int w, int h, const world *wd
     float now = (float)wd->tick - 1 + alpha;          /* display time, in ticks */
     for (int i = 0; i < wd->count; i++) {
         const ship *s = &wd->ships[i];
-        if (!s->alive && s->sink > 90) continue;         /* gone under */
+        int shore = s->cls->hull_type == HULL_SHIPYARD;
+        if (!s->alive && s->sink > 90 && !shore) continue;   /* gone under */
         int stage = s->stage < 1 ? 1 : s->stage > 3 ? 3 : s->stage;
         const gpu_model *m = get_model(r, s->cls->model[stage - 1]);
         if (!m) m = get_model(r, s->cls->model[0]);
         if (!m) continue;
         float x = s->prev_x + (s->x - s->prev_x) * alpha, z = s->prev_z + (s->z - s->prev_z) * alpha;
         float hd = s->prev_heading + wrap_angle(s->heading - s->prev_heading) * alpha;
-        float y = s->cls->submerged ? -6.0f : sea_height(x, z, t) * 0.5f;
+        float y = s->cls->submerged ? -6.0f : shore ? 0 : sea_height(x, z, t) * 0.5f;
         y -= s->water * 25;                              /* lower in the water as she floods */
         float roll = s->list, pitch = s->trim;
-        if (!s->alive) {
+        if (!s->alive && !shore) {
             y -= fminf(s->sink * 0.6f, 50);              /* settles over about 80 s */
             if (s->cause == 2) roll += (s->list >= 0 ? 1 : -1) * fminf(s->sink * 0.08f, 2.6f);   /* rolls over */
             else pitch += (s->trim >= 0 ? 1 : -1) * fminf(s->sink * 0.006f, 0.35f);              /* goes down by an end */

@@ -2,7 +2,7 @@
  *
  *   shrts [--assets DIR] [--screenshot OUT.ppm --frames N] [--cam SHIP YAW PITCH DIST]
  *         [--cam-plane AIRCRAFT YAW PITCH DIST]
- *         [--headless SECONDS] [--scenario m01|fleet|carriers] [--seed N] [--ai-both]
+ *         [--headless SECONDS] [--scenario m01|fleet|carriers|assault|attack|defend] [--seed N] [--ai-both]
  *
  * DIR (default "assets") holds files/ (tools/imp_extract.py) and data/
  * (tools/data2json.py). Controls: LMB select / drag-box, Shift+LMB add,
@@ -41,6 +41,28 @@ static int spawn(game *g, const char *cls, int side, float x, float z, float hea
     int id = world_spawn(&g->w, c, side, x, z, heading);
     if (id >= 0) g->w.ships[id].ai = side == 1;
     return id;
+}
+
+/* A side's shipyard, armed from the nation's battleship, building the listed classes. */
+static int yard(game *g, const char *nation, int side, float x, float z, float heading, const char **options, int n)
+{
+    char donor[64];
+    snprintf(donor, sizeof donor, "%sBattleship", nation);
+    const ship_class *c = NULL;
+    char name[64];
+    snprintf(name, sizeof name, "%sShipyard", nation);
+    c = class_find(&g->classes, name);
+    if (!c) c = classes_add_shipyard(&g->classes, nation, class_find(&g->classes, donor));
+    if (!c) { fprintf(stderr, "can't make a %s shipyard\n", nation); return -1; }
+    int id = shipyard_spawn(&g->w, c, side, x, z, heading);
+    if (id < 0) return -1;
+    g->w.ships[id].ai = side == 1;
+    side_state *st = &g->w.sides[side];
+    for (int k = 0; k < n && st->option_count < MAX_BUILD_OPTIONS; k++) {
+        const ship_class *o = class_find(&g->classes, options[k]);
+        if (o) st->options[st->option_count++] = o;
+    }
+    return 0;
 }
 
 /* "m01": Mission 01 as measured in the original under PPSSPP (notes/runtime.md):
@@ -83,8 +105,46 @@ static int setup_scenario(game *g, const char *name)
             err |= spawn(g, jp[k], 1, ox[k] + 300, 11000 - oz[k], PI_F) < 0;
         }
         g->cam.target = v3(0, 0, 0);
+    } else if (!strcmp(name, "assault") || !strcmp(name, "attack") || !strcmp(name, "defend")) {
+        /* Shipyard modes. assault: a yard each, first to destroy the other's wins.
+         * attack: you bring the bigger fleet against a defended Japanese yard, 30 min.
+         * defend: the same with sides swapped: you hold the US yard for 30 min. */
+        static const char *us_build[] = {"AmericanDestroyer", "AmericanCruiser", "AmericanBattleship",
+                                         "AmericanAircraftCarrier", "AmericanTorpedoBoat", "AmericanSubmarine"};
+        static const char *jp_build[] = {"JapaneseDestroyer", "JapaneseCruiser", "JapaneseBattleship",
+                                         "JapaneseAircraftCarrier", "JapaneseTorpedoBoat", "JapaneseSubmarine"};
+        int assault = !strcmp(name, "assault"), player_defends = !strcmp(name, "defend");
+        g->w.mode = assault ? MODE_ASSAULT : MODE_DEFEND;
+        g->w.defender = player_defends ? 0 : 1;
+        g->w.time_limit = 30 * 60;
+        if (assault || player_defends) err |= yard(g, "American", 0, 0, -7000, 0, us_build, 6);
+        if (assault || !player_defends) err |= yard(g, "Japanese", 1, 0, 7000, PI_F, jp_build, 6);
+        /* The defender has the yard, the attacker a bigger fleet. */
+        const char *small_us[] = {"AmericanBattleship", "AmericanCruiser", "AmericanDestroyer", "AmericanDestroyer"};
+        const char *small_jp[] = {"JapaneseBattleship", "JapaneseCruiser", "JapaneseDestroyer", "JapaneseDestroyer"};
+        const char *big_us[] = {"AmericanBattleship", "AmericanBattleship", "AmericanCruiser", "AmericanCruiser",
+                                "AmericanAircraftCarrier", "AmericanDestroyer", "AmericanDestroyer", "AmericanDestroyer"};
+        const char *big_jp[] = {"JapaneseBattleship", "JapaneseBattleship", "JapaneseCruiser", "JapaneseCruiser",
+                                "JapaneseAircraftCarrier", "JapaneseDestroyer", "JapaneseDestroyer", "JapaneseDestroyer"};
+        int n_us = assault || player_defends ? 4 : 8, n_jp = assault || !player_defends ? 4 : 8;
+        const char **us = n_us == 4 ? small_us : big_us, **jp = n_jp == 4 ? small_jp : big_jp;
+        for (int k = 0; k < n_us; k++)
+            err |= spawn(g, us[k], 0, ((float)k - (float)(n_us - 1) / 2) * 350, -5600 + (k % 2) * 300.0f, 0) < 0;
+        for (int k = 0; k < n_jp; k++)
+            err |= spawn(g, jp[k], 1, ((float)k - (float)(n_jp - 1) / 2) * 350, 5600 - (k % 2) * 300.0f, PI_F) < 0;
+        if (!assault) {                              /* the attacker's reinforcement waves */
+            int a = 1 - g->w.defender;
+            side_state *st = &g->w.sides[a];
+            const char *wave[] = {a == 0 ? "AmericanCruiser" : "JapaneseCruiser", a == 0 ? "AmericanDestroyer" : "JapaneseDestroyer"};
+            for (int k = 0; k < 2; k++) st->options[st->option_count++] = class_find(&g->classes, wave[k]);
+            st->reinforce_every = 300;
+            st->entry_x = 0;
+            st->entry_z = a == 0 ? -6500 : 6500;
+            g->w.sides[g->w.defender].income *= 0.7f;   /* tuned: AI vs AI splits about evenly */
+        }
+        g->cam.target = v3(0, 0, -5000);
     } else {
-        fprintf(stderr, "unknown scenario %s (m01, fleet, carriers)\n", name);
+        fprintf(stderr, "unknown scenario %s (m01, fleet, carriers, assault, attack, defend)\n", name);
         return -1;
     }
     if (err) return -1;
@@ -287,6 +347,7 @@ int main(int argc, char **argv)
     const char *assets = "assets", *shot = NULL, *scenario = "m01";
     unsigned long long seed = 1;
     int ai_both = 0;
+    float trace = 0;
     int frames = 60;
     float headless = -1, cam_yaw = 0, cam_pitch = 0, cam_dist = 0;
     int cam_ship = -1, cam_plane = -1;
@@ -296,6 +357,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--scenario") && i + 1 < argc) scenario = argv[++i];
         else if (!strcmp(argv[i], "--ai-both")) ai_both = 1;
+        else if (!strcmp(argv[i], "--trace") && i + 1 < argc) trace = (float)atof(argv[++i]);
         else if (!strcmp(argv[i], "--seed") && i + 1 < argc) seed = strtoull(argv[++i], NULL, 10);
         else if (!strcmp(argv[i], "--headless") && i + 1 < argc) headless = (float)atof(argv[++i]);
         else if ((!strcmp(argv[i], "--cam") || !strcmp(argv[i], "--cam-plane")) && i + 4 < argc) {
@@ -324,6 +386,26 @@ int main(int argc, char **argv)
         int sunk_seen[MAX_SHIPS] = {0};
         for (t = 0; t < ticks && world_winner(&g.w) < 0; t++) {
             world_step(&g.w);
+            if (trace > 0 && t % (int)(trace * SIM_HZ) == 0) {
+                /* Ships afloat per side, yard condition, budget, closest approach to the enemy yard. */
+                printf("t=%6.0f", (double)t / SIM_HZ);
+                for (int sd = 0; sd < 2; sd++) {
+                    int n = 0;
+                    float closest = INFINITY;
+                    int ey = g.w.sides[1 - sd].yard;
+                    for (int i = 0; i < g.w.count; i++) {
+                        const ship *s = &g.w.ships[i];
+                        if (!s->alive || s->side != sd || is_shore(s)) continue;
+                        n++;
+                        if (ey >= 0) closest = fminf(closest, hypotf(s->x - g.w.ships[ey].x, s->z - g.w.ships[ey].z));
+                    }
+                    int y = g.w.sides[sd].yard;
+                    printf("  | side %d: %2d ships", sd, n);
+                    if (y >= 0) printf(", yard %3.0f%%, budget %5.0f", 100 * g.w.ships[y].hp / g.w.ships[y].cls->max_health, g.w.sides[sd].budget);
+                    if (ey >= 0 && n) printf(", %5.0f from enemy yard", closest);
+                }
+                printf("\n");
+            }
             for (int i = 0; i < g.w.count; i++)
                 if (!g.w.ships[i].alive && !sunk_seen[i]) {
                     sunk_seen[i] = 1;
@@ -369,6 +451,8 @@ int main(int argc, char **argv)
     renderer *r = renderer_create(path);
     for (int i = 0; i < g.w.count; i++)
         if (renderer_load_class(r, g.w.ships[i].cls)) return 1;
+    for (int s = 0; s < 2; s++)                     /* ships the yards can build */
+        for (int o = 0; o < g.w.sides[s].option_count; o++) renderer_load_class(r, g.w.sides[s].options[o]);
 
     Uint64 freq = SDL_GetPerformanceFrequency(), last = SDL_GetPerformanceCounter();
     double acc = 0, sim_time = 0;

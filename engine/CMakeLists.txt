@@ -11,7 +11,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
 
 # Everything except main.c and render/gl, so the simulation can be tested headless.
-add_library(shcore STATIC src/asset.c src/data.c src/json.c src/sim.c src/combat.c src/layout.c src/ai.c src/air.c src/damage.c src/captain.c)
+add_library(shcore STATIC src/asset.c src/data.c src/json.c src/sim.c src/combat.c src/layout.c src/ai.c src/air.c src/damage.c src/captain.c src/base.c)
 target_compile_options(shcore PRIVATE -Wall -Wextra)
 target_link_libraries(shcore PUBLIC m)
 

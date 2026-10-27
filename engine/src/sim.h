@@ -8,12 +8,14 @@
 
 #define SIM_HZ 20
 #define SIM_DT (1.0f / SIM_HZ)
-#define MAX_SHIPS 64
+#define MAX_SHIPS 160       /* shipyards build mid-battle; wrecks keep their slots */
 #define MAX_WAYPOINTS 16
 #define MAX_PROJECTILES 1024
 #define MAX_FX 512
 #define MAX_AIRCRAFT 256
-#define REP_KINDS_MAX 8        /* >= REP_KINDS (report_kind is declared after ship) */
+#define REP_KINDS_MAX 12       /* >= REP_KINDS (report_kind is declared after ship) */
+#define MAX_BUILD_OPTIONS 8
+#define MAX_QUEUE 6
 
 /* Tuning (design choices for the RTS, not values from the original). */
 #define SPEED_SCALE 0.5f       /* world units per second per point of class speed */
@@ -126,12 +128,32 @@ typedef struct {
     dc_policy policy;
     float dc_timer;
     int jammed;                /* steering gear out: rudder stuck */
+    int returning;             /* AI: heading home to the shipyard for repairs */
+    int committed;             /* AI: part of an attack wave (else mustering at the rally point) */
     int cause;                 /* why she went down: 0 afloat, 1 flooding, 2 capsized, 3 magazine, 4 structure, 5 abandoned */
     float launch_timer;        /* carrier: seconds until the next plane can take off */
     waypoint wp[MAX_WAYPOINTS];
     int wp_count;
     float prev_x, prev_z, prev_heading;  /* state at the previous tick, for interpolation */
 } ship;
+
+typedef enum { MODE_SKIRMISH, MODE_ASSAULT, MODE_DEFEND } game_mode;
+
+/* Per side: its shipyard, build budget and production queue (src/base.c). */
+typedef struct {
+    int yard;                  /* ship index of the side's shipyard, -1 none */
+    float budget, income;      /* build points, and points per second while the yard stands */
+    const ship_class *options[MAX_BUILD_OPTIONS];
+    int option_count;
+    const ship_class *queue[MAX_QUEUE];
+    int queue_count;
+    float progress;            /* seconds of work done on queue[0] */
+    int built;
+    /* A side without a yard (the attacker in MODE_DEFEND) gets reinforcement waves of
+     * its build options every reinforce_every seconds, arriving at (entry_x, entry_z). */
+    float reinforce_every, reinforce_timer, entry_x, entry_z;
+    int waves;                 /* AI attack waves launched; each one musters bigger */
+} side_state;
 
 typedef struct {
     ship ships[MAX_SHIPS];
@@ -147,6 +169,10 @@ typedef struct {
     int air_count;
     int bombs, bomb_hits, planes_lost_aa, planes_lost_fighters, planes_ditched;
     int penetrations, ricochets, fires_started, magazine_explosions;
+    game_mode mode;
+    side_state sides[2];
+    int defender;              /* MODE_DEFEND: the side holding the shipyard */
+    float time_limit;          /* MODE_DEFEND: seconds the defender must hold */
 } world;
 
 void world_init(world *w);   /* seed 1 */
@@ -202,6 +228,7 @@ int torpedo_threat(const world *w, int i, float *comb_heading);
 typedef enum { REP_FLOOD_MAGAZINE, REP_COUNTER_FLOOD, REP_EVADE_TORPEDO, REP_FIGHT_FLOODING,
                REP_FIGHT_FIRES, REP_WITHDRAW, REP_LAUNCH_STRIKE,
                REP_BRIDGE_LOST,  /* not an action: her captain can't report any more */
+               REP_RETURN_TO_YARD,
                REP_KINDS } report_kind;
 typedef struct {
     int ship;
@@ -223,6 +250,15 @@ int hangar_count(const world *w, int carrier, plane_type type);
 int is_carrier(const ship *s);
 void air_step(world *w);     /* part of world_step */
 void air_spawn_group(world *w, int carrier);   /* world_spawn calls it for carriers */
+
+/* Shipyards and game modes (src/base.c). */
+int is_shore(const ship *s);
+int shipyard_spawn(world *w, const ship_class *yard, int side, float x, float z, float heading);
+int order_build(world *w, int side, const ship_class *c);   /* 0 queued, -1 can't */
+void base_step(world *w);    /* part of world_step: income, production, repairs, land */
+float repair_radius(const ship *yard);
+int at_yard(const world *w, int i);          /* moored in reach of her side's working drydock */
+float mode_time_left(const world *w);        /* MODE_DEFEND, seconds; else 0 */
 
 /* Simple enemy commander for ships with ai set: close to gun range, turn broadside. */
 void ai_step(world *w);

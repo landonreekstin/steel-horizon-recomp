@@ -78,6 +78,11 @@ int captain_reports(const world *w, int side, captain_report *out, int max)
         float d;
         if (s->hp < 0.3f * s->cls->max_health && cool[REP_WITHDRAW] <= 0 && nearest_enemy(w, i, 1, &d) >= 0 && d < 3500)
             n = add(out, n, max, i, REP_WITHDRAW, 30);
+        int y = w->sides[side & 1].yard;
+        if (!is_shore(s) && y >= 0 && w->ships[y].alive && s->hp < 0.5f * s->cls->max_health && !at_yard(w, i) &&
+            module_health(&w->ships[y], MOD_DRYDOCK, -1) >= 0.3f && cool[REP_RETURN_TO_YARD] <= 0 &&
+            hypotf(w->ships[y].x - s->x, w->ships[y].z - s->z) > repair_radius(&w->ships[y]))
+            n = add(out, n, max, i, REP_RETURN_TO_YARD, 25);
         if (is_carrier(s) && !s->ai && cool[REP_LAUNCH_STRIKE] <= 0 && hangar_count(w, i, PLANE_BOMBER) >= 3 &&
             nearest_enemy(w, i, 1, &d) >= 0 && d < 12000)
             n = add(out, n, max, i, REP_LAUNCH_STRIKE, 20);
@@ -122,6 +127,12 @@ void captain_act(world *w, const captain_report *r)
         break;
     }
     case REP_BRIDGE_LOST: return;              /* nothing to do */
+    case REP_RETURN_TO_YARD: {
+        const ship *yd = &w->ships[w->sides[s->side & 1].yard];
+        float fwd = yd->cls->half_length + 450;
+        order_move(w, &id, 1, yd->x + sinf(yd->heading) * fwd, yd->z + cosf(yd->heading) * fwd, 0);
+        break;
+    }
     default: break;
     }
     s->report_cool[r->kind] = ACT_COOLDOWN;

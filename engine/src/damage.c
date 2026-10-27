@@ -201,6 +201,14 @@ void damage_hit(world *w, int j, hit_kind kind, float x, float z, float dmg, flo
     int k = comp_at(c, along), side = across >= 0;
     compartment *cp = &s->comp[k];
     float comp_hp = c->max_health / (float)c->comp_count * COMP_HP_SCALE;
+    if (is_shore(s)) {                                   /* nothing to flood ashore */
+        if (kind == HIT_NEAR_MISS) return;
+        if (kind == HIT_TORPEDO) {                       /* blasts the quay */
+            kind = HIT_SHELL;
+            pen = 9;
+            plunging = 0;
+        }
+    }
 
     switch (kind) {
     case HIT_SHELL: case HIT_BOMB: {
@@ -246,6 +254,7 @@ void damage_hit(world *w, int j, hit_kind kind, float x, float z, float dmg, flo
         hit_modules(w, s, k, dmg, 0);
         break;
     }
+    if (is_shore(s)) for (int q = 0; q < c->comp_count; q++) s->comp[q].leak[0] = s->comp[q].leak[1] = 0;
     if (s->alive) {
         s->hp = condition(s) * c->max_health;
         float f = s->hp / c->max_health;
@@ -303,6 +312,11 @@ void damage_step(world *w, int i)
     for (int r = 0; r < REP_KINDS_MAX; r++) s->report_cool[r] = fmaxf(0, s->report_cool[r] - dt);
     if (s->dc_timer <= 0) { assign_crews(s); s->dc_timer = 1.0f; }
     float machinery = module_health(s, MOD_ENGINE, -1);
+    if (is_shore(s))
+        for (int k = 0; k < n; k++) {
+            s->comp[k].leak[0] = s->comp[k].leak[1] = s->comp[k].flood[0] = s->comp[k].flood[1] = 0;
+            s->comp[k].counter_flood = -1;
+        }
     float water = 0, list = 0, trim = 0;
     for (int k = 0; k < n; k++) {
         compartment *cp = &s->comp[k];
@@ -362,7 +376,7 @@ void damage_step(world *w, int i)
     s->list = list_frac * LIST_TO_RAD;
     s->trim = trim / (float)n * 0.6f;
     s->jammed = module_health(s, MOD_STEERING, -1) < 0.25f;
-    if (fabsf(list_frac) > AUTO_COUNTER) {
+    if (fabsf(list_frac) > AUTO_COUNTER && !is_shore(s)) {
         int i1 = i;
         order_counter_flood(w, &i1, 1);
     }
