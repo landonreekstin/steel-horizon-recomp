@@ -272,7 +272,7 @@ static int adpcm_decode(const uint8_t *f, size_t size, int16_t *out)
     return n;
 }
 
-static int is_name_char(uint8_t c) { return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'; }
+static int is_name_char(uint8_t c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'; }
 
 int bnk_load(const char *path, sound_bank *out)
 {
@@ -299,33 +299,30 @@ int bnk_load(const char *path, sound_bank *out)
         if (!(f > 1 && f < 200) || (long)data_off + (long)off + (long)sz > size) break;
         ents++;
     }
-    /* Names: the [A-Z0-9_]{4,} runs before the data; the last `ents` of them. */
-    int nn = 0, cap = 1024;
-    long *name_at = malloc(sizeof(long) * (size_t)cap);
-    int *name_len = malloc(sizeof(int) * (size_t)cap);
-    for (long o = 0; o < (long)data_off;) {
-        long r = o;
-        while (r < (long)data_off && is_name_char(d[r])) r++;
-        if (r - o >= 4 && nn < cap) { name_at[nn] = o; name_len[nn++] = (int)(r - o); }
-        o = r > o ? r : o + 1;
-    }
-    out->count = ents < nn ? ents : nn;
+    /* Names: 20-byte slots after the entry table, `char name[16]` + u32 entry index, in
+     * hash order (not entry order). */
+    out->count = ents;
+    out->rate = BNK_SAMPLE_RATE;
     out->names = calloc((size_t)out->count, sizeof *out->names);
     out->pcm = calloc((size_t)out->count, sizeof *out->pcm);
     out->length = calloc((size_t)out->count, sizeof *out->length);
+    for (long o = e0 + 24L * ents; o + 20 <= (long)data_off; o++) {
+        long r = o;
+        while (r < o + 16 && is_name_char(d[r])) r++;
+        if (r - o < 3 || d[r] != 0 || (o > 0 && is_name_char(d[o - 1]))) continue;
+        uint32_t idx;
+        memcpy(&idx, d + o + 16, 4);
+        if (idx < (uint32_t)ents && !out->names[idx][0]) memcpy(out->names[idx], d + o, (size_t)(r - o));
+        o = r;
+    }
     for (int i = 0; i < out->count; i++) {
         long o = e0 + 24L * i;
         uint32_t off, sz;
         memcpy(&off, d + o + 16, 4);
         memcpy(&sz, d + o + 20, 4);
-        int k = nn - out->count + i;
-        int l = name_len[k] < 31 ? name_len[k] : 31;
-        memcpy(out->names[i], d + name_at[k], (size_t)l);
         out->pcm[i] = malloc(sizeof(int16_t) * (sz / 16 * 28 + 28));
         out->length[i] = adpcm_decode(d + data_off + off, sz, out->pcm[i]);
     }
-    free(name_at);
-    free(name_len);
     free(d);
     return out->count ? 0 : -1;
 }

@@ -50,10 +50,13 @@ int bog_load(const char *path, image *out);       /* mip level 0 as RGBA */
 void image_free(image *img);
 
 /* Sound bank (.bnk "SBlk", tools/bnk.py): named PS-ADPCM samples, decoded to 16-bit
- * mono PCM at 44.1 kHz (see notes/formats.md). */
+ * mono PCM. The game plays every sample at note 60 against the bank's root, which is
+ * 11.025 kHz (notes/formats.md); the mixer runs at BANK_RATE and resamples. */
 #define BANK_RATE 44100
+#define BNK_SAMPLE_RATE 11025
 typedef struct {
     int count;
+    int rate;                   /* the samples' rate: BNK_SAMPLE_RATE, or BANK_RATE when synthesised */
     char (*names)[32];
     int16_t **pcm;
     int *length;                /* samples */

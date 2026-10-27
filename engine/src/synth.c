@@ -68,6 +68,7 @@ static void add(sound_bank *b, const char *name, const recipe *r)
 void synth_bank(sound_bank *b)
 {
     memset(b, 0, sizeof *b);
+    b->rate = BANK_RATE;
     static const char *cal[4] = {"ENORMCANN", "LRGCANN", "MEDCANN", "SMLCANN"};
     for (int c = 0; c < 4; c++) {
         float size = 1 - 0.25f * (float)c;           /* 1 = 16in .. 0.25 = small guns */

@@ -9,7 +9,8 @@
 
 typedef struct {
     const int16_t *pcm;
-    int len, pos;
+    int len;
+    uint32_t pos, step;         /* 16.16 fixed point: the bank's rate over the output's */
     float gl, gr;
 } voice;
 
@@ -32,10 +33,13 @@ static void mix(void *ud, Uint8 *stream, int bytes)
         for (int k = 0; k < VOICES; k++) {
             voice *vc = &a->v[k];
             if (!vc->pcm) continue;
-            float s = vc->pcm[vc->pos++];
+            int i = (int)(vc->pos >> 16);
+            float fr = (float)(vc->pos & 0xffff) / 65536.0f;
+            float s = vc->pcm[i] + (i + 1 < vc->len ? (vc->pcm[i + 1] - vc->pcm[i]) * fr : 0);   /* linear */
             l += s * vc->gl;
             r += s * vc->gr;
-            if (vc->pos >= vc->len) vc->pcm = NULL;
+            vc->pos += vc->step;
+            if ((int)(vc->pos >> 16) >= vc->len) vc->pcm = NULL;
         }
         /* Soft limit so a broadside doesn't clip harshly. */
         l = 32767 * tanhf(l / 32767);
@@ -90,7 +94,7 @@ static void play_index(audio *a, int i, float gain, float pan)
     int slot = -1, oldest = -1, most = -1;
     for (int k = 0; k < VOICES; k++) {
         if (!a->v[k].pcm) { slot = k; break; }
-        if (a->v[k].pos > most) { most = a->v[k].pos; oldest = k; }
+        if ((int)(a->v[k].pos >> 16) > most) { most = (int)(a->v[k].pos >> 16); oldest = k; }
     }
     if (slot < 0) slot = oldest;                   /* steal the voice nearest its end */
     voice *vc = &a->v[slot];
@@ -98,6 +102,7 @@ static void play_index(audio *a, int i, float gain, float pan)
     vc->pcm = a->bank.pcm[i];
     vc->len = a->bank.length[i];
     vc->pos = 0;
+    vc->step = (uint32_t)((double)a->bank.rate / BANK_RATE * 65536.0 + 0.5);
     pan = clampf(pan, -1, 1);
     vc->gl = gain * sqrtf(0.5f * (1 - pan));
     vc->gr = gain * sqrtf(0.5f * (1 + pan));

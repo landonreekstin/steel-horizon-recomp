@@ -4,10 +4,10 @@
 Layout (from game.bnk): u32 header words, "SBlk" block at 0x18; a table of
 24-byte entries (f32 85.21, u32 0, u32 0x80ff0000, u32 flags, u32 offset, u32 size)
 whose offsets are relative to the sample data (the last 4 MB of the file, at
-header word [4]); then the names, one per entry in the same order, each in a
-40-byte record. Samples are standard PSP ADPCM: 16-byte frames (predictor/shift,
+header word [4]); then a name table of 20-byte slots, `char name[16]` + u32 entry
+index, in hash order (not entry order; some slots empty). Samples are standard PSP ADPCM: 16-byte frames (predictor/shift,
 flags, 14 bytes = 28 nibbles), each sample followed by one end-flagged pad frame.
-The sample rate isn't in the table; see notes/formats.md for how it was chosen.
+Played at 11.025 kHz (note 60 against the root in each entry; notes/formats.md).
 
 Usage: python3 -I tools/bnk.py BANK.bnk OUTDIR    (writes NAME.wav per sample)
 """
@@ -16,7 +16,7 @@ import struct
 import sys
 import wave
 
-RATE = 44100
+RATE = 11025   # the game plays every sample at note 60 = 11.025 kHz (notes/formats.md)
 COEF = [(0, 0), (60, 0), (115, -52), (98, -55), (122, -60)]
 
 
@@ -46,7 +46,6 @@ class Bank:
         # The sample data starts right after the name list; header word [4] + 0x18 gives it
         # in game.bnk (0x6b30); fall back to the first frame-aligned run if not.
         self.data_off = struct.unpack_from("<I", data, 16)[0]
-        names = [n.decode() for n in re.findall(rb"[A-Z0-9_]{4,}", data[:self.data_off])]
         # Entries: walk the 24-byte records that fit the layout.
         o = data.find(struct.pack("<f", 85.21) if False else b"\x00\x6e\xaa\x42")
         ents = []
@@ -56,11 +55,18 @@ class Bank:
                 break
             ents.append((off, size))
             o += 24
-        names = names[-len(ents):] if len(names) >= len(ents) else names
+        # Name slots after the entry table: name (NUL-padded to 16) + u32 entry index.
+        names = {}
+        for m in re.finditer(rb"[A-Za-z0-9_]{3,16}\x00", data[o:self.data_off]):
+            p = o + m.start()
+            if p + 20 <= self.data_off:
+                idx = struct.unpack_from("<I", data, p + 16)[0]
+                if idx < len(ents):
+                    names[idx] = m.group()[:-1].decode()
         self.samples = {}
-        for (off, size), name in zip(ents, names):
+        for i, (off, size) in enumerate(ents):
             a = self.data_off + off
-            self.samples[name] = data[a:a + size]
+            self.samples[names.get(i, "SAMPLE%03d" % i)] = data[a:a + size]
 
 
 def main(path, outdir):

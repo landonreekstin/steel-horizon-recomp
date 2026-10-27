@@ -68,14 +68,23 @@ data but not yet confirmed in BOOT.BIN code.
 ## Sound banks (`sound/banks/*.bnk`, "SBlk") — `tools/bnk.py`, `engine/src/asset.c`
 - Header u32 words: `3, 2, 0x18, …, data_offset (word [4]), data_size`; "SBlk" block at
   0x18. game.bnk: 415 samples, data at 0x6b30 (4.0 MB); frontend.bnk the menu sounds.
-- Table of 24-byte entries from the first f32 85.21 (`00 6e aa 42`):
-  `f32 85.21, u32 0, u32 0x80ff0000, u32 flags (0x9fc0 / 0x409fc0), u32 offset, u32 size`;
-  offsets relative to the data, sizes include one end-flagged pad frame.
-- Names follow, one per entry in order, in 40-byte records, cut at 15 characters
-  ("ENORMCANNSHT1_W").
+- At 0x58: one 12-byte record per sound, `s8 volume (127), s8 pan, s16, u8 present, u8,
+  u16 flags, u32 offset` into a table of 8-byte entries (`u24 offset into the sample
+  table, u8 count`) that follows them.
+- Table of 24-byte sample entries from `00 6e aa 42` (not a float):
+  `u8, u8, s8 fine-tune (0xaa = -86), u8 root note (0x42), u32 0, u16 0, u16 ADSR1 0x80ff,
+  u16 ADSR2 0x9fc0, u16 flags (0 / 0x40), u32 offset, u32 size`; offsets relative to the
+  data, sizes include one end-flagged pad frame.
+- Names follow in **20-byte slots, `char name[16]` + u32 entry index, in hash order**
+  (not entry order; some slots empty), cut at 15 characters ("ENORMCANNSHT1_W"). Until
+  2026-10-27 the readers took the names in file order, which gave most sounds the wrong
+  sample.
 - Data: standard PSP/PS2 ADPCM (16-byte frames: predictor<<4|shift, flags, 28 nibbles;
   the usual five filter pairs). All 262,252 frames parse; flag bit 0 ends a sample.
-- **Sample rate is not in the table.** Taken as 44.1 kHz: the voice lines' pitch comes
-  out at 133–164 Hz (male) at 44.1 kHz, 67 Hz at 22.05 kHz. Unconfirmed by ear yet
-  (samples on the NAS under `steel-horizon/sound-check/`).
+- **Sample rate: 11.025 kHz.** BOOT.BIN's sound request (0x0898b6c8) starts every sound
+  at note 60 (0x3c, no bend unless the caller asks); the note-to-pitch routine
+  (0x08988054, run under unicorn) with this bank's root bytes gives SAS pitch 0x400 for
+  note 60 (0x1000 = 44.1 kHz at note 84). Cross-check: with the names mapped by index,
+  the US voice lines' F0 is 160–300 Hz at 11.025 kHz (800–1,100 Hz at 44.1 kHz). The
+  engine mixes at 44.1 kHz and resamples (audio.c).
 - Music (`sound/music/*.at3`) is ATRAC3 in RIFF; not decoded (no decoder on hand).
