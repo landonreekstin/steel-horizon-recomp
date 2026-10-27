@@ -50,7 +50,7 @@ def run(assets, port, perturb=None):
 def rejoin(assets, port):
     """A client drops out mid-battle and comes back: it replays the history and must
     end up with the same battle as everyone else."""
-    common = ["--assets", assets, "--headless", "3000", "--bot"]
+    common = ["--assets", assets, "--headless", "600", "--bot", "--pace", "40"]   # ~15 s of wall time
     # The host runs at 40x real time, so the battle is still on when p2 drops at 1.5 s.
     host = subprocess.Popen([EXE, "--host", str(port), "--players", "3", "--teams", "0,1,0", "--scenario", "fleet",
                              "--name", "host", "--pace", "40"] + common, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -60,9 +60,13 @@ def rejoin(assets, port):
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     p2 = subprocess.Popen([EXE, "--join", f"127.0.0.1:{port}", "--name", "p2"] + common,
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    time.sleep(1.5)
+    # Paced at 40x real time: drop it 3 s in (two minutes of battle), then come back.
+    while "on team" not in p2.stdout.readline():
+        pass
+    time.sleep(3)
     p2.kill()                                   # connection lost mid-battle
     p2.wait()
+    time.sleep(0.5)
     p2 = subprocess.Popen([EXE, "--join", f"127.0.0.1:{port}", "--name", "p2"] + common,
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     outs = [x.communicate(timeout=900)[0] for x in (host, p1, p2)]

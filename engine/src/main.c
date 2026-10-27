@@ -571,9 +571,9 @@ int main(int argc, char **argv)
     int ai_both = 0, host_port = -1, mp_players = 2, teams[MAX_PLAYERS] = {0}, teams_given = 0, bot = 0;
     long desync_at = -1;
     const char *join_addr = NULL, *player_name = "Admiral";
-    float trace = 0;
+    float trace = 0, pace = 0;
     int frames = 60;
-    float headless = -1, pace = 0, cam_yaw = 0, cam_pitch = 0, cam_dist = 0;
+    float headless = -1, cam_yaw = 0, cam_pitch = 0, cam_dist = 0;
     int cam_ship = -1, cam_plane = -1;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--assets") && i + 1 < argc) assets = argv[++i];
@@ -696,6 +696,7 @@ int main(int argc, char **argv)
         g.player = net_player(g.net);
         g.side = ng.team[g.player];
         printf("player %d (%s) on team %d, %d players, scenario %s\n", g.player, ng.name[g.player], g.side, ng.players, scenario);
+        fflush(stdout);
     }
     if (setup_scenario(&g, scenario)) return 1;
     world_seed(&g.w, seed);
@@ -709,11 +710,17 @@ int main(int argc, char **argv)
         int ticks = (int)(headless * SIM_HZ), t, chat_lines = 0;
         int sunk_seen[MAX_SHIPS] = {0};
         Uint64 t0 = SDL_GetTicks64();
+        int lost = 0;
         for (t = 0; t < ticks && world_winner(&g.w) < 0;) {
-            if (g.net && net_poll(g.net)) { fprintf(stderr, "lost the connection\n"); return 1; }
-            if (bot) bot_orders(&g);
-            if (pace > 0 && (double)(SDL_GetTicks64() - t0) < 1000.0 * t / (SIM_HZ * pace)) { usleep(500); continue; }
-            if (!mp_step(&g)) { usleep(500); continue; }   /* waiting for the next turn */
+            /* Connection gone: play out the turns already received, then stop. */
+            if (g.net && !lost && net_poll(g.net)) { fprintf(stderr, "lost the connection\n"); lost = 1; }
+            if (bot && !lost) bot_orders(&g);
+            if (pace > 0 && !lost && (double)(SDL_GetTicks64() - t0) < 1000.0 * t / (SIM_HZ * pace)) { usleep(500); continue; }
+            if (!mp_step(&g)) {                         /* waiting for the next turn */
+                if (lost) break;
+                usleep(500);
+                continue;
+            }
             t++;
             if (desync_at >= 0 && g.w.tick == desync_at) g.w.ships[0].x += 1;   /* --desync-test */
             if (g.net && bot && g.w.tick == 100) {      /* the bot says hello, for the chat test */
@@ -771,7 +778,7 @@ int main(int argc, char **argv)
         print_state(&g.w);
         if (g.net) {
             /* Let the last acknowledgements arrive, then report for the test harness. */
-            for (int k = 0; k < 200; k++) { net_poll(g.net); usleep(2000); }
+            for (int k = 0; k < 200 && !lost; k++) { net_poll(g.net); usleep(2000); }
             for (char line[96]; net_chat_take(g.net, line, sizeof line);) chat_lines++;
             printf("chat lines %d\n", chat_lines);
             printf("final tick %ld checksum %08x desync %ld\n", g.w.tick, world_checksum(&g.w),
