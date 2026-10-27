@@ -2,7 +2,7 @@
  *
  *   shrts [--assets DIR] [--screenshot OUT.ppm --frames N] [--cam SHIP YAW PITCH DIST]
  *         [--cam-plane AIRCRAFT YAW PITCH DIST]
- *         [--headless SECONDS] [--scenario m01|fleet|carriers|assault|attack|defend] [--seed N] [--ai-both]
+ *         [--headless SECONDS [--pace N]] [--scenario m01|fleet|carriers|assault|attack|defend] [--seed N] [--ai-both]
  *
  * DIR (default "assets") holds files/ (tools/imp_extract.py) and data/
  * (tools/data2json.py). Controls: LMB select / drag-box, Shift+LMB add,
@@ -573,7 +573,7 @@ int main(int argc, char **argv)
     const char *join_addr = NULL, *player_name = "Admiral";
     float trace = 0;
     int frames = 60;
-    float headless = -1, cam_yaw = 0, cam_pitch = 0, cam_dist = 0;
+    float headless = -1, pace = 0, cam_yaw = 0, cam_pitch = 0, cam_dist = 0;
     int cam_ship = -1, cam_plane = -1;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--assets") && i + 1 < argc) assets = argv[++i];
@@ -604,6 +604,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--trace") && i + 1 < argc) trace = (float)atof(argv[++i]);
         else if (!strcmp(argv[i], "--seed") && i + 1 < argc) seed = strtoull(argv[++i], NULL, 10);
         else if (!strcmp(argv[i], "--headless") && i + 1 < argc) headless = (float)atof(argv[++i]);
+        else if (!strcmp(argv[i], "--pace") && i + 1 < argc) pace = (float)atof(argv[++i]);   /* headless: at most N x real time */
         else if ((!strcmp(argv[i], "--cam") || !strcmp(argv[i], "--cam-plane")) && i + 4 < argc) {
             if (!strcmp(argv[i], "--cam")) cam_ship = atoi(argv[++i]);
             else cam_plane = atoi(argv[++i]);
@@ -707,9 +708,11 @@ int main(int argc, char **argv)
          * runs until one side is sunk or the time is up. */
         int ticks = (int)(headless * SIM_HZ), t, chat_lines = 0;
         int sunk_seen[MAX_SHIPS] = {0};
+        Uint64 t0 = SDL_GetTicks64();
         for (t = 0; t < ticks && world_winner(&g.w) < 0;) {
             if (g.net && net_poll(g.net)) { fprintf(stderr, "lost the connection\n"); return 1; }
             if (bot) bot_orders(&g);
+            if (pace > 0 && (double)(SDL_GetTicks64() - t0) < 1000.0 * t / (SIM_HZ * pace)) { usleep(500); continue; }
             if (!mp_step(&g)) { usleep(500); continue; }   /* waiting for the next turn */
             t++;
             if (desync_at >= 0 && g.w.tick == desync_at) g.w.ships[0].x += 1;   /* --desync-test */

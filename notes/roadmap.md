@@ -26,8 +26,8 @@ Full plan: `~/.claude/plans/i-want-to-recompile-snoopy-pearl.md`. Status per pha
   damage thumbnails, ship-profile cross-section, dive and torpedo bombers.
 - 8c (first pass): online lockstep multiplayer, teams of several players each with a
   fleet, desync detection, chat (Y) (`tests/test_multiplayer.py`). Rejoin after a drop
-  (host keeps the full turn history and replays it) is written but its test FAILS:
-  the restarted client gets no result; not yet debugged.
+  (host keeps the full turn history and replays it to the returning player); tested by
+  `tests/test_multiplayer.py` (host paced with `--pace 40` so the drop lands mid-battle).
 - 8 (front end): main menu, skirmish list, custom-battle fleet picker (nations, hull
   counts, optional shipyards), host/join screens and lobby; minimap; hover accuracy
   readout; original sound effects and voice lines.

@@ -51,8 +51,9 @@ def rejoin(assets, port):
     """A client drops out mid-battle and comes back: it replays the history and must
     end up with the same battle as everyone else."""
     common = ["--assets", assets, "--headless", "3000", "--bot"]
+    # The host runs at 40x real time, so the battle is still on when p2 drops at 1.5 s.
     host = subprocess.Popen([EXE, "--host", str(port), "--players", "3", "--teams", "0,1,0", "--scenario", "fleet",
-                             "--name", "host"] + common, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                             "--name", "host", "--pace", "40"] + common, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     if "hosting on port" not in host.stdout.readline():
         return None
     p1 = subprocess.Popen([EXE, "--join", f"127.0.0.1:{port}", "--name", "p1"] + common,
