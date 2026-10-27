@@ -1212,7 +1212,15 @@ void renderer_draw(renderer *r, const camera *cam, int w, int h, const world *wd
             vec3 tail = v3(head.x - p->vx * back, 1.0f, head.z - p->vz * back);
             line(tail, head, 0.85f, 0.95f, 1.0f, 0.9f);
         } else {
-            float t0 = fmaxf(tt - 0.12f, 0), t1 = fminf(tt, p->flight);
+            if (tt > p->flight) {
+                /* Landed: only depth charges stay active, sinking to their depth. */
+                if (p->ammo == AMMO_DC) {
+                    float x = p->x0 + p->vx * p->flight, z = p->z0 + p->vz * p->flight, d = fminf(tt - p->flight, 2.0f) * 6;
+                    line(v3(x, -d + 3, z), v3(x, -d, z), 0.15f, 0.15f, 0.15f, 0.8f);
+                }
+                continue;
+            }
+            float t0 = fmaxf(tt - 0.12f, 0), t1 = tt;
             vec3 a = v3(p->x0 + p->vx * t0, p->y0 + p->vy * t0 - 0.5f * GRAVITY * t0 * t0, p->z0 + p->vz * t0);
             vec3 b = v3(p->x0 + p->vx * t1, p->y0 + p->vy * t1 - 0.5f * GRAVITY * t1 * t1, p->z0 + p->vz * t1);
             if (p->ammo == AMMO_DC || p->ammo == AMMO_BOMB) line(a, b, 0.15f, 0.15f, 0.15f, 1);
