@@ -215,3 +215,12 @@ each kill planes (fighters more); Japan won all 4 after the fighter fix.
   scripted orders over the network: identical final checksums, no desync; a client
   perturbed at tick 2000 is caught at turn 500.
 - Not yet: lobby UI, chat, reconnect, NAT traversal (play over LAN/VPN or a forwarded port).
+- **Ammunition** (design): main battery 120 rounds a mount, secondaries 400, torpedo
+  tubes 4 spreads, depth-charge racks 24 (shore batteries ×5); an empty mount falls
+  silent; the drydock restocks a full load in 2 minutes.
+- **Hit height**: flat fire lands on the upperworks 30% of the time (half-deck armour,
+  wrecks bridge/radar/AA/turrets there, no flooding), the belt 55%, below the
+  waterline 15% (0.8× belt, 80% leak chance at twice the rate).
+- **Manual damage control**: clicking a compartment in the panel makes it a priority
+  (teams' score ×4 there); hovering shows its structure, water per side, fire, teams
+  and every module in it with health and ammunition.

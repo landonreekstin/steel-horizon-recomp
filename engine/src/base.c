@@ -83,6 +83,12 @@ static void repair_alongside(world *w, int i, float rate)
         if (s->module_lost[m] && s->module_hp[m] >= 0.1f) s->module_lost[m] = 0;
     }
     s->crew = fminf(s->cls->complement, s->crew + s->cls->complement * 0.002f * dt);
+    /* Rearming: a magazine's worth every 2 minutes alongside. */
+    if (w->tick % SIM_HZ == 0)                           /* once a second, 1/120 of a load */
+        for (int m = 0; m < s->cls->mount_count; m++) {
+            int cap = ammo_capacity(s->cls, m), add = (cap + 119) / 120;
+            s->turrets[m].ammo = s->turrets[m].ammo + add < cap ? s->turrets[m].ammo + add : cap;
+        }
 }
 
 /* Keep ships out of the shipyard's ground: push them back to its waterline. */

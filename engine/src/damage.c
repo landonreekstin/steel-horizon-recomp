@@ -210,9 +210,24 @@ void damage_hit(world *w, int j, hit_kind kind, float x, float z, float dmg, flo
         }
     }
 
+    /* Flat fire strikes the hull at a height: the upperworks (thin plating, the
+     * bridge, radar and AA, no flooding), the belt, or below the waterline (flooding). */
+    int zone = 1;                                        /* 0 upperworks, 1 belt, 2 underwater */
+    if (kind == HIT_SHELL && !plunging && !is_shore(s)) {
+        float u = rand01(w);
+        zone = u < 0.3f ? 0 : u < 0.85f ? 1 : 2;
+    }
     switch (kind) {
     case HIT_SHELL: case HIT_BOMB: {
-        float armour = plunging || kind == HIT_BOMB ? c->deck : c->belt;
+        float armour = plunging || kind == HIT_BOMB ? c->deck : zone == 0 ? c->deck * 0.5f : zone == 2 ? c->belt * 0.8f : c->belt;
+        if (zone == 0) {                                 /* upperworks: wreck what's up there */
+            w->upperworks++;
+            wreck(s, k, dmg * 0.5f / comp_hp, side);
+            hit_modules(w, s, k, dmg * 1.4f, 1);
+            casualties(s, 0.12f * dmg / comp_hp);
+            if (rand01(w) < 0.2f) ignite(w, s, k, 0.25f);
+            break;
+        }
         int through = pen * (0.85f + 0.3f * rand01(w)) > armour;
         if (!through) {                                  /* splinters on the upperworks */
             w->ricochets++;
@@ -228,7 +243,7 @@ void damage_hit(world *w, int j, hit_kind kind, float x, float z, float dmg, flo
         hit_modules(w, s, k, dmg, 0);
         casualties(s, 0.25f * dmg / comp_hp);
         if (rand01(w) < (kind == HIT_BOMB ? 0.5f : 0.25f) * fminf(dmg / 60.0f, 1.5f)) ignite(w, s, k, 0.3f);
-        if (!plunging && kind == HIT_SHELL && rand01(w) < 0.35f) cp->leak[side] += dmg / 3000.0f;
+        if (!plunging && kind == HIT_SHELL && rand01(w) < (zone == 2 ? 0.8f : 0.3f)) cp->leak[side] += dmg / (zone == 2 ? 1500.0f : 3000.0f);
         if (has_magazine(s, k) && !cp->mag_flooded && rand01(w) < MAG_HIT * dmg / 90.0f) go_down(w, j, 3);
         break;
     }
@@ -284,7 +299,7 @@ static void assign_crews(ship *s)
             repair += (REPAIR_CAP - s->module_hp[m]) * wgt;
         }
         const float *pw = weight[s->policy];
-        score[k] = fire * pw[0] + flood * pw[1] + repair * pw[2];
+        score[k] = (fire * pw[0] + flood * pw[1] + repair * pw[2]) * (cp->priority ? 4 : 1) + (cp->priority ? 0.5f : 0);
         s->comp[k].crews = 0;
     }
     /* Short-handed ships man fewer teams. */
@@ -411,6 +426,14 @@ void order_flood_magazines(world *w, const int *ids, int n)
 {
     for (int i = 0; i < n; i++)
         for (int k = 0; k < w->ships[ids[i]].cls->comp_count; k++) order_flood_magazine(w, ids[i], k);
+}
+
+void order_dc_priority(world *w, int ship_id, int k)
+{
+    ship *s = &w->ships[ship_id];
+    if (k < 0 || k >= s->cls->comp_count) return;
+    s->comp[k].priority = !s->comp[k].priority;
+    s->dc_timer = 0;                                     /* reassign now */
 }
 
 void order_counter_flood(world *w, const int *ids, int n)

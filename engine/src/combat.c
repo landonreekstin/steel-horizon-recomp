@@ -117,9 +117,22 @@ void fx_mag(world *w, fx_kind kind, float x, float y, float z, float mag)
     w->fx_head = (w->fx_head + 1) % MAX_FX;
 }
 
-/* A mount whose turret is wrecked, or whose magazine is flooded, can't fire. */
+/* Magazine loads (design): enough for a long action, not an endless one. Main
+ * battery 120 rounds a turret (~35 min at the 16in's reload), secondaries 400,
+ * torpedo tubes 4 spreads, depth-charge racks 24; shore batteries five times that. */
+int ammo_capacity(const ship_class *c, int m)
+{
+    const turret_mount *mt = &c->mounts[m];
+    const class_weapon *wp = &c->weapons[mt->weapon];
+    int n = wp->ammo == AMMO_TORPEDO ? 4 : wp->ammo == AMMO_DC ? 24 : mt->bat == BAT_MAIN ? 120 : 400;
+    return c->hull_type == HULL_SHIPYARD ? n * 5 : n;
+}
+
+/* A mount whose turret is wrecked, whose magazine is flooded, or that is out of
+ * ammunition can't fire. */
 static int mount_ready(const ship *s, int m)
 {
+    if (s->turrets[m].ammo <= 0) return 0;
     if (module_health(s, MOD_TURRET, m) <= 0) return 0;
     const turret_mount *mt = &s->cls->mounts[m];
     if (mt->bat != BAT_MAIN && mt->bat != BAT_TORPEDO) return 1;
@@ -290,6 +303,7 @@ static void fire(world *w, int i, int m, int j, float aim_yaw)
             w->torps++;
         }
         tu->reload = wp->fire_rate * TORP_RELOAD_SCALE * (module_health(s, MOD_TURRET, m) < 0.5f ? 1.8f : 1);
+        tu->ammo--;
         fx(w, FX_TORP_LAUNCH, mx, my, mz);
         return;
     }
@@ -317,6 +331,7 @@ static void fire(world *w, int i, int m, int j, float aim_yaw)
     /* Damaged turrets and thinned-out gun crews load slower. */
     tu->reload = fmaxf(2.0f, wp->fire_rate * RELOAD_SCALE) * (module_health(s, MOD_TURRET, m) < 0.5f ? 1.8f : 1)
                / (0.4f + 0.6f * crew_factor(s)) / (1 + 0.2f * officer_level(s, OFF_GUNNERY));
+    tu->ammo--;
     if (wp->ammo == AMMO_DC) fx(w, FX_DC_LAUNCH, mx, my, mz);
     else fx_mag(w, FX_MUZZLE, mx, my, mz, wp->damage);
 }

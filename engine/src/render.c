@@ -848,6 +848,9 @@ void ui_ship_profile(renderer *r, const ship *s, float x, float y, float w, floa
         default: break;
         }
     }
+    if (detail)                                           /* priority compartments: a white bar */
+        for (int k = 0; k < n; k++)
+            if (s->comp[k].priority) ui_rect(PX(c->comp_z[k]) + 1, base + 15, PX(c->comp_z[k + 1]) - 1, base + 18, 1, 1, 1, 1);
     if (detail)                                           /* damage-control teams */
         for (int k = 0; k < n; k++)
             for (int q = 0; q < s->comp[k].crews; q++) {

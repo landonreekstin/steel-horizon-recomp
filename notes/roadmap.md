@@ -33,10 +33,10 @@ Full plan: `~/.claude/plans/i-want-to-recompile-snoopy-pearl.md`. Status per pha
 ## Next
 
 ### 7. Cross-section damage model *(requested, War Thunder style)* — remaining
-Done in the first pass (above); still to do: labels and tooltips on the panel (needs
-text rendering, shared with the toolbar), assigning teams to a compartment by hand,
-per-turret magazines and ammunition counts, decks above/below the waterline (shell
-hit height), and compartments laid out from real ship plans once ships are generated.
+Done: first pass (above), plus panel tooltips, sending teams to a compartment by hand
+(click it), per-mount ammunition (restocked at the drydock), and hit height (upperworks
+/ belt / below the waterline). Still to do: compartments laid out from real ship plans
+once ships are generated from them.
 Original plan:
 Replace the single HP pool with a ship laid out as compartments along the hull, each
 with its own state, and shells/bombs/torpedoes resolved against that layout:

@@ -96,6 +96,7 @@ typedef struct {
     int crews;                 /* damage-control teams working here */
     int mag_flooded;           /* magazine deliberately flooded */
     int counter_flood;         /* side (0/1) being counter-flooded, -1 none */
+    int priority;              /* the player sent damage control here first */
 } compartment;
 
 typedef struct {
@@ -103,6 +104,7 @@ typedef struct {
     float reload;              /* seconds until loaded */
     float retarget;            /* seconds until the next target search */
     int target;                /* ship index, -1 none */
+    int ammo;                  /* rounds (torpedo tubes: spreads) left in the magazine */
 } turret;
 
 typedef struct {
@@ -181,7 +183,7 @@ typedef struct {
     aircraft air[MAX_AIRCRAFT];
     int air_count;
     int bombs, bomb_hits, planes_lost_aa, planes_lost_fighters, planes_ditched;
-    int penetrations, ricochets, fires_started, magazine_explosions;
+    int penetrations, ricochets, fires_started, magazine_explosions, upperworks;
     int air_torps;             /* aerial torpedoes dropped */
     game_mode mode;
     side_state sides[2];
@@ -232,6 +234,8 @@ float condition(const ship *s);    /* 0..1, drives the health bar and the 01/02/
 void order_dc_policy(world *w, const int *ids, int n, dc_policy p);
 void order_flood_magazines(world *w, const int *ids, int n);
 void order_counter_flood(world *w, const int *ids, int n);
+void order_dc_priority(world *w, int ship, int comp);   /* toggle "teams here first" */
+int ammo_capacity(const ship_class *c, int mount);      /* full magazine for a mount */
 /* Fire at a part of the target (MOD_ENGINE, MOD_MAGAZINE, MOD_STEERING, MOD_BRIDGE,
  * MOD_TURRET) instead of the ship as a whole; -1 for the whole ship. */
 void order_aim(world *w, const int *ids, int n, int kind, unsigned mask);

@@ -73,6 +73,9 @@ void world_apply(world *w, const command *c)
     case CMD_OFFICER:
         if (n == 1) order_officer(w, c->player, c->a, ids[0]);
         break;
+    case CMD_DC_PRIORITY:
+        if (n == 1) order_dc_priority(w, ids[0], c->a);
+        break;
     default: break;
     }
 }

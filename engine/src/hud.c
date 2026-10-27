@@ -262,7 +262,57 @@ static const char *aim_name(int kind)
     }
 }
 
-static void ship_readout(hud *h, const world *w, const unsigned char *selected, int sw, int sh)
+static const char *MODULE_NAME[MOD_KINDS] = {"turret", "magazine", "engines", "steering", "bridge", "radar", "AA",
+                                              "flight deck", "hangar lift", "drydock", "slipway"};
+
+/* Hovering the cross-section: that compartment's state; clicking: teams there first. */
+static void compartment_tip(hud *h, renderer *r, const world *w, command_queue *q, int i, int sw, int sh)
+{
+    const ship *s = &w->ships[i];
+    const ship_class *c = s->cls;
+    const ship_profile *p = renderer_profile(r, c);
+    float pw = fminf(760, (float)sw - 40), x0 = ((float)sw - pw) / 2 + 20, y0 = (float)sh - 166, bw = pw - 165;
+    if (!p || h->mouse_x < x0 || h->mouse_x > x0 + bw || h->mouse_y < y0 || h->mouse_y > y0 + 126) return;
+    float z = p->z0 + (h->mouse_x - x0) / bw * (p->z1 - p->z0);
+    int k = 0;
+    while (k < c->comp_count - 1 && z > c->comp_z[k + 1]) k++;
+    const compartment *cp = &s->comp[k];
+    char lines[8][96];
+    int nl = 0;
+    snprintf(lines[nl++], 96, "Compartment %d of %d%s  (click: damage control here first)", k + 1, c->comp_count,
+             cp->priority ? "  [PRIORITY]" : "");
+    snprintf(lines[nl++], 96, "structure %.0f%%  water P %.0f%% S %.0f%%%s  fire %.0f%%  teams %d", 100 * cp->structure,
+             100 * cp->flood[0], 100 * cp->flood[1], cp->leak[0] + cp->leak[1] > 0 ? " (leaking)" : "", 100 * cp->fire, cp->crews);
+    for (int m = 0; m < c->module_count && nl < 7; m++) {
+        const module_def *d = &c->modules[m];
+        if (d->comp != k) continue;
+        if (d->kind == MOD_MAGAZINE)
+            snprintf(lines[nl++], 96, "  magazine%s", cp->mag_flooded ? " (flooded)" : cp->fire > 0 ? " - FIRE NEARBY" : "");
+        else if (d->kind == MOD_TURRET)
+            snprintf(lines[nl++], 96, "  %s %s %.0f%%%s  ammo %d", c->mounts[d->mount].name[0] ? c->mounts[d->mount].name : "mount",
+                     c->weapons[c->mounts[d->mount].weapon].name, 100 * s->module_hp[m], s->module_lost[m] ? " LOST" : "",
+                     s->turrets[d->mount].ammo);
+        else
+            snprintf(lines[nl++], 96, "  %s %.0f%%%s", MODULE_NAME[d->kind], 100 * s->module_hp[m], s->module_lost[m] ? " LOST" : "");
+    }
+    float tw = 0;
+    for (int l = 0; l < nl; l++) tw = fmaxf(tw, ui_text_width(lines[l]));
+    float lh = ui_line_height(), tx = fminf(h->mouse_x + 14, (float)sw - tw - 14), ty = y0 - (float)nl * (lh + 2) - 60;
+    ui_rect(tx - 6, ty - 4, tx + tw + 6, ty + (float)nl * (lh + 2) + 4, 0.03f, 0.04f, 0.05f, 0.92f);
+    for (int l = 0; l < nl; l++) ui_text(tx, ty + (float)l * (lh + 2), lines[l], l ? 0.85f : 1, l ? 0.9f : 0.85f, l ? 0.95f : 0.5f, 1);
+    if (h->click && s->owner == h->player) {
+        command cmd;
+        memset(&cmd, 0, sizeof cmd);
+        cmd.kind = CMD_DC_PRIORITY;
+        cmd.player = (uint8_t)h->player;
+        cmd.a = k;
+        cmd_set_ship(&cmd, i);
+        hud_issue(q, w, &cmd);
+        h->click = 0;
+    }
+}
+
+static void ship_readout(hud *h, renderer *r, const world *w, command_queue *q, const unsigned char *selected, int sw, int sh)
 {
     int i = -1;
     for (int k = 0; k < w->count && i < 0; k++)
@@ -287,8 +337,9 @@ static void ship_readout(hud *h, const world *w, const unsigned char *selected, 
         for (int m = 0; m < s->cls->mount_count && target < 0; m++)
             if (s->cls->mounts[m].bat == BAT_MAIN && s->turrets[m].target >= 0) target = s->turrets[m].target;
     }
-    int mains = 0;
-    for (int m = 0; m < s->cls->mount_count; m++) mains += s->cls->mounts[m].bat == BAT_MAIN;
+    int mains = 0, main_ammo = 0;
+    for (int m = 0; m < s->cls->mount_count; m++)
+        if (s->cls->mounts[m].bat == BAT_MAIN) { mains++; main_ammo += s->turrets[m].ammo; }
     if (target >= 0) {
         float p = 0;
         int n = 0;
@@ -297,9 +348,9 @@ static void ship_readout(hud *h, const world *w, const unsigned char *selected, 
         char tname[64];
         ship_label(w, target, tname, sizeof tname);
         if (n)
-            snprintf(l2, sizeof l2, "Main battery on %s%s: %.0f%% per shell, %d of %d turrets bearing   aim: %s [T]",
+            snprintf(l2, sizeof l2, "Main battery on %s%s: %.0f%% per shell, %d/%d bearing, ammo %d   aim: %s [T]",
                      tname, s->order_target[BAT_MAIN] == target ? " (focus)" : "", 100 * p / (float)n, n,
-                     mains, aim_name(s->aim[BAT_MAIN]));
+                     mains, main_ammo, aim_name(s->aim[BAT_MAIN]));
         else
             snprintf(l2, sizeof l2, "Main battery: %s out of arc or range   aim: %s [T]", tname, aim_name(s->aim[BAT_MAIN]));
     } else {
@@ -326,6 +377,8 @@ static void ship_readout(hud *h, const world *w, const unsigned char *selected, 
     ui_text(x0 + pw - 95, y0 + 2, "list", DIM[0], DIM[1], DIM[2], 1);
     ui_text(x0 + pw - 135, y0 + 76, "water", DIM[0], DIM[1], DIM[2], 1);
     ui_text(x0 + pw - 135, y0 + 90, "cond.", DIM[0], DIM[1], DIM[2], 1);
+    box(h, x0 + 20, y0 + 4, x0 + pw - 145, y0 + 130, (const float[4]){0, 0, 0, 0});   /* the profile catches clicks */
+    compartment_tip(h, r, w, q, i, sw, sh);
 }
 
 /* ---- shipyard (left, below the controls) and the game-mode banner ---------------------- */
@@ -599,7 +652,7 @@ int hud_draw(hud *h, renderer *r, world *w, command_queue *q, int player, unsign
     fleet_bar(h, r, w, q, selected, sw, sh, t);
     minimap(h, w, sh);
     hover_tooltip(h, w, selected);
-    ship_readout(h, w, selected, sw, sh);
+    ship_readout(h, r, w, q, selected, sw, sh);
     int result = world_winner(w);
     if (result >= 0) {
         const char *msg = result == 0 ? "VICTORY" : "DEFEAT";

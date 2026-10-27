@@ -595,14 +595,16 @@ static void test_damage(const class_table *ct)
     world_init(&w);
     world_spawn(&w, bb, 1, 0, 0, 0);
     for (int k = 0; k < 40; k++) damage_hit(&w, 0, HIT_SHELL, 10, (float)(k % 9) * 15 - 60, w5->damage, shell_pen(w5, 1000), 0);
-    CHECK(w.penetrations == 0 && w.ricochets == 40, "5in on a BB belt: %d through", w.penetrations);
+    CHECK(w.penetrations == 0 && w.ricochets + w.upperworks == 40 && w.upperworks > 0,
+          "5in on a BB: %d through the belt, %d on the upperworks", w.penetrations, w.upperworks);
     world_init(&w);
     world_spawn(&w, bb, 1, 0, 0, 0);
     for (int k = 0; k < 20; k++) {                       /* fresh ship each time: 20 hits would sink her */
         damage_init(&w.ships[0]);
         damage_hit(&w, 0, HIT_SHELL, 10, 0, w16->damage, shell_pen(w16, 500), 0);
     }
-    CHECK(w.penetrations >= 18, "16in at 500: %d of 20 through", w.penetrations);
+    CHECK(w.penetrations + w.upperworks >= 18 && w.penetrations >= 10, "16in at 500: %d of 20 through the belt, %d upperworks",
+          w.penetrations, w.upperworks);
 
     /* A torpedo floods one side and lists her; the crew counter-floods it back. */
     world_init(&w);
@@ -655,6 +657,16 @@ static void test_damage(const class_table *ct)
         fire_crews[pass] = w.ships[0].comp[2].crews;
     }
     CHECK(fire_crews[0] > fire_crews[1], "fire priority puts more teams on the fire (%d vs %d)", fire_crews[0], fire_crews[1]);
+
+    /* Manual priority: the player's compartment gets teams first. */
+    world_init(&w);
+    world_spawn(&w, bb, 1, 0, 0, 0);
+    w.ships[0].comp[2].fire = 0.8f;                      /* the big fire... */
+    w.ships[0].comp[6].fire = 0.2f;                      /* ...and the one the player cares about */
+    order_dc_priority(&w, 0, 6);
+    world_step(&w);
+    CHECK(w.ships[0].comp[6].crews >= w.ships[0].comp[2].crews && w.ships[0].comp[6].crews >= 2,
+          "priority compartment teams %d vs %d", w.ships[0].comp[6].crews, w.ships[0].comp[2].crews);
 
     /* Flooded magazines silence those turrets: a target dead ahead at 2,500 is out of
      * 5in range, so only the main battery could fire. */
@@ -880,6 +892,23 @@ static void test_bases(class_table *ct)
     ships0 = w.count;
     run(&w, build_time(dd) * 2);
     CHECK(w.count == ships0, "no slipway, no ships");
+
+    /* Ammunition: empty magazines don't fire; the yard restocks them. */
+    world_init(&w);
+    shipyard_spawn(&w, uyard, 0, 0, 0, 0);
+    int gunner = world_spawn(&w, bb, 0, 6000, 900, 0);   /* out at sea first */
+    world_spawn(&w, jdd, 1, 6000, 3000, PI_F);
+    w.ships[2].hold_fire = 1;
+    for (int m = 0; m < bb->mount_count; m++) w.ships[gunner].turrets[m].ammo = 0;
+    w.ships[0].hold_fire = 1;                            /* keep the yard's own guns out of it */
+    run(&w, 20);
+    CHECK(w.shots == 0, "no ammunition, no shells (%d)", w.shots);
+    w.ships[gunner].x = w.ships[gunner].prev_x = 0;      /* now alongside the drydock */
+    w.ships[gunner].hold_fire = 1;
+    run(&w, 130);
+    int full = 0;
+    for (int m = 0; m < bb->mount_count; m++) full += w.ships[gunner].turrets[m].ammo == ammo_capacity(bb, m);
+    CHECK(full == bb->mount_count || w.shots > 0, "restocked alongside: %d of %d mounts full", full, bb->mount_count);
 
     /* Ships can't sail through the yard. */
     world_init(&w);
