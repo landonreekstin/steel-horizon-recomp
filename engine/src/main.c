@@ -21,6 +21,7 @@
 #include "data.h"
 #include "gl.h"
 #include "command.h"
+#include "audio.h"
 #include "hud.h"
 #include "net.h"
 #include "math3d.h"
@@ -38,6 +39,7 @@ typedef struct {
     int player, side;          /* the local player (command.h) and his team */
     command_queue q;
     net *net;                  /* online game, or NULL */
+    audio *snd;                /* NULL: silent */
 } game;
 
 static int spawn(game *g, const char *cls, int side, float x, float z, float heading)
@@ -317,6 +319,13 @@ static command sel_cmd(const game *g, cmd_kind kind)
 /* Everything the player orders goes through the command stream (command.h). */
 static void issue(game *g, const command *c)
 {
+    /* The first ship ordered answers (move and attack orders). */
+    if (c->kind == CMD_MOVE || c->kind == CMD_ATTACK)
+        for (int i = 0; i < g->w.count; i++)
+            if (cmd_has_ship(c, i) && g->w.ships[i].owner == g->player && g->w.ships[i].alive) {
+                audio_ack(g->snd, &g->w.ships[i]);
+                break;
+            }
     if (g->net) net_send_command(g->net, c);
     else hud_issue(&g->q, &g->w, c);
 }
@@ -488,6 +497,7 @@ int main(int argc, char **argv)
 {
     const char *assets = "assets", *shot = NULL, *scenario = "m01";
     unsigned long long seed = 1;
+    int mute = 0, sound = 0;
     int ai_both = 0, host_port = -1, mp_players = 2, teams[MAX_PLAYERS] = {0}, teams_given = 0, bot = 0;
     long desync_at = -1;
     const char *join_addr = NULL, *player_name = "Admiral";
@@ -506,6 +516,8 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--join") && i + 1 < argc) join_addr = argv[++i];
         else if (!strcmp(argv[i], "--name") && i + 1 < argc) player_name = argv[++i];
         else if (!strcmp(argv[i], "--bot")) bot = 1;
+        else if (!strcmp(argv[i], "--mute")) mute = 1;
+        else if (!strcmp(argv[i], "--sound")) sound = 1;   /* sound in --screenshot runs too */
         else if (!strcmp(argv[i], "--desync-test") && i + 1 < argc) desync_at = atol(argv[++i]);
         else if (!strcmp(argv[i], "--teams") && i + 1 < argc) {
             const char *p = argv[++i];
@@ -649,6 +661,9 @@ int main(int argc, char **argv)
     glEnable(GL_MULTISAMPLE);
 
     renderer *r = renderer_create(path);
+    char bank_path[600];
+    snprintf(bank_path, sizeof bank_path, "%s/sound/banks/game.bnk", path);
+    g.snd = (shot && !sound) || mute ? NULL : audio_open(bank_path);
     for (int i = 0; i < g.w.count; i++)
         if (renderer_load_class(r, g.w.ships[i].cls)) return 1;
     for (int s = 0; s < 2; s++)                     /* ships the yards can build */
@@ -791,6 +806,11 @@ int main(int argc, char **argv)
             g.cam.pitch = cam_pitch;
             g.cam.dist = cam_dist;
         }
+        {
+            vec3 eye;
+            camera_viewproj(&g.cam, w, h, &eye);
+            audio_events(g.snd, &g.w, eye, v3norm(v3sub(g.cam.target, eye)));
+        }
         renderer_draw(r, &g.cam, w, h, &g.w, g.paused ? 1.0f : (float)(acc / SIM_DT),
                       g.selected, &g.box, (float)sim_time);
         {
@@ -844,6 +864,7 @@ int main(int argc, char **argv)
                  win_side == 0 ? "  |  VICTORY" : win_side == 1 ? "  |  DEFEAT" : "");
         SDL_SetWindowTitle(win, title);
     }
+    audio_close(g.snd);
     renderer_destroy(r);
     SDL_GL_DeleteContext(ctx);
     SDL_DestroyWindow(win);

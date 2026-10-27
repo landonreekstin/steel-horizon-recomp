@@ -7,6 +7,7 @@
 float rand01(world *w);
 float gauss(world *w);
 void fx(world *w, fx_kind kind, float x, float y, float z);
+void fx_mag(world *w, fx_kind kind, float x, float y, float z, float mag);
 float hull_distance(const ship *s, float x, float z);
 float intercept(float mx, float mz, float px, float pz, float vx, float vz, float v);
 projectile *new_projectile(world *w);

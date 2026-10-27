@@ -245,3 +245,103 @@ void image_free(image *img)
     free(img->rgba);
     img->rgba = NULL;
 }
+
+/* ---- sound banks ---------------------------------------------------------------------- */
+
+static const int ADPCM_COEF[5][2] = {{0, 0}, {60, 0}, {115, -52}, {98, -55}, {122, -60}};
+
+static int adpcm_decode(const uint8_t *f, size_t size, int16_t *out)
+{
+    int n = 0, s1 = 0, s2 = 0;
+    for (size_t o = 0; o + 16 <= size; o += 16) {
+        int pred = f[o] >> 4, shift = f[o] & 15;
+        int k1 = pred < 5 ? ADPCM_COEF[pred][0] : 0, k2 = pred < 5 ? ADPCM_COEF[pred][1] : 0;
+        for (int b = 2; b < 16; b++)
+            for (int h = 0; h < 2; h++) {
+                int nib = h ? f[o + b] >> 4 : f[o + b] & 15;
+                int v = nib >= 8 ? nib - 16 : nib;
+                v = (v * 4096) >> shift;             /* arithmetic shift, as Python's >> */
+                v += (s1 * k1 + s2 * k2) >> 6;
+                v = v < -32768 ? -32768 : v > 32767 ? 32767 : v;
+                out[n++] = (int16_t)v;
+                s2 = s1;
+                s1 = v;
+            }
+        if (f[o + 1] & 1) break;
+    }
+    return n;
+}
+
+static int is_name_char(uint8_t c) { return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'; }
+
+int bnk_load(const char *path, sound_bank *out)
+{
+    memset(out, 0, sizeof *out);
+    long size;
+    uint8_t *d = read_file(path, &size);
+    if (!d) return -1;
+    if (size < 0x40 || memcmp(d + 0x18, "SBlk", 4)) { fprintf(stderr, "%s: not an SBlk bank\n", path); free(d); return -1; }
+    uint32_t data_off;
+    memcpy(&data_off, d + 16, 4);
+    if (data_off >= (uint32_t)size) { free(d); return -1; }
+    /* Entries: 24-byte records starting at the first f32 85.21 (00 6e aa 42). */
+    static const uint8_t mark[4] = {0x00, 0x6e, 0xaa, 0x42};
+    long e0 = -1;
+    for (long o = 0; o + 4 <= (long)data_off; o++)
+        if (!memcmp(d + o, mark, 4)) { e0 = o; break; }
+    int ents = 0;
+    for (long o = e0; e0 >= 0 && o + 24 <= (long)data_off; o += 24) {
+        float f;
+        uint32_t off, sz;
+        memcpy(&f, d + o, 4);
+        memcpy(&off, d + o + 16, 4);
+        memcpy(&sz, d + o + 20, 4);
+        if (!(f > 1 && f < 200) || (long)data_off + (long)off + (long)sz > size) break;
+        ents++;
+    }
+    /* Names: the [A-Z0-9_]{4,} runs before the data; the last `ents` of them. */
+    int nn = 0, cap = 1024;
+    long *name_at = malloc(sizeof(long) * (size_t)cap);
+    int *name_len = malloc(sizeof(int) * (size_t)cap);
+    for (long o = 0; o < (long)data_off;) {
+        long r = o;
+        while (r < (long)data_off && is_name_char(d[r])) r++;
+        if (r - o >= 4 && nn < cap) { name_at[nn] = o; name_len[nn++] = (int)(r - o); }
+        o = r > o ? r : o + 1;
+    }
+    out->count = ents < nn ? ents : nn;
+    out->names = calloc((size_t)out->count, sizeof *out->names);
+    out->pcm = calloc((size_t)out->count, sizeof *out->pcm);
+    out->length = calloc((size_t)out->count, sizeof *out->length);
+    for (int i = 0; i < out->count; i++) {
+        long o = e0 + 24L * i;
+        uint32_t off, sz;
+        memcpy(&off, d + o + 16, 4);
+        memcpy(&sz, d + o + 20, 4);
+        int k = nn - out->count + i;
+        int l = name_len[k] < 31 ? name_len[k] : 31;
+        memcpy(out->names[i], d + name_at[k], (size_t)l);
+        out->pcm[i] = malloc(sizeof(int16_t) * (sz / 16 * 28 + 28));
+        out->length[i] = adpcm_decode(d + data_off + off, sz, out->pcm[i]);
+    }
+    free(name_at);
+    free(name_len);
+    free(d);
+    return out->count ? 0 : -1;
+}
+
+void bnk_free(sound_bank *b)
+{
+    for (int i = 0; i < b->count; i++) free(b->pcm[i]);
+    free(b->pcm);
+    free(b->names);
+    free(b->length);
+    memset(b, 0, sizeof *b);
+}
+
+int bnk_find(const sound_bank *b, const char *name)
+{
+    for (int i = 0; i < b->count; i++)
+        if (!strcmp(b->names[i], name)) return i;
+    return -1;
+}

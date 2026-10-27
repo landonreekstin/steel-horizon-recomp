@@ -17,6 +17,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 from bog import Bog  # noqa: E402
 from pingu import Pingu  # noqa: E402
+import bnk  # noqa: E402
 
 FNV_OFFSET, FNV_PRIME, MASK = 1469598103934665603, 1099511628211, (1 << 64) - 1
 
@@ -89,7 +90,15 @@ def main(assets):
         if rest == ["ERROR"]:
             fails.append(f"{rel}: C reader failed")
             continue
-        if rel.endswith(".bog"):
+        if rel.endswith(".bnk"):
+            b = bnk.Bank(data)
+            h, total = FNV_OFFSET, 0
+            for name, frames in b.samples.items():
+                pcm = bnk.decode(frames)
+                h = fnv(fnv(h, name.encode()), struct.pack("<%dh" % len(pcm), *pcm))
+                total += len(pcm)
+            want = [str(len(b.samples)), str(total), f"{h:016x}"]
+        elif rel.endswith(".bog"):
             w, h, rgba = Bog(data).level(0)
             want = [str(w), str(h), f"{fnv(FNV_OFFSET, rgba):016x}"]
         else:

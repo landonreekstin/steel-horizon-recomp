@@ -46,7 +46,8 @@ typedef enum { OFF_GUNNERY, OFF_FIRE_CONTROL, OFF_DAMAGE_CONTROL, OFF_ENGINEERIN
 #define REARM_S 40.0f
 
 typedef enum { FX_NONE, FX_MUZZLE, FX_SPLASH, FX_HIT, FX_NEAR_MISS, FX_TORP_HIT, FX_DC_BLAST, FX_SINK,
-               FX_FLAK, FX_AIR_GUN, FX_PLANE_DOWN, FX_RICOCHET, FX_MAGAZINE } fx_kind;
+               FX_FLAK, FX_AIR_GUN, FX_PLANE_DOWN, FX_RICOCHET, FX_MAGAZINE, FX_TORP_LAUNCH, FX_DC_LAUNCH,
+               FX_TAKEOFF, FX_LANDING } fx_kind;
 
 typedef enum { PLANE_FIGHTER, PLANE_BOMBER /* dive bomber */, PLANE_TORPEDO } plane_type;
 typedef enum { AIR_HANGAR, AIR_OUT, AIR_ATTACK, AIR_RETURN, AIR_DECK, AIR_FALLING, AIR_LOST } air_state;
@@ -67,6 +68,7 @@ typedef struct {
 typedef struct {
     fx_kind kind;
     float x, y, z;
+    float mag;                 /* weapon damage for shots and impacts (picks the sound); 0 else */
     long tick;
 } fx_event;
 

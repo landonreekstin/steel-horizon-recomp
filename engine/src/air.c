@@ -313,6 +313,7 @@ static void return_step(world *w, aircraft *a)
     fly_to(a, c->x, d < 800 ? 25 : CRUISE_ALT, c->z, 30, plane_speed(a));
     if (d < 120 && a->y < 60 && module_health(c, MOD_FLIGHT_DECK, -1) >= 0.4f) {
         a->state = AIR_DECK;
+        fx(w, FX_LANDING, a->x, a->y, a->z);
         a->carrier = home;
         a->mission = MISSION_NONE;
         a->target = -1;
@@ -362,6 +363,7 @@ void air_step(world *w)
             a->speed = plane_speed(a);
             a->fuel = FUEL_S;
             a->state = AIR_OUT;
+            if (k % 3 == 0) fx(w, FX_TAKEOFF, a->x, a->y, a->z);
             a->prev_x = a->x;
             a->prev_y = a->y;
             a->prev_z = a->z;

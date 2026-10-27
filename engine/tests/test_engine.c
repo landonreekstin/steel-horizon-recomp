@@ -49,6 +49,17 @@ static void hash_tree(const char *root, const char *dir, FILE *out)
             h = fnv(h, img.rgba, (size_t)img.width * img.height * 4);
             fprintf(out, "%s %d %d %016llx\n", rel, img.width, img.height, (unsigned long long)h);
             image_free(&img);
+        } else if (n > 4 && !strcmp(e->d_name + n - 4, ".bnk")) {
+            sound_bank b;
+            if (bnk_load(path, &b)) { fprintf(out, "%s ERROR\n", rel); continue; }
+            long total = 0;
+            for (int i = 0; i < b.count; i++) {
+                h = fnv(h, b.names[i], strlen(b.names[i]));
+                h = fnv(h, b.pcm[i], sizeof(int16_t) * (size_t)b.length[i]);
+                total += b.length[i];
+            }
+            fprintf(out, "%s %d %ld %016llx\n", rel, b.count, total, (unsigned long long)h);
+            bnk_free(&b);
         } else if (n > 6 && !strcmp(e->d_name + n - 6, ".pingu")) {
             pingu p;
             if (pingu_load(path, &p)) { fprintf(out, "%s ERROR\n", rel); continue; }
@@ -118,6 +129,30 @@ static void test_assets(const char *assets, const class_table *ct)
     for (int i = 0; pt && i < pt->weapon_count; i++)
         if (!strcmp(pt->weapons[i].name, "18 Inch T")) torp = pt->weapons[i].damage == 195;
     CHECK(torp, "PT boat 18in torpedo resolves to the torpedo entry, not the 18in gun");
+}
+
+/* Every sound the battle maps events to is in the original bank (names cut at 15). */
+static void test_sound(const char *assets)
+{
+    char path[1024];
+    snprintf(path, sizeof path, "%s/files/sound/banks/game.bnk", assets);
+    sound_bank b;
+    CHECK(!bnk_load(path, &b) && b.count == 415, "game.bnk: %d sounds", b.count);
+    static const char *used[] = {"ENORMCANNSHT1_W", "LRGCANNSHT1_WAV", "MEDCANNSHT1_WAV", "SMLCANNSHT1_WAV",
+                                 "ENORMCANNHT1_WA", "LRGCANNHT1_WAV", "MEDCANNHT1_WAV", "SMLCANNHT1_WAV",
+                                 "ENORMCANNMISS1_", "LRGCANNMISS1_WA", "MEDCANNMISS1_WA", "SMLCANNMISS1_WA",
+                                 "TORPSHT1_WAV", "TORPHT1_WAV", "DPTHCHRGSHT1_WA", "DPTHCHRGEXPL1_W", "AAGUNEXPL1_WAV",
+                                 "_50CALSHT1_WAV", "CRSHWTR1_WAV", "SINKINGLRG2_WAV", "TAKEOFFALS2_WAV", "LANDALS_WAV",
+                                 "BB_USA_01", "DD_JAPAN_01", "MPT_USA_01", "CV_BRIT_01"};
+    for (size_t k = 0; k < sizeof used / sizeof *used; k++) {
+        int i = bnk_find(&b, used[k]);
+        CHECK(i >= 0 && b.length[i] > 1000, "sound %s present", used[k]);
+    }
+    /* Decoded audio isn't silence: a big gun's report is loud. */
+    int i = bnk_find(&b, "ENORMCANNSHT1_W"), peak = 0;
+    for (int k = 0; i >= 0 && k < b.length[i]; k++) peak = abs(b.pcm[i][k]) > peak ? abs(b.pcm[i][k]) : peak;
+    CHECK(peak > 8000, "16in report peak %d", peak);
+    bnk_free(&b);
 }
 
 static void run(world *w, float seconds)
@@ -1033,6 +1068,7 @@ int main(int argc, char **argv)
     snprintf(path, sizeof path, "%s/files", assets);
     CHECK(classes_load_layouts(&ct, path) == 0, "every class model loads for its layout");
     test_assets(assets, &ct);
+    test_sound(assets);
     test_sim(&ct);
     test_combat(&ct);
     test_air(&ct);

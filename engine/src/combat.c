@@ -102,7 +102,13 @@ float hit_chance(int fh, int th, float d)
 
 void fx(world *w, fx_kind kind, float x, float y, float z)
 {
+    fx_mag(w, kind, x, y, z, 0);
+}
+
+void fx_mag(world *w, fx_kind kind, float x, float y, float z, float mag)
+{
     fx_event *e = &w->fx[w->fx_head];
+    e->mag = mag;
     e->kind = kind;
     e->x = x;
     e->y = y;
@@ -284,7 +290,7 @@ static void fire(world *w, int i, int m, int j, float aim_yaw)
             w->torps++;
         }
         tu->reload = wp->fire_rate * TORP_RELOAD_SCALE * (module_health(s, MOD_TURRET, m) < 0.5f ? 1.8f : 1);
-        fx(w, FX_MUZZLE, mx, my, mz);
+        fx(w, FX_TORP_LAUNCH, mx, my, mz);
         return;
     }
 
@@ -311,7 +317,8 @@ static void fire(world *w, int i, int m, int j, float aim_yaw)
     /* Damaged turrets and thinned-out gun crews load slower. */
     tu->reload = fmaxf(2.0f, wp->fire_rate * RELOAD_SCALE) * (module_health(s, MOD_TURRET, m) < 0.5f ? 1.8f : 1)
                / (0.4f + 0.6f * crew_factor(s)) / (1 + 0.2f * officer_level(s, OFF_GUNNERY));
-    fx(w, FX_MUZZLE, mx, my, mz);
+    if (wp->ammo == AMMO_DC) fx(w, FX_DC_LAUNCH, mx, my, mz);
+    else fx_mag(w, FX_MUZZLE, mx, my, mz, wp->damage);
 }
 
 static void fire_control(world *w, int i)
@@ -370,12 +377,12 @@ static void shell_impact(world *w, projectile *p)
         damage_hit(w, best, p->ammo == AMMO_BOMB ? HIT_BOMB : HIT_SHELL, x, z, p->damage, p->pen, p->plunging);
         if (p->ammo == AMMO_BOMB) w->bomb_hits++;
         else w->hits++;
-        fx(w, FX_HIT, x, 8, z);
+        fx_mag(w, FX_HIT, x, 8, z, p->damage);
     } else if (best >= 0 && bd <= NEAR_MISS) {
         damage_hit(w, best, HIT_NEAR_MISS, x, z, p->damage, 0, 0);
-        fx(w, FX_NEAR_MISS, x, 0, z);
+        fx_mag(w, FX_NEAR_MISS, x, 0, z, p->damage);
     } else {
-        fx(w, FX_SPLASH, x, 0, z);
+        fx_mag(w, FX_SPLASH, x, 0, z, p->damage);
     }
 }
 

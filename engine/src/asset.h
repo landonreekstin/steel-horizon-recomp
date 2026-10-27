@@ -49,6 +49,19 @@ int mounts_load(const char *path, mounts *out);   /* missing file: count = 0, re
 int bog_load(const char *path, image *out);       /* mip level 0 as RGBA */
 void image_free(image *img);
 
+/* Sound bank (.bnk "SBlk", tools/bnk.py): named PS-ADPCM samples, decoded to 16-bit
+ * mono PCM at 44.1 kHz (see notes/formats.md). */
+#define BANK_RATE 44100
+typedef struct {
+    int count;
+    char (*names)[32];
+    int16_t **pcm;
+    int *length;                /* samples */
+} sound_bank;
+int bnk_load(const char *path, sound_bank *out);
+void bnk_free(sound_bank *b);
+int bnk_find(const sound_bank *b, const char *name);   /* -1 if absent */
+
 /* Reads a whole file; caller frees. */
 uint8_t *read_file(const char *path, long *size);
 

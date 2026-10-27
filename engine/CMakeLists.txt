@@ -19,7 +19,7 @@ add_library(shcore STATIC src/asset.c src/data.c src/json.c src/sim.c src/combat
 target_compile_options(shcore PRIVATE -Wall -Wextra)
 target_link_libraries(shcore PUBLIC m)
 
-add_executable(shrts src/main.c src/render.c src/gl.c src/hud.c)
+add_executable(shrts src/main.c src/render.c src/gl.c src/hud.c src/audio.c)
 target_compile_options(shrts PRIVATE -Wall -Wextra)
 target_link_libraries(shrts PRIVATE shcore PkgConfig::SDL2)
 
