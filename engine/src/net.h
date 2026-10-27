@@ -19,8 +19,17 @@
 
 typedef struct net net;
 
+/* A custom battle: each side's nation and how many of each hull. */
+#define CUSTOM_HULLS 8         /* BB, CB, CA, DD, DE, CV, PT, SS */
+typedef struct {
+    char nation[2][16];
+    uint8_t count[2][CUSTOM_HULLS];
+    uint8_t yards;             /* 1: each side gets a shipyard (assault rules) */
+} custom_spec;
+
 typedef struct {
     char scenario[32];
+    custom_spec custom;
     uint64_t seed;
     int players;
     int team[MAX_PLAYERS];
@@ -40,6 +49,9 @@ int net_poll(net *n);
 int net_lobby_full(const net *n);
 /* Host: announce the game (teams assigned 0,1,0,1... unless set) and start. */
 void net_start(net *n, const char *scenario, uint64_t seed, const int *teams);
+void net_set_custom(net *n, const custom_spec *c);     /* host, before net_start */
+int net_joined(const net *n);                          /* host: players connected (incl. host) */
+const char *net_name(const net *n, int player);
 /* 1 once the game has started; fills the settings. */
 int net_started(const net *n, net_game *out);
 

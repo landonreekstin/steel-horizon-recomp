@@ -25,8 +25,10 @@ Full plan: `~/.claude/plans/i-want-to-recompile-snoopy-pearl.md`. Status per pha
 - 8b: command stream, flagships, distinguished officers, fleet toolbar with live
   damage thumbnails, ship-profile cross-section, dive and torpedo bombers.
 - 8c (first pass): online lockstep multiplayer, teams of several players each with a
-  fleet, desync detection (`tests/test_multiplayer.py`). Still to do: lobby screen,
-  chat, reconnect.
+  fleet, desync detection (`tests/test_multiplayer.py`). Still to do: chat, reconnect.
+- 8 (front end): main menu, skirmish list, custom-battle fleet picker (nations, hull
+  counts, optional shipyards), host/join screens and lobby; minimap; hover accuracy
+  readout; original sound effects and voice lines.
 
 ## Next
 

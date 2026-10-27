@@ -81,7 +81,8 @@ Build/run the engine:
 ```
 cmake -S engine -B engine/build -G Ninja && ninja -C engine/build
 engine/build/test_engine assets && python3 -I tests/test_engine_port.py
-engine/build/shrts --assets assets [--scenario m01|fleet|carriers|assault|attack|defend]
+engine/build/shrts --assets assets      # front end: skirmish, custom battle, host/join online
+engine/build/shrts --assets assets [--scenario m01|fleet|carriers|assault|attack|defend|custom]
 #   LMB select, RMB move (Shift queues), RMB enemy focus fire (Ctrl: secondaries only),
 #   H hold fire, F fire at will, S stop, WASD/QE/wheel camera, Space pause, +/- speed
 #   carrier selected: B air strike (focus target or nearest), G fighter patrol, R recall

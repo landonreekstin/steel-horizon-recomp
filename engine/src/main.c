@@ -23,6 +23,7 @@
 #include "command.h"
 #include "audio.h"
 #include "hud.h"
+#include "menu.h"
 #include "net.h"
 #include "math3d.h"
 #include "render.h"
@@ -40,7 +41,11 @@ typedef struct {
     command_queue q;
     net *net;                  /* online game, or NULL */
     audio *snd;                /* NULL: silent */
+    custom_spec custom;        /* the "custom" scenario's fleets */
 } game;
+
+static const char *HULL_NAME[CUSTOM_HULLS] = {"Battleship", "Battlecruiser", "Cruiser", "Destroyer",
+                                              "DestroyerEscort", "AircraftCarrier", "TorpedoBoat", "Submarine"};
 
 static int spawn(game *g, const char *cls, int side, float x, float z, float heading)
 {
@@ -151,8 +156,39 @@ static int setup_scenario(game *g, const char *name)
             g->w.sides[g->w.defender].income *= 0.7f;   /* tuned: AI vs AI splits about evenly */
         }
         g->cam.target = v3(0, 0, -5000);
+    } else if (!strcmp(name, "custom")) {
+        /* Fleets from the picker: capital ships in the first line, the rest behind. */
+        const custom_spec *cs = &g->custom;
+        for (int sd = 0; sd < 2; sd++) {
+            int n = 0;
+            for (int h = 0; h < CUSTOM_HULLS; h++) n += cs->count[sd][h];
+            int k = 0;
+            for (int h = 0; h < CUSTOM_HULLS; h++)
+                for (int c = 0; c < cs->count[sd][h]; c++, k++) {
+                    char cls[64];
+                    snprintf(cls, sizeof cls, "%s%s", cs->nation[sd], HULL_NAME[h]);
+                    int row = h < 3 || h == 5 ? 0 : 1, per = n > 8 ? 8 : n;
+                    float x = ((float)(k % per) - (float)(per - 1) / 2) * 380;
+                    float z = sd == 0 ? -500.0f * (float)row - 400.0f * (float)(k / 8) : 6000 + 500.0f * (float)row + 400.0f * (float)(k / 8);
+                    err |= spawn(g, cls, sd, x, z, sd ? PI_F : 0) < 0;
+                }
+        }
+        if (cs->yards) {
+            g->w.mode = MODE_ASSAULT;
+            for (int sd = 0; sd < 2; sd++) {
+                const char *opts[CUSTOM_HULLS];
+                char names[CUSTOM_HULLS][64];
+                int no = 0;
+                for (int h = 0; h < CUSTOM_HULLS; h++) {
+                    snprintf(names[h], sizeof names[h], "%s%s", cs->nation[sd], HULL_NAME[h]);
+                    if (class_find(&g->classes, names[h])) opts[no++] = names[h];
+                }
+                err |= yard(g, cs->nation[sd], sd, 0, sd ? 13000 : -7000, sd ? PI_F : 0, opts, no);
+            }
+        }
+        g->cam.target = v3(0, 0, 1200);
     } else {
-        fprintf(stderr, "unknown scenario %s (m01, fleet, carriers, assault, attack, defend)\n", name);
+        fprintf(stderr, "unknown scenario %s (m01, fleet, carriers, assault, attack, defend, custom)\n", name);
         return -1;
     }
     if (err) return -1;
@@ -493,11 +529,36 @@ static void order_key(game *g, SDL_Keycode k, int ctrl, hud *hd)
     if (c.kind != CMD_NONE) issue(g, &c);
 }
 
+static int video_init(SDL_Window **win, SDL_GLContext *ctx)
+{
+    if (SDL_Init(SDL_INIT_VIDEO)) { fprintf(stderr, "SDL: %s\n", SDL_GetError()); return -1; }
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
+    *win = SDL_CreateWindow("Steel Horizon RTS", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                            1280, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+    if (!*win) {                                    /* retry without MSAA */
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
+        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
+        *win = SDL_CreateWindow("Steel Horizon RTS", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                                1280, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+    }
+    *ctx = *win ? SDL_GL_CreateContext(*win) : NULL;
+    if (!*ctx || !gl_load()) { fprintf(stderr, "OpenGL 3.3: %s\n", SDL_GetError()); return -1; }
+    SDL_GL_SetSwapInterval(1);
+    printf("GL %s\n", glGetString(GL_VERSION));
+    glEnable(GL_MULTISAMPLE);
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     const char *assets = "assets", *shot = NULL, *scenario = "m01";
     unsigned long long seed = 1;
-    int mute = 0, sound = 0;
+    int mute = 0, sound = 0, scenario_given = 0;
     int ai_both = 0, host_port = -1, mp_players = 2, teams[MAX_PLAYERS] = {0}, teams_given = 0, bot = 0;
     long desync_at = -1;
     const char *join_addr = NULL, *player_name = "Admiral";
@@ -509,7 +570,7 @@ int main(int argc, char **argv)
         if (!strcmp(argv[i], "--assets") && i + 1 < argc) assets = argv[++i];
         else if (!strcmp(argv[i], "--screenshot") && i + 1 < argc) shot = argv[++i];
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
-        else if (!strcmp(argv[i], "--scenario") && i + 1 < argc) scenario = argv[++i];
+        else if (!strcmp(argv[i], "--scenario") && i + 1 < argc) { scenario = argv[++i]; scenario_given = 1; }
         else if (!strcmp(argv[i], "--ai-both")) ai_both = 1;
         else if (!strcmp(argv[i], "--host") && i + 1 < argc) host_port = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--players") && i + 1 < argc) mp_players = atoi(argv[++i]);
@@ -548,6 +609,32 @@ int main(int argc, char **argv)
     if (classes_load(path, &g.classes)) return 1;
     snprintf(path, sizeof path, "%s/files", assets);
     classes_load_layouts(&g.classes, path);
+    /* No mode on the command line: the front end chooses (and opens the window). */
+    SDL_Window *win = NULL;
+    SDL_GLContext ctx = NULL;
+    renderer *r = NULL;
+    menu_config mc;
+    menu_defaults(&mc);
+    g.custom = mc.custom;
+    int menu_mode = !scenario_given && headless < 0 && !shot && host_port < 0 && !join_addr;
+    snprintf(path, sizeof path, "%s/files", assets);
+    if (menu_mode) {
+        if (video_init(&win, &ctx)) return 1;
+        r = renderer_create(path);
+        menu_result mr = menu_run(win, r, &g.classes, &mc);
+        if (mr == MENU_QUIT) return 0;
+        scenario = mc.scenario;
+        g.custom = mc.custom;
+        player_name = mc.name;
+        if (mr == MENU_HOST) {
+            host_port = mc.port;
+            mp_players = mc.players;
+            memcpy(teams, mc.teams, sizeof teams);
+            teams_given = 1;
+        } else if (mr == MENU_JOIN) {
+            join_addr = mc.address;
+        }
+    }
     /* Online: host or join, wait in the lobby, take the host's scenario and seed. */
     net_game ng;
     if (host_port >= 0 || join_addr) {
@@ -563,7 +650,8 @@ int main(int argc, char **argv)
         if (!g.net) return 1;
         if (net_is_host(g.net)) printf("hosting on port %d, waiting for %d players\n", net_port(g.net), mp_players);
         fflush(stdout);
-        for (;;) {
+        if (menu_mode && menu_lobby(win, r, g.net, &mc, seed, &ng)) return 0;
+        for (; !menu_mode;) {
             if (net_poll(g.net)) { fprintf(stderr, "lost the connection\n"); return 1; }
             if (net_is_host(g.net) && net_lobby_full(g.net) && !net_started(g.net, NULL)) net_start(g.net, scenario, seed, teams_given ? teams : NULL);
             if (net_started(g.net, &ng) && net_player(g.net) >= 0) break;
@@ -571,6 +659,7 @@ int main(int argc, char **argv)
         }
         scenario = ng.scenario;
         seed = ng.seed;
+        g.custom = ng.custom;
         g.player = net_player(g.net);
         g.side = ng.team[g.player];
         printf("player %d (%s) on team %d, %d players, scenario %s\n", g.player, ng.name[g.player], g.side, ng.players, scenario);
@@ -639,28 +728,11 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    if (SDL_Init(SDL_INIT_VIDEO)) { fprintf(stderr, "SDL: %s\n", SDL_GetError()); return 1; }
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
-    SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
-    SDL_Window *win = SDL_CreateWindow("Steel Horizon RTS", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                                       1280, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
-    if (!win) {                                     /* retry without MSAA */
-        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
-        SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
-        win = SDL_CreateWindow("Steel Horizon RTS", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                               1280, 720, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+    if (!win) {
+        if (video_init(&win, &ctx)) return 1;
+        r = renderer_create(path);
     }
-    SDL_GLContext ctx = win ? SDL_GL_CreateContext(win) : NULL;
-    if (!ctx || !gl_load()) { fprintf(stderr, "OpenGL 3.3: %s\n", SDL_GetError()); return 1; }
-    SDL_GL_SetSwapInterval(1);
-    printf("GL %s\n", glGetString(GL_VERSION));
-    glEnable(GL_MULTISAMPLE);
 
-    renderer *r = renderer_create(path);
     char bank_path[600];
     snprintf(bank_path, sizeof bank_path, "%s/sound/banks/game.bnk", path);
     g.snd = (shot && !sound) || mute ? NULL : audio_open(bank_path);

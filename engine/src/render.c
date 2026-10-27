@@ -627,12 +627,16 @@ void ui_rect(float x0, float y0, float x1, float y1, float r, float g, float b, 
 float ui_text(float x, float y, const char *str, float r, float g, float b, float a)
 {
     const float c[4] = {r, g, b, a};
-    float x0 = x;
+    /* Whole pixels, and texel centres inset by half a texel: with nearest sampling a
+     * fractional position would pick up the neighbouring glyph's edge column. */
+    x = floorf(x + 0.5f);
+    y = floorf(y + 0.5f);
+    float x0 = x, hu = 0.5f / FONT_ATLAS_W, hv = 0.5f / FONT_ATLAS_H;
     for (const unsigned char *p = (const unsigned char *)str; *p; p++) {
-        if (*p >= 32 && *p < 127) {
+        if (*p > 32 && *p < 127) {
             int i = *p - 32, cx = i % FONT_COLS * FONT_CELL_W, cy = i / FONT_COLS * FONT_CELL_H;
-            ui_quad(x, y, x + FONT_CELL_W, y + FONT_CELL_H, (float)cx / FONT_ATLAS_W, (float)cy / FONT_ATLAS_H,
-                    (float)(cx + FONT_CELL_W) / FONT_ATLAS_W, (float)(cy + FONT_CELL_H) / FONT_ATLAS_H, c);
+            ui_quad(x, y, x + FONT_CELL_W, y + FONT_CELL_H, (float)cx / FONT_ATLAS_W + hu, (float)cy / FONT_ATLAS_H + hv,
+                    (float)(cx + FONT_CELL_W) / FONT_ATLAS_W - hu, (float)(cy + FONT_CELL_H) / FONT_ATLAS_H - hv, c);
         }
         x += FONT_CELL_W;
     }

@@ -268,11 +268,21 @@ int net_poll(net *n)
     return n->peer[0].fd >= 0 && read_conn(n, 0) == 0 ? 0 : -1;
 }
 
+void net_set_custom(net *n, const custom_spec *c)
+{
+    n->game.custom = *c;
+}
+
+int net_joined(const net *n) { return n->joined; }
+const char *net_name(const net *n, int p) { return p >= 0 && p < MAX_PLAYERS ? n->names[p] : ""; }
+
 void net_start(net *n, const char *scenario, uint64_t seed, const int *teams)
 {
     if (!n->host) return;
     net_game *g = &n->game;
+    custom_spec keep = g->custom;
     memset(g, 0, sizeof *g);
+    g->custom = keep;
     snprintf(g->scenario, sizeof g->scenario, "%s", scenario);
     g->seed = seed;
     g->players = n->players;
