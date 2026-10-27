@@ -479,6 +479,97 @@ static void fleet_bar(hud *h, renderer *r, world *w, command_queue *q, unsigned 
     }
 }
 
+/* ---- minimap (bottom left) ------------------------------------------------------------ */
+
+int hud_minimap_point(const hud *h, float sx, float sy, float *x, float *z)
+{
+    if (h->map_size <= 0 || sx < h->map_x0 || sy < h->map_y0 || sx > h->map_x0 + h->map_size || sy > h->map_y0 + h->map_size)
+        return 0;
+    *x = h->map_cx + (sx - h->map_x0 - h->map_size / 2) / h->map_scale;
+    *z = h->map_cz - (sy - h->map_y0 - h->map_size / 2) / h->map_scale;   /* +Z up the map */
+    return 1;
+}
+
+static void minimap(hud *h, const world *w, int sh)
+{
+    float size = 220, x0 = 10, y0 = (float)sh - size - 10;
+    /* Fit everything afloat (and the camera) with a margin, square. */
+    float lo_x = h->cam_x, hi_x = h->cam_x, lo_z = h->cam_z, hi_z = h->cam_z;
+    for (int i = 0; i < w->count; i++) {
+        const ship *s = &w->ships[i];
+        if (!s->alive) continue;
+        lo_x = fminf(lo_x, s->x); hi_x = fmaxf(hi_x, s->x);
+        lo_z = fminf(lo_z, s->z); hi_z = fmaxf(hi_z, s->z);
+    }
+    float span = fmaxf(fmaxf(hi_x - lo_x, hi_z - lo_z) * 1.15f, 4000);
+    h->map_x0 = x0; h->map_y0 = y0; h->map_size = size;
+    h->map_cx = (lo_x + hi_x) / 2; h->map_cz = (lo_z + hi_z) / 2;
+    h->map_scale = size / span;
+    box(h, x0, y0, x0 + size, y0 + size, (const float[4]){0.05f, 0.12f, 0.18f, 0.85f});
+    #define MX(x) (x0 + size / 2 + ((x) - h->map_cx) * h->map_scale)
+    #define MY(z) (y0 + size / 2 - ((z) - h->map_cz) * h->map_scale)
+    int side = -1;
+    for (int i = 0; i < w->count && side < 0; i++)
+        if (w->ships[i].owner == h->player) side = w->ships[i].side;
+    for (int i = 0; i < w->count; i++) {
+        const ship *s = &w->ships[i];
+        if (!s->alive) continue;
+        float r = is_shore(s) ? 5 : s->cls->half_length > 80 ? 2.5f : 1.6f;
+        float cr = s->side != side ? 0.95f : s->owner == h->player ? 0.35f : 0.4f;
+        float cg = s->side != side ? 0.3f : s->owner == h->player ? 0.95f : 0.7f;
+        float cb = s->side != side ? 0.25f : s->owner == h->player ? 0.4f : 1.0f;
+        ui_rect(MX(s->x) - r, MY(s->z) - r, MX(s->x) + r, MY(s->z) + r, cr, cg, cb, 1);
+        if (s->flagship) ui_rect(MX(s->x) - r - 1, MY(s->z) - r - 3, MX(s->x) + r + 1, MY(s->z) - r - 2, 1, 0.85f, 0.3f, 1);
+    }
+    for (int k = 0; k < w->air_count; k++) {
+        const aircraft *a = &w->air[k];
+        if (a->state != AIR_OUT && a->state != AIR_ATTACK && a->state != AIR_RETURN) continue;
+        float cr = a->side != side ? 1.0f : 0.8f, cg = a->side != side ? 0.6f : 0.95f;
+        ui_rect(MX(a->x) - 0.8f, MY(a->z) - 0.8f, MX(a->x) + 0.8f, MY(a->z) + 0.8f, cr, cg, 0.9f, 1);
+    }
+    /* The camera: a dot and a tick toward where it looks. */
+    float cx = MX(h->cam_x), cy = MY(h->cam_z), fx = -sinf(h->cam_yaw), fz = -cosf(h->cam_yaw);
+    ui_rect(cx - 2, cy - 2, cx + 2, cy + 2, 1, 1, 1, 1);
+    for (int q = 1; q <= 6; q++) ui_rect(cx + fx * (float)q * 2 - 0.7f, cy - fz * (float)q * 2 - 0.7f,
+                                         cx + fx * (float)q * 2 + 0.7f, cy - fz * (float)q * 2 + 0.7f, 1, 1, 1, 0.8f);
+    #undef MX
+    #undef MY
+    if (h->click && h->click_x >= x0 && h->click_x <= x0 + size && h->click_y >= y0 && h->click_y <= y0 + size) {
+        hud_minimap_point(h, h->click_x, h->click_y, &h->map_click_x, &h->map_click_z);
+        h->map_clicked = 1;
+        h->click = 0;
+    }
+}
+
+/* Accuracy tooltip for the enemy under the cursor: what the selected ships' main
+ * batteries would get per shell, before you commit to the target. */
+static void hover_tooltip(hud *h, const world *w, const unsigned char *selected)
+{
+    if (h->hover < 0 || h->hover >= w->count || !w->ships[h->hover].alive) return;
+    float p = 0;
+    int n = 0, ships = 0;
+    for (int i = 0; i < w->count; i++) {
+        if (!selected[i] || !w->ships[i].alive || w->ships[i].owner != h->player) continue;
+        int bearing = 0;
+        for (int m = 0; m < w->ships[i].cls->mount_count; m++)
+            if (w->ships[i].cls->mounts[m].bat == BAT_MAIN && can_engage(w, i, m, h->hover)) {
+                p += hit_probability(w, i, m, h->hover);
+                n++;
+                bearing = 1;
+            }
+        ships += bearing;
+    }
+    char who[64], line[128];
+    ship_label(w, h->hover, who, sizeof who);
+    const ship *t = &w->ships[h->hover];
+    if (n) snprintf(line, sizeof line, "%s  %.0f%%  |  %.0f%% per shell, %d turrets on %d ships", who,
+                    100 * t->hp / t->cls->max_health, 100 * p / (float)n, n, ships);
+    else snprintf(line, sizeof line, "%s  %.0f%%  |  out of arc or range of the selection", who, 100 * t->hp / t->cls->max_health);
+    float tw = ui_text_width(line), x = h->mouse_x + 16, y = h->mouse_y + 12;
+    ui_rect(x - 4, y - 2, x + tw + 4, y + ui_line_height() + 2, 0.05f, 0.05f, 0.07f, 0.85f);
+    ui_text(x, y, line, 1, 0.85f, 0.6f, 1);
+}
+
 static void mode_banner(const world *w, int sw)
 {
     char msg[128];
@@ -506,6 +597,8 @@ int hud_draw(hud *h, renderer *r, world *w, command_queue *q, int player, unsign
     shipyard_panel(h, w, q, h->controls_bottom + 8);
     captain_bar(h, w, q, sw, t);
     fleet_bar(h, r, w, q, selected, sw, sh, t);
+    minimap(h, w, sh);
+    hover_tooltip(h, w, selected);
     ship_readout(h, w, selected, sw, sh);
     int result = world_winner(w);
     if (result >= 0) {

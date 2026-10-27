@@ -15,6 +15,13 @@ typedef struct {
     int pending_officer;       /* officer picked in the fleet bar, waiting for a ship; -1 */
     int last_card;
     float last_click_t;
+    /* Minimap: last frame's mapping, a click on it (-> camera), the camera position. */
+    float map_x0, map_y0, map_size, map_cx, map_cz, map_scale;
+    int map_clicked;
+    float map_click_x, map_click_z, cam_x, cam_z, cam_yaw;
+    /* Enemy under the cursor, for the accuracy tooltip; -1 none. */
+    int hover;
+    float mouse_x, mouse_y;
     int click;                 /* a left click waiting to be handled this frame */
     float click_x, click_y;
     float controls_bottom;     /* where the controls toolbar ended, for the panel below it */
@@ -28,6 +35,8 @@ typedef struct {
 int hud_draw(hud *h, renderer *r, world *w, command_queue *q, int player, unsigned char *selected, int sw, int sh, float t);
 /* Queues a command for the next tick. */
 void hud_issue(command_queue *q, const world *w, const command *c);
+/* Screen point on the minimap -> world (x, z); 0 if not on it. */
+int hud_minimap_point(const hud *h, float sx, float sy, float *x, float *z);
 /* 1 if (x, y) is over a HUD box (so a click there isn't a world click). */
 int hud_over(const hud *h, float x, float y);
 /* Carries out the most urgent report (Enter key). */

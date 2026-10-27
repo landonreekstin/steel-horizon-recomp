@@ -657,7 +657,9 @@ int main(int argc, char **argv)
     Uint64 freq = SDL_GetPerformanceFrequency(), last = SDL_GetPerformanceCounter();
     double acc = 0, sim_time = 0;
     int running = 1, frame = 0, orbit = 0;
-    static hud hd = {.show_captain = 1, .show_controls = 1, .show_fleet = 1, .focus = -1, .pending_officer = -1, .last_card = -1};
+    float mx_w, mz_w;
+    static hud hd = {.show_captain = 1, .show_controls = 1, .show_fleet = 1, .focus = -1, .pending_officer = -1,
+                     .last_card = -1, .hover = -1};
     if (shot) {                                     /* deterministic picture for checking */
         /* Select the player's ships and steam them halfway to the enemy. */
         int ids[MAX_SHIPS], n = 0, ne = 0;
@@ -706,6 +708,13 @@ int main(int argc, char **argv)
                     g.box.x0 = g.box.x1 = e.button.x;
                     g.box.y0 = g.box.y1 = e.button.y;
                     g.box.active = 1;
+                } else if (e.button.button == SDL_BUTTON_RIGHT &&
+                           hud_minimap_point(&hd, (float)e.button.x, (float)e.button.y, &mx_w, &mz_w)) {
+                    command c = sel_cmd(&g, CMD_MOVE);          /* RMB on the minimap: go there */
+                    c.x = mx_w;
+                    c.z = mz_w;
+                    c.flag = (SDL_GetModState() & KMOD_SHIFT) != 0;
+                    issue(&g, &c);
                 } else if (e.button.button == SDL_BUTTON_RIGHT) {
                     float x, z;
                     int ids[MAX_SHIPS], n = selected_ids(&g, ids);
@@ -784,7 +793,21 @@ int main(int argc, char **argv)
         }
         renderer_draw(r, &g.cam, w, h, &g.w, g.paused ? 1.0f : (float)(acc / SIM_DT),
                       g.selected, &g.box, (float)sim_time);
+        {
+            int mx, my;
+            SDL_GetMouseState(&mx, &my);
+            hd.mouse_x = (float)mx;
+            hd.mouse_y = (float)my;
+            hd.hover = hud_over(&hd, (float)mx, (float)my) ? -1 : enemy_at(&g, mx, my, w, h);
+            hd.cam_x = g.cam.target.x;
+            hd.cam_z = g.cam.target.z;
+            hd.cam_yaw = g.cam.yaw;
+        }
         int key = hud_draw(&hd, r, &g.w, &g.q, g.player, g.selected, w, h, (float)sim_time);
+        if (hd.map_clicked) {                            /* LMB on the minimap: look there */
+            g.cam.target = v3(hd.map_click_x, 0, hd.map_click_z);
+            hd.map_clicked = 0;
+        }
         while (g.net && g.q.count) {                     /* online: HUD orders go out too */
             net_send_command(g.net, &g.q.items[g.q.head]);
             g.q.head = (g.q.head + 1) % CMD_QUEUE;
