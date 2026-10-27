@@ -65,6 +65,9 @@ python3 -I tools/preview.py assets/files MODEL.pingu out.png [GUN.pingu]
   patrols, escorts, dogfights, shipboard AA, land/rearm; scenario `carriers`; tests for
   launch, bombing, AA, interception, recall, determinism. Roadmap (incl. War Thunder-
   style damage model, controls toolbar, dive vs torpedo bombers): `notes/roadmap.md`.
+- Damage model (phase 7, first pass): compartments, armour/penetration, flooding, list
+  and counter-flooding, fires, magazines, destroyable modules, damage-control teams,
+  cross-section panel. Rules in `notes/battle-logic.md`; tests incl. two mutants.
 
 Build/run the engine:
 
@@ -75,5 +78,6 @@ engine/build/shrts --assets assets [--scenario m01|fleet|carriers]
 #   LMB select, RMB move (Shift queues), RMB enemy focus fire (Ctrl: secondaries only),
 #   H hold fire, F fire at will, S stop, WASD/QE/wheel camera, Space pause, +/- speed
 #   carrier selected: B air strike (focus target or nearest), G fighter patrol, R recall
+#   damage control: P crew priority, X counter-flood, M flood magazines
 engine/build/shrts --assets assets --scenario fleet --ai-both --headless 900   # balance run
 ```

@@ -96,3 +96,35 @@ planes within 2,500 of what they guard, match speed on the tail, 25 % hit per sh
 within 300 units; AA twice a second within 1,200, 30 % falling to 15 % at range.
 Measured `carriers` scenario, 4 seeds: 18–25 min, ~50 % of bombs hit, AA and fighters
 each kill planes (fighters more); Japan won all 4 after the fighter fix.
+
+## Cross-section damage model (phase 7, `engine/src/damage.c`) — design, not the original
+- **Layout per class** (`layout.c`): 10 compartments for capital ships and carriers, 8
+  cruisers/auxiliaries, 6 destroyers/escorts/subs, 4 PT boats, equal lengths stern→bow,
+  each split port/starboard for water. Modules: every weapon mount, a magazine per
+  main-battery/torpedo compartment, two engine rooms amidships, steering aft, bridge and
+  radar forward, two AA groups, flight deck on carriers. Armour (shell_pen units):
+  BB belt 2.9 / deck 2.2, CB 2.2/1.6, CA 1.8/1.2, CV 1.4/1.2, DD-class 0.3/0.2.
+- **Hits:** `shell_pen = damage/25 × (1 − 0.35·range/max)`; flat fire meets the belt,
+  shells beyond 55% of max range and all bombs (pen 2.4) meet the deck; ±15% scatter.
+  Non-penetrating: 12% structure, splinters on exposed modules, 5% fire. Penetrating:
+  structure −dmg/(maxHP/n·1.2), modules there 50% each, fire 25% (bombs 50%), flat
+  hits 35% leak, magazine detonation 2% per 90 dmg. Torpedoes always flood (bulges cut
+  it 40% on capital ships), depth charges flood subs. Damage beyond a wrecked
+  compartment carries outward; a wrecked compartment that keeps being hit is holed.
+- **Over time:** leaks fill the dry space, power pumps and teams drain and plug; fires
+  grow, spread, burn structure and modules, cook off a dry magazine (0.4%/s at full
+  fire); list = port/starboard water difference; the crew counter-floods past ~10°.
+- **She goes down when** water ≥ reserve buoyancy (BB 32%, CV 30%, CA 27%, DD 24%),
+  list > ~22° (capsize), a magazine goes up, mean structure < 20%, or 55% of the
+  compartments are wrecked (broken back). Health bar and 01/02/03 models = the worst of
+  those margins.
+- **Effects:** engines → top speed; steering out → rudder jammed; bridge out → helm at
+  half rate, +20% spread; radar out → +40% spread; turret out → silent, damaged →
+  slower reload/training; flooded magazine → its turrets silent; AA hp scales AA;
+  flight deck < 40% → no launches or landings.
+- **Damage control:** teams per class (BB/CV 4, CA 3, DD 2, PT 1) reassigned every second
+  by score (fire ×6 next to a magazine, leaks, module repairs) under a policy: auto,
+  fires, flooding, weapons. Repairs cap at 70%, wrecked modules repair at a third.
+- Measured (seeds 1–3, both sides AI): m01 3–3.5 min; fleet 9–11 min, sinkings by
+  flooding, structure, magazines and the odd capsize; carriers 23–51 min. Mirrored
+  identical fleets over 40 seeds: 19–21 and 22–18, so no side bias.

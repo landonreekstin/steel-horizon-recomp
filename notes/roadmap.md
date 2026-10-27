@@ -9,10 +9,19 @@ Full plan: `~/.claude/plans/i-want-to-recompile-snoopy-pearl.md`. Status per pha
 - 6: combat: turrets, ballistics, torpedoes, depth charges, stages and sinking, fire orders.
 - 6b: carriers and aircraft: fighters (CAP/escort, dogfights), bombers (strikes),
   shipboard AA, launch/land/rearm cycle.
+- 7 (first pass): compartments, armour and penetration, flooding with list and
+  counter-flooding, fires, magazine detonation, engine/steering/bridge/radar/turret/
+  AA/flight-deck modules, damage-control teams with priority policies, flooding
+  magazines, a cross-section panel for the selected ship (notes/battle-logic.md).
 
 ## Next
 
-### 7. Cross-section damage model *(requested, War Thunder style)*
+### 7. Cross-section damage model *(requested, War Thunder style)* — remaining
+Done in the first pass (above); still to do: labels and tooltips on the panel (needs
+text rendering, shared with the toolbar), assigning teams to a compartment by hand,
+per-turret magazines and ammunition counts, decks above/below the waterline (shell
+hit height), and compartments laid out from real ship plans once ships are generated.
+Original plan:
 Replace the single HP pool with a ship laid out as compartments along the hull, each
 with its own state, and shells/bombs/torpedoes resolved against that layout:
 - **Compartments** bow → stern, below and above the waterline, built per class from
