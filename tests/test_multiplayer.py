@@ -34,6 +34,10 @@ def run(assets, port, perturb=None):
     outs = [host.communicate(timeout=600)[0]] + [c.communicate(timeout=600)[0] for c in clients]
     results = []
     for out in outs:
+        c = re.findall(r"chat lines (\d+)", out)
+        if not c or int(c[-1]) != 3:
+            print("FAIL chat: a peer got", c[-1] if c else "no", "lines (expected 3)")
+            return None
         m = re.findall(r"final tick (\d+) checksum ([0-9a-f]+) desync (-?\d+)", out)
         if not m:
             print("FAIL no result from a peer:\n" + out[-2000:])

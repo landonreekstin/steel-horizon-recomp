@@ -65,6 +65,10 @@ void net_done_turn(net *n, long turn, uint32_t checksum);
 /* Host: turn where peers' checksums first differed, or -1. */
 long net_desync(const net *n);
 
+/* Chat: a line to everyone; received lines come back through net_chat_take. */
+void net_chat(net *n, const char *text);
+int net_chat_take(net *n, char *out, int cap);     /* 1 if a line was waiting */
+
 uint32_t world_checksum(const world *w);
 
 #endif

@@ -42,6 +42,11 @@ typedef struct {
     net *net;                  /* online game, or NULL */
     audio *snd;                /* NULL: silent */
     custom_spec custom;        /* the "custom" scenario's fleets */
+    /* Online chat: the line being typed (Y opens it), and recent lines on screen. */
+    int typing;
+    char chat_in[80];
+    char chat_log[6][96];
+    float chat_time[6];
 } game;
 
 static const char *HULL_NAME[CUSTOM_HULLS] = {"Battleship", "Battlecruiser", "Cruiser", "Destroyer",
@@ -672,7 +677,7 @@ int main(int argc, char **argv)
     if (headless >= 0) {
         /* Sim only: the player side holds its course, both sides fire at will;
          * runs until one side is sunk or the time is up. */
-        int ticks = (int)(headless * SIM_HZ), t;
+        int ticks = (int)(headless * SIM_HZ), t, chat_lines = 0;
         int sunk_seen[MAX_SHIPS] = {0};
         for (t = 0; t < ticks && world_winner(&g.w) < 0;) {
             if (g.net && net_poll(g.net)) { fprintf(stderr, "lost the connection\n"); return 1; }
@@ -680,6 +685,15 @@ int main(int argc, char **argv)
             if (!mp_step(&g)) { usleep(500); continue; }   /* waiting for the next turn */
             t++;
             if (desync_at >= 0 && g.w.tick == desync_at) g.w.ships[0].x += 1;   /* --desync-test */
+            if (g.net && bot && g.w.tick == 100) {      /* the bot says hello, for the chat test */
+                char hello[64];
+                snprintf(hello, sizeof hello, "hello from player %d", g.player);
+                net_chat(g.net, hello);
+            }
+            for (char line[96]; g.net && net_chat_take(g.net, line, sizeof line);) {
+                printf("chat: %s\n", line);
+                chat_lines++;
+            }
             if (trace > 0 && t % (int)(trace * SIM_HZ) == 0) {
                 /* Ships afloat per side, yard condition, budget, closest approach to the enemy yard. */
                 printf("t=%6.0f", (double)t / SIM_HZ);
@@ -721,6 +735,8 @@ int main(int argc, char **argv)
         if (g.net) {
             /* Let the last acknowledgements arrive, then report for the test harness. */
             for (int k = 0; k < 200; k++) { net_poll(g.net); usleep(2000); }
+            for (char line[96]; net_chat_take(g.net, line, sizeof line);) chat_lines++;
+            printf("chat lines %d\n", chat_lines);
             printf("final tick %ld checksum %08x desync %ld\n", g.w.tick, world_checksum(&g.w),
                    net_is_host(g.net) ? net_desync(g.net) : -1L);
             net_close(g.net);
@@ -777,6 +793,25 @@ int main(int argc, char **argv)
         const Uint8 *keys = SDL_GetKeyboardState(NULL);
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) running = 0;
+            else if (g.typing && e.type == SDL_TEXTINPUT) {
+                size_t n = strlen(g.chat_in), add = strlen(e.text.text);
+                if (n + add < sizeof g.chat_in) memcpy(g.chat_in + n, e.text.text, add + 1);
+            } else if (g.typing && e.type == SDL_KEYDOWN) {
+                SDL_Keycode k = e.key.keysym.sym;
+                size_t n = strlen(g.chat_in);
+                if (k == SDLK_BACKSPACE && n) g.chat_in[n - 1] = 0;
+                else if (k == SDLK_ESCAPE) { g.typing = 0; SDL_StopTextInput(); }
+                else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) {
+                    if (n) net_chat(g.net, g.chat_in);
+                    g.chat_in[0] = 0;
+                    g.typing = 0;
+                    SDL_StopTextInput();
+                }
+            } else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_y && g.net) {
+                g.typing = 1;                            /* Y: say something */
+                g.chat_in[0] = 0;
+                SDL_StartTextInput();
+            }
             else if (e.type == SDL_KEYDOWN) {
                 SDL_Keycode k = e.key.keysym.sym;
                 int ctrl = (e.key.keysym.mod & KMOD_CTRL) != 0;
@@ -896,6 +931,29 @@ int main(int argc, char **argv)
             hd.cam_yaw = g.cam.yaw;
         }
         int key = hud_draw(&hd, r, &g.w, &g.q, g.player, g.selected, w, h, (float)sim_time);
+        if (g.net) {                                     /* chat: new lines in, recent lines shown */
+            char line[96];
+            while (net_chat_take(g.net, line, sizeof line)) {
+                memmove(g.chat_log[1], g.chat_log[0], sizeof g.chat_log[0] * 5);
+                memmove(&g.chat_time[1], &g.chat_time[0], sizeof g.chat_time[0] * 5);
+                snprintf(g.chat_log[0], sizeof g.chat_log[0], "%s", line);
+                g.chat_time[0] = (float)sim_time;
+            }
+            float cy = (float)h - 290;
+            for (int k = 0; k < 6; k++)
+                if (g.chat_log[k][0] && sim_time - g.chat_time[k] < 12) {
+                    ui_rect(250, cy - 2, 250 + ui_text_width(g.chat_log[k]) + 8, cy + ui_line_height() + 2, 0, 0, 0, 0.55f);
+                    ui_text(254, cy, g.chat_log[k], 0.9f, 0.95f, 1, 1);
+                    cy -= ui_line_height() + 6;
+                }
+            if (g.typing) {
+                char shown[100];
+                snprintf(shown, sizeof shown, "Say: %s_", g.chat_in);
+                ui_rect(250, (float)h - 266, 250 + ui_text_width(shown) + 8, (float)h - 246, 0.1f, 0.12f, 0.18f, 0.9f);
+                ui_text(254, (float)h - 264, shown, 1, 0.9f, 0.6f, 1);
+            }
+            ui_flush(r, w, h);
+        }
         if (hd.map_clicked) {                            /* LMB on the minimap: look there */
             g.cam.target = v3(hd.map_click_x, 0, hd.map_click_z);
             hd.map_clicked = 0;

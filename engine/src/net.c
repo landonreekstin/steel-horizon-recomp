@@ -14,7 +14,9 @@
 
 /* Wire format: u32 length (of type + payload), u8 type, payload. Structs go raw: all
  * peers run the same build on little-endian machines. */
-enum { M_HELLO = 1, M_WELCOME, M_START, M_CMD, M_TURN, M_ACK };
+enum { M_HELLO = 1, M_WELCOME, M_START, M_CMD, M_TURN, M_ACK, M_CHAT };
+#define CHAT_LINE 96
+#define CHAT_KEEP 16
 
 #define RING 1024              /* turns buffered */
 #define LAG_LIMIT 8            /* host waits for a peer more than this many turns behind */
@@ -46,7 +48,17 @@ struct net {
     int pending_count;
     turn_slot ring[RING];
     long desync;
+    char chat[CHAT_KEEP][CHAT_LINE];
+    int chat_head, chat_count;
 };
+
+static void chat_store(net *n, const char *line)
+{
+    int i = (n->chat_head + n->chat_count) % CHAT_KEEP;
+    snprintf(n->chat[i], CHAT_LINE, "%s", line);
+    if (n->chat_count < CHAT_KEEP) n->chat_count++;
+    else n->chat_head = (n->chat_head + 1) % CHAT_KEEP;
+}
 
 static void nonblock(int fd)
 {
@@ -216,8 +228,44 @@ static void handle(net *n, int from, int type, const unsigned char *p, uint32_t 
             }
         }
         break;
+    case M_CHAT: {
+        char line[CHAT_LINE];
+        uint32_t l = len < CHAT_LINE - 1 ? len : CHAT_LINE - 1;
+        memcpy(line, p, l);
+        line[l] = 0;
+        if (n->host) {                                 /* stamp the speaker, relay to all */
+            char full[CHAT_LINE];
+            snprintf(full, sizeof full, "%.20s: %.70s", n->names[from], line);
+            chat_store(n, full);
+            for (int q = 1; q < n->players; q++) send_msg(n->peer[q].fd, M_CHAT, full, (uint32_t)strlen(full));
+        } else {
+            chat_store(n, line);
+        }
+        break;
+    }
     default: break;
     }
+}
+
+void net_chat(net *n, const char *text)
+{
+    if (n->host) {
+        char full[CHAT_LINE];
+        snprintf(full, sizeof full, "%.20s: %.70s", n->names[0], text);
+        chat_store(n, full);
+        for (int q = 1; q < n->players; q++) send_msg(n->peer[q].fd, M_CHAT, full, (uint32_t)strlen(full));
+    } else {
+        send_msg(n->peer[0].fd, M_CHAT, text, (uint32_t)strlen(text));
+    }
+}
+
+int net_chat_take(net *n, char *out, int cap)
+{
+    if (!n->chat_count) return 0;
+    snprintf(out, (size_t)cap, "%s", n->chat[n->chat_head]);
+    n->chat_head = (n->chat_head + 1) % CHAT_KEEP;
+    n->chat_count--;
+    return 1;
 }
 
 static int read_conn(net *n, int idx)
