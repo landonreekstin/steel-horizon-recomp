@@ -282,11 +282,11 @@ static void aa_step(world *w, int i)
         if (d < bd) { bd = d; best = k; }
     }
     if (best < 0) return;
-    s->aa_reload = AA_INTERVAL;
+    s->aa_reload = AA_INTERVAL / (1 + 0.3f * officer_level(s, OFF_AA));
     aircraft *a = &w->air[best];
     fx(w, FX_FLAK, a->x + gauss(w) * 18, a->y + gauss(w) * 10, a->z + gauss(w) * 18);
     if (rand01(w) < AA_HIT * (1 - 0.5f * bd / AA_RANGE))
-        plane_damage(w, a, s->cls->aa_damage * module_health(s, MOD_AA, -1), 0);
+        plane_damage(w, a, s->cls->aa_damage * module_health(s, MOD_AA, -1) * (1 + 0.3f * officer_level(s, OFF_AA)), 0);
 }
 
 void air_step(world *w)
@@ -312,7 +312,7 @@ void air_step(world *w)
             a->prev_y = a->y;
             a->prev_z = a->z;
             a->prev_heading = a->heading;
-            c->launch_timer = LAUNCH_INTERVAL;
+            c->launch_timer = LAUNCH_INTERVAL / (1 + 0.6f * officer_level(c, OFF_AVIATION));
             break;
         }
     }
@@ -333,7 +333,8 @@ void air_step(world *w)
             break;
         case AIR_DECK:
             /* Rearming and repairs happen below: no lifts, no turnaround. */
-            if (module_health(&w->ships[a->carrier], MOD_HANGAR_LIFT, -1) >= 0.3f) a->timer -= SIM_DT;
+            if (module_health(&w->ships[a->carrier], MOD_HANGAR_LIFT, -1) >= 0.3f)
+                a->timer -= SIM_DT * (1 + 0.4f * officer_level(&w->ships[a->carrier], OFF_AVIATION));
             if (a->timer <= 0) {
                 a->state = AIR_HANGAR;
                 a->hp = a->max_hp;

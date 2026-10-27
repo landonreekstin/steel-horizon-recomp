@@ -288,7 +288,8 @@ static void assign_crews(ship *s)
         s->comp[k].crews = 0;
     }
     /* Short-handed ships man fewer teams. */
-    int teams = (int)ceilf((float)c->dc_crews * fminf(1, crew_factor(s) * 1.4f));
+    int teams = (int)ceilf((float)c->dc_crews * fminf(1, crew_factor(s) * 1.4f))
+              + (int)officer_level(s, OFF_DAMAGE_CONTROL);      /* a DC officer organises another team */
     for (int t = 0; t < teams; t++) {
         int best = -1;
         float bs = 0.01f;
@@ -320,7 +321,8 @@ void damage_step(world *w, int i)
     float water = 0, list = 0, trim = 0;
     for (int k = 0; k < n; k++) {
         compartment *cp = &s->comp[k];
-        float teams = (float)cp->crews * (0.5f + 0.5f * crew_factor(s));   /* tired, short-handed */
+        float teams = (float)cp->crews * (0.5f + 0.5f * crew_factor(s))    /* tired, short-handed */
+                    * (1 + 0.4f * officer_level(s, OFF_DAMAGE_CONTROL)) * (s->flagship ? 1.2f : 1);
         float was = cp->flood[0] + cp->flood[1];
         for (int sd = 0; sd < 2; sd++) {
             /* Leaks fill the space that's still dry; teams plug, pumps drain. */

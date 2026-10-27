@@ -188,6 +188,7 @@ typedef struct {
     int textured[16];
     float flat[16][3];          /* colour of untextured materials */
     mounts mts;
+    ship_profile prof;
 } gpu_model;
 
 #define MAX_MODELS 160
@@ -254,6 +255,51 @@ static GLuint upload_texture(const image *img)
     return t;
 }
 
+/* Side profile: highest and lowest vertex per slice along the length. */
+static void profile_begin(ship_profile *p, float z0, float z1)
+{
+    memset(p, 0, sizeof *p);
+    p->z0 = z0;
+    p->z1 = z1 > z0 ? z1 : z0 + 1;
+    for (int b = 0; b < PROFILE_BINS; b++) { p->top[b] = -1e9f; p->bot[b] = 1e9f; }
+}
+
+static void profile_add(ship_profile *p, const float *pos)
+{
+    int b = (int)((pos[2] - p->z0) / (p->z1 - p->z0) * PROFILE_BINS);
+    if (b < 0 || b >= PROFILE_BINS) return;
+    p->top[b] = fmaxf(p->top[b], pos[1]);
+    p->bot[b] = fminf(p->bot[b], pos[1]);
+}
+
+static void profile_end(ship_profile *p)
+{
+    /* Empty slices take their neighbours' extents; the deck line is the lower quartile
+     * of the tops (bow and stern decks sit low, superstructure stands above). */
+    for (int pass = 0; pass < 2; pass++)
+        for (int b = 0; b < PROFILE_BINS; b++)
+            if (p->top[b] < -1e8f) {
+                int n = b > 0 ? b - 1 : b + 1;
+                if (n < PROFILE_BINS && p->top[n] > -1e8f) { p->top[b] = p->top[n]; p->bot[b] = p->bot[n]; }
+            }
+    float tops[PROFILE_BINS];
+    int n = 0;
+    p->ymin = 1e9f;
+    p->ymax = -1e9f;
+    for (int b = 0; b < PROFILE_BINS; b++)
+        if (p->top[b] > -1e8f) {
+            tops[n++] = p->top[b];
+            p->ymin = fminf(p->ymin, p->bot[b]);
+            p->ymax = fmaxf(p->ymax, p->top[b]);
+        } else {
+            p->top[b] = p->bot[b] = 0;
+        }
+    for (int a = 1; a < n; a++)
+        for (int b = a; b > 0 && tops[b] < tops[b - 1]; b--) { float t = tops[b]; tops[b] = tops[b - 1]; tops[b - 1] = t; }
+    p->deck = n ? tops[n / 4] : 0;
+    p->ok = n > 0;
+}
+
 static gpu_model *get_model(renderer *r, const char *rel)
 {
     if (!rel || !rel[0]) return NULL;
@@ -309,6 +355,10 @@ static gpu_model *get_model(renderer *r, const char *rel)
         glEnableVertexAttribArray(1);
         glEnableVertexAttribArray(2);
     }
+    profile_begin(&m->prof, p.bbox_min[2], p.bbox_max[2]);
+    for (int i = 0; i < p.mesh_count; i++)
+        for (int k = 0; k < p.meshes[i].vertex_count; k++) profile_add(&m->prof, p.meshes[i].vertices[k].pos);
+    profile_end(&m->prof);
     pingu_free(&p);
     /* Mount points live next to the model: same name, .pts. */
     size_t n = strlen(path);
@@ -429,6 +479,11 @@ static gpu_model *shipyard_model(renderer *r, const ship_class *cls)
     for (int q = 0; q < cls->mount_count; q++)                       /* battery emplacements */
         gen_box(&concrete, cls->mounts[q].pos[0] - 25, 5, cls->mounts[q].pos[2] - 25, cls->mounts[q].pos[0] + 25, 12,
                 cls->mounts[q].pos[2] + 25);
+    profile_begin(&m->prof, -360, 320);
+    const gen_mesh *all[] = {&ground, &concrete, &dark, &steel, &brick, &bunker};
+    for (int q = 0; q < 6; q++)
+        for (int k = 0; k < all[q]->nv; k++) profile_add(&m->prof, all[q]->v[k].pos);
+    profile_end(&m->prof);
     upload_gen(m, &ground, 0.36f, 0.42f, 0.27f);
     upload_gen(m, &concrete, 0.62f, 0.62f, 0.6f);
     upload_gen(m, &dark, 0.12f, 0.16f, 0.2f);
@@ -674,120 +729,153 @@ static void flush_lines(renderer *r, mat4 vp)
 
 /* ---- cross-section damage panel (screen space) ------------------------------------- */
 
-static void fill(float x0, float y0, float x1, float y1, float cr, float cg, float cb, float ca)
-{
-    for (float y = y0; y < y1; y += 1) line(v3(x0, y + 0.5f, 0), v3(x1, y + 0.5f, 0), cr, cg, cb, ca);
-}
-
-static void frame(float x0, float y0, float x1, float y1, float cr, float cg, float cb)
-{
-    line(v3(x0, y0, 0), v3(x1, y0, 0), cr, cg, cb, 1);
-    line(v3(x1, y0, 0), v3(x1, y1, 0), cr, cg, cb, 1);
-    line(v3(x1, y1, 0), v3(x0, y1, 0), cr, cg, cb, 1);
-    line(v3(x0, y1, 0), v3(x0, y0, 0), cr, cg, cb, 1);
-}
-
 static vec3 health_colour(float hp)
 {
     return hp <= 0 ? v3(0.15f, 0.15f, 0.15f) : hp < 0.3f ? v3(0.95f, 0.25f, 0.2f)
          : hp < 0.7f ? v3(0.95f, 0.8f, 0.2f) : v3(0.3f, 0.9f, 0.35f);
 }
 
-/* Side profile, stern left and bow right: compartments with water (port above,
- * starboard below the centre line), fire and crews; modules as marks coloured by
- * health (green, yellow, red, black = destroyed). */
-static void damage_panel(const ship *s, int w, int h, float t)
+const ship_profile *renderer_profile(renderer *r, const ship_class *c)
+{
+    const gpu_model *m = get_model(r, c->model[0]);
+    return m && m->prof.ok ? &m->prof : NULL;
+}
+
+/* The ship's own side profile, stern left and bow right, cut into compartments:
+ * hull tinted by structure, water rising from the keel, fire, wrecked compartments
+ * dark; superstructure above the deck line. detail adds modules, crews, and port and
+ * starboard water strips under the hull. */
+void ui_ship_profile(renderer *r, const ship *s, float x, float y, float w, float h, int detail, float t)
 {
     const ship_class *c = s->cls;
+    const ship_profile *p = renderer_profile(r, c);
     int n = c->comp_count;
-    if (n == 0) return;
-    float pw = fminf(760, (float)w - 40), x0 = ((float)w - pw) / 2, y0 = (float)h - 170, ph = 150;
-    fill(x0 - 10, y0 - 10, x0 + pw + 10, y0 + ph + 10, 0.04f, 0.06f, 0.08f, 0.75f);
-    float hx0 = x0 + 20, hx1 = x0 + pw - 90, deck = y0 + 45, keel = y0 + 115;
-    float L = c->half_length;
-    #define PX(z) (hx0 + ((z) + L) / (2 * L) * (hx1 - hx0))
-    for (int k = 0; k < n; k++) {
-        const compartment *cp = &s->comp[k];
-        float a = PX(c->comp_z[k]) + 1, b = PX(c->comp_z[k + 1]) - 1, mid = (deck + keel) / 2;
-        /* Taper the bow and stern ends of the profile. */
-        float top = deck, bot = keel - (k == 0 || k == n - 1 ? 20 : 0);
-        fill(a, top, b, bot, 0.25f + 0.3f * (1 - cp->structure), 0.27f, 0.3f, 0.9f);
-        float fp = cp->flood[0] * (mid - top), fs = cp->flood[1] * (bot - mid);
-        if (fp > 0) fill(a, mid - fp, b, mid, 0.15f, 0.4f, 0.85f, 0.9f);
-        if (fs > 0) fill(a, bot - fs, b, bot, 0.15f, 0.4f, 0.85f, 0.9f);
-        if (cp->fire > 0) {
-            float flick = 0.75f + 0.25f * sinf(t * 17 + (float)k * 2.1f);
-            fill(a, top, b, top + (bot - top) * 0.5f * cp->fire * flick, 1.0f, 0.45f, 0.1f, 0.85f);
-        }
-        if (cp->leak[0] + cp->leak[1] > 0)                 /* open leak: a blue tick at the keel */
-            line(v3((a + b) / 2 - 4, bot + 4, 0), v3((a + b) / 2 + 4, bot + 4, 0), 0.3f, 0.6f, 1, 1);
-        if (cp->structure < 0.05f) {                       /* wrecked */
-            line(v3(a, top, 0), v3(b, bot, 0), 0.9f, 0.2f, 0.15f, 1);
-            line(v3(a, bot, 0), v3(b, top, 0), 0.9f, 0.2f, 0.15f, 1);
-        }
-        for (int q = 0; q < cp->crews; q++)                /* damage-control teams */
-            fill(a + 3 + (float)q * 6, bot - 7, a + 7 + (float)q * 6, bot - 3, 1, 1, 1, 1);
-        if (cp->mag_flooded) frame(a + 2, top + 2, b - 2, bot - 2, 0.3f, 0.6f, 1);
-        vec3 sc = health_colour(cp->structure);
-        frame(a, top, b, bot, sc.x * 0.8f, sc.y * 0.8f, sc.z * 0.8f);
-        line(v3(a, mid, 0), v3(b, mid, 0), 0.5f, 0.55f, 0.6f, 0.5f);
+    if (!p || n == 0) {
+        ui_rect(x, y + h * 0.4f, x + w, y + h, 0.4f, 0.42f, 0.45f, 1);
+        return;
     }
-    /* Modules */
-    int stack[MAX_COMPARTMENTS] = {0};
+    float L = c->half_length, zr = p->z1 - p->z0;
+    /* The models stop near the waterline; draw the hull down to a keel at ~70% of the
+     * half-beam (a typical WWII draft), rising toward bow and stern. */
+    float keel = fminf(p->ymin, is_shore(s) ? p->ymin : -0.7f * c->half_beam);
+    float yr = p->ymax - keel;
+    float strips = detail ? 14 : 0;
+    float sx = w / zr, sy = fminf(sx * 1.6f, (h - strips) / (yr > 1 ? yr : 1));
+    float base = y + h - strips;
+    #define PX(z) (x + ((z) - p->z0) * sx)
+    #define PY(v) (base - ((v) - keel) * sy)
+    #define KEEL(b) (keel + (fminf(p->deck, 0) - keel) * powf(fabsf(((float)(b) + 0.5f) / PROFILE_BINS * 2 - 1), 6))
+    float bw = w / PROFILE_BINS + 0.6f;
+    for (int b = 0; b < PROFILE_BINS; b++) {
+        float z = p->z0 + ((float)b + 0.5f) / PROFILE_BINS * zr;
+        int k = 0;
+        while (k < n - 1 && z > c->comp_z[k + 1]) k++;
+        if (z < -L - 1 || z > L + 1) k = z < 0 ? 0 : n - 1;
+        const compartment *cp = &s->comp[k];
+        float xb = x + (float)b * (w / PROFILE_BINS);
+        float top = p->top[b], bot = KEEL(b), deck = fminf(top, p->deck);
+        float st = cp->structure, alive = s->alive ? 1 : 0.4f;
+        /* Hull */
+        float hr = (0.32f + 0.35f * (1 - st)) * alive, hg = (0.36f - 0.12f * (1 - st)) * alive, hb = (0.4f - 0.18f * (1 - st)) * alive;
+        if (st < 0.05f) { hr = 0.25f; hg = 0.08f; hb = 0.06f; }
+        ui_rect(xb, PY(deck), xb + bw, PY(bot), hr, hg, hb, 1);
+        /* Water: the average of both sides, from the keel up. */
+        float wl = (cp->flood[0] + cp->flood[1]) / 2;
+        if (wl > 0) ui_rect(xb, PY(bot + (deck - bot) * wl), xb + bw, PY(bot), 0.16f, 0.42f, 0.88f, 0.95f);
+        /* Superstructure */
+        if (top > deck + 0.5f) ui_rect(xb, PY(top), xb + bw, PY(deck), 0.5f * alive, 0.52f * alive, 0.55f * alive, 1);
+        if (cp->fire > 0) {
+            float flick = 0.75f + 0.25f * sinf(t * 17 + (float)k * 2.1f + (float)b * 0.7f);
+            float fh = (top - bot) * 0.6f * cp->fire * flick;
+            ui_rect(xb, PY(deck + fh * 0.5f), xb + bw, PY(deck - fh * 0.5f), 1.0f, 0.45f + 0.2f * flick, 0.1f, 0.85f);
+        }
+        if (detail) {                                  /* port and starboard water under the hull */
+            ui_rect(xb, base + 3, xb + bw, base + 7, 0.1f + 0.1f * cp->flood[0], 0.12f + 0.3f * cp->flood[0], 0.15f + 0.7f * cp->flood[0], 1);
+            ui_rect(xb, base + 9, xb + bw, base + 13, 0.1f + 0.1f * cp->flood[1], 0.12f + 0.3f * cp->flood[1], 0.15f + 0.7f * cp->flood[1], 1);
+        }
+    }
+    /* Bulkheads */
+    for (int k = 1; k < n; k++) {
+        float bx = PX(c->comp_z[k]);
+        int b = (int)((c->comp_z[k] - p->z0) / zr * PROFILE_BINS);
+        b = b < 0 ? 0 : b >= PROFILE_BINS ? PROFILE_BINS - 1 : b;
+        ui_rect(bx - 0.5f, PY(fminf(p->top[b], p->deck)), bx + 0.5f, PY(KEEL(b)), 0.08f, 0.09f, 0.1f, 0.9f);
+    }
+    /* Modules: on deck (turrets), inside the hull (magazines, engines, steering), on the
+     * superstructure (bridge, radar, AA). Lost ones are black. */
     for (int m = 0; m < c->module_count; m++) {
         const module_def *d = &c->modules[m];
         float z = d->kind == MOD_TURRET ? c->mounts[d->mount].pos[2] : (c->comp_z[d->comp] + c->comp_z[d->comp + 1]) / 2;
-        float x = PX(z);
-        vec3 col = health_colour(s->module_hp[m]);
+        if (d->kind == MOD_TURRET && !detail && c->mounts[d->mount].bat != BAT_MAIN) continue;
+        if (!detail && d->kind != MOD_TURRET) continue;
+        int b = (int)((z - p->z0) / zr * PROFILE_BINS);
+        b = b < 0 ? 0 : b >= PROFILE_BINS ? PROFILE_BINS - 1 : b;
+        float mx = PX(z), deck = fminf(p->top[b], p->deck), hp = s->module_hp[m];
+        vec3 col = health_colour(hp);
+        float r0 = detail ? 4 : 2;
         switch (d->kind) {
         case MOD_TURRET: {
-            const turret_mount *mt = &c->mounts[d->mount];
-            float sz = mt->bat == BAT_MAIN ? 7 : 4, yy = deck - 4 - (mt->bat == BAT_MAIN ? 0 : 10);
-            if (mt->bat == BAT_ASW || mt->bat == BAT_TORPEDO) yy = deck - 4;
-            fill(x - sz, yy - sz, x + sz, yy, col.x, col.y, col.z, 1);
+            float yy = PY(deck);
+            if (c->mounts[d->mount].bat == BAT_MAIN) ui_rect(mx - r0 * 1.6f, yy - r0 * 1.6f, mx + r0 * 1.6f, yy, col.x, col.y, col.z, 1);
+            else ui_rect(mx - r0, yy - r0 - (detail ? 6 : 0), mx + r0, yy - (detail ? 6 : 0), col.x, col.y, col.z, 1);
             break;
         }
         case MOD_MAGAZINE:
-            fill(x - 5, keel - 26, x + 5, keel - 16, col.x * 0.5f + 0.4f, col.y * 0.3f, col.z * 0.2f, 1);
-            frame(x - 5, keel - 26, x + 5, keel - 16, 1, 0.6f, 0.2f);
+            ui_rect(mx - 5, PY(KEEL(b)) - 16, mx + 5, PY(KEEL(b)) - 7, 0.4f + col.x * 0.5f, col.y * 0.35f, col.z * 0.2f, 1);
+            if (s->comp[d->comp].mag_flooded) ui_rect(mx - 5, PY(KEEL(b)) - 16, mx + 5, PY(KEEL(b)) - 13, 0.3f, 0.6f, 1, 1);
             break;
         case MOD_ENGINE:
-            fill(x - 9, keel - 14, x + 9, keel - 4, col.x, col.y, col.z, 1);
+            ui_rect(mx - 8, PY(KEEL(b)) - 6, mx + 8, PY(KEEL(b)) - 1, col.x, col.y, col.z, 1);
             break;
         case MOD_STEERING:
-            fill(x - 4, keel - 12, x + 4, keel - 2, col.x, col.y, col.z, 1);
+            ui_rect(mx - 3, PY(KEEL(b)) - 7, mx + 3, PY(KEEL(b)) - 1, col.x, col.y, col.z, 1);
             break;
-        case MOD_BRIDGE:
-            fill(x - 6, deck - 30, x + 6, deck - 8, col.x, col.y, col.z, 1);
-            break;
-        case MOD_RADAR:
-            line(v3(x, deck - 30, 0), v3(x, deck - 42, 0), col.x, col.y, col.z, 1);
-            line(v3(x - 6, deck - 42, 0), v3(x + 6, deck - 42, 0), col.x, col.y, col.z, 1);
-            break;
-        case MOD_AA:
-            fill(x - 3 + (float)stack[d->comp] * 8, deck - 16, x + 3 + (float)stack[d->comp] * 8, deck - 10, col.x, col.y, col.z, 1);
-            stack[d->comp]++;
-            break;
-        case MOD_FLIGHT_DECK:
-            fill(hx0, deck - 3, hx1, deck, col.x, col.y, col.z, 1);
-            break;
-        default:
+        case MOD_BRIDGE: case MOD_RADAR: {
+            float yy = PY(p->top[b]) - (d->kind == MOD_RADAR ? 8 : 0);
+            ui_rect(mx - 4, yy - 4, mx + 4, yy + 2, col.x, col.y, col.z, 1);
             break;
         }
+        case MOD_AA: case MOD_HANGAR_LIFT: case MOD_DRYDOCK: case MOD_SLIPWAY:
+            ui_rect(mx - 3, PY(deck) - 12, mx + 3, PY(deck) - 7, col.x, col.y, col.z, 1);
+            break;
+        case MOD_FLIGHT_DECK:
+            ui_rect(x, PY(p->deck) - 2, x + w, PY(p->deck), col.x, col.y, col.z, 1);
+            break;
+        default: break;
+        }
     }
+    if (detail)                                           /* damage-control teams */
+        for (int k = 0; k < n; k++)
+            for (int q = 0; q < s->comp[k].crews; q++) {
+                float cx = PX(c->comp_z[k]) + 3 + (float)q * 6;
+                int b = (int)((c->comp_z[k] - p->z0) / zr * PROFILE_BINS) + 1;
+                b = b < 0 ? 0 : b >= PROFILE_BINS ? PROFILE_BINS - 1 : b;
+                float yy = (PY(fminf(p->top[b], p->deck)) + PY(KEEL(b))) / 2;
+                ui_rect(cx, yy - 2, cx + 4, yy + 2, 1, 1, 1, 1);
+            }
     #undef PX
-    /* Gauges at the right: list (a tilted bar), water against reserve buoyancy, condition. */
+    #undef PY
+    #undef KEEL
+}
+
+/* The damage panel: the profile at full size plus list, water and condition gauges. */
+static void damage_panel(renderer *r, const ship *s, int w, int h, float t)
+{
+    float pw = fminf(760, (float)w - 40), x0 = ((float)w - pw) / 2, y0 = (float)h - 170, ph = 150;
+    ui_rect(x0 - 10, y0 - 10, x0 + pw + 10, y0 + ph + 10, 0.04f, 0.06f, 0.08f, 0.82f);
+    ui_ship_profile(r, s, x0 + 20, y0 + 4, pw - 165, 108, 1, t);
     float gx = x0 + pw - 50, gy = y0 + 50;
     float ca = cosf(s->list), sa = sinf(s->list);
-    line(v3(gx - 25 * ca, gy - 25 * sa, 0), v3(gx + 25 * ca, gy + 25 * sa, 0), 0.9f, 0.9f, 0.9f, 1);
-    line(v3(gx - 30, gy, 0), v3(gx + 30, gy, 0), 0.4f, 0.4f, 0.45f, 1);
+    for (int q = -25; q <= 25; q += 2) ui_rect(gx + ca * (float)q - 1, gy + sa * (float)q - 1, gx + ca * (float)q + 1, gy + sa * (float)q + 1, 0.9f, 0.9f, 0.9f, 1);
+    ui_rect(gx - 30, gy - 0.5f, gx + 30, gy + 0.5f, 0.4f, 0.4f, 0.45f, 1);
+    const ship_class *c = s->cls;
     float wf = clampf(s->water / c->reserve_buoyancy, 0, 1), cf = s->hp / c->max_health;
-    fill(gx - 30, gy + 30, gx + 30, gy + 38, 0.1f, 0.1f, 0.12f, 1);
-    fill(gx - 30, gy + 30, gx - 30 + 60 * wf, gy + 38, 0.2f, 0.45f, 0.9f, 1);
+    ui_rect(gx - 30, gy + 30, gx + 30, gy + 38, 0.1f, 0.1f, 0.12f, 1);
+    ui_rect(gx - 30, gy + 30, gx - 30 + 60 * wf, gy + 38, 0.2f, 0.45f, 0.9f, 1);
     vec3 cc = health_colour(cf);
-    fill(gx - 30, gy + 44, gx + 30, gy + 52, 0.1f, 0.1f, 0.12f, 1);
-    fill(gx - 30, gy + 44, gx - 30 + 60 * cf, gy + 52, cc.x, cc.y, cc.z, 1);
-    if (s->jammed) frame(gx - 32, gy - 32, gx + 32, gy + 56, 0.95f, 0.25f, 0.2f);
+    ui_rect(gx - 30, gy + 44, gx + 30, gy + 52, 0.1f, 0.1f, 0.12f, 1);
+    ui_rect(gx - 30, gy + 44, gx - 30 + 60 * cf, gy + 52, cc.x, cc.y, cc.z, 1);
+    if (s->jammed) ui_rect(gx - 32, gy + 56, gx + 32, gy + 58, 0.95f, 0.25f, 0.2f, 1);
 }
 
 void renderer_draw(renderer *r, const camera *cam, int w, int h, const world *wd,
@@ -1081,8 +1169,7 @@ void renderer_draw(renderer *r, const camera *cam, int w, int h, const world *wd
     flush_lines(r, ortho);
     for (int i = 0; selected && i < wd->count; i++)
         if (selected[i] && wd->ships[i].alive) {
-            damage_panel(&wd->ships[i], w, h, t);
-            flush_lines(r, ortho);
+            damage_panel(r, &wd->ships[i], w, h, t);
             break;
         }
 

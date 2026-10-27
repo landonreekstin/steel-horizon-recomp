@@ -33,9 +33,39 @@ static void ai_build(world *w)
     }
 }
 
+/* AI admirals: a flagship (the biggest ship), officers posted to the biggest ships. */
+static void ai_command(world *w)
+{
+    for (int p = 0; p < FLEET_PLAYERS; p++) {
+        int best = -1, side = -1, any_ai = 0;
+        float bc = -1;
+        for (int i = 0; i < w->count; i++) {
+            const ship *s = &w->ships[i];
+            if (s->owner != p || !s->alive || is_shore(s)) continue;
+            any_ai |= s->ai;
+            side = s->side & 1;
+            float c = class_cost(s->cls) + s->hp * 0.01f;
+            if (c > bc) { bc = c; best = i; }
+        }
+        if (!any_ai || best < 0) continue;
+        if (w->flagship_of[p] < 0) order_flagship(w, p, best);
+        for (int k = 0; k < w->officer_count[side]; k++)
+            if (w->officer_ship[side][k] == -1) {
+                officer_kind kind = w->officer_kind_of[side][k];
+                /* Aviation officers to a carrier if there is one. */
+                int to = best;
+                if (kind == OFF_AVIATION)
+                    for (int i = 0; i < w->count; i++)
+                        if (w->ships[i].owner == p && w->ships[i].alive && is_carrier(&w->ships[i])) { to = i; break; }
+                order_officer(w, p, k, to);
+            }
+    }
+}
+
 void ai_step(world *w)
 {
     ai_build(w);
+    ai_command(w);
     for (int i = 0; i < w->count; i++) {
         ship *s = &w->ships[i];
         if (!s->ai || !s->alive || is_shore(s)) continue;

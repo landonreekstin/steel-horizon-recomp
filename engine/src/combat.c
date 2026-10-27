@@ -167,6 +167,7 @@ static void gun_solution(const world *w, int i, int m, int j, float *ax, float *
     float sigma = d * DISPERSION * 85.0f / hit_chance(s->cls->hull_type, t->cls->hull_type, d);
     sigma *= fire_control_factor(s) * (1 + 0.6f * (1 - crew_factor(s))) * (s->aim[mt->bat] >= 0 ? 1.25f : 1)
            * (s->evade > 0 ? 1.3f : 1) * (1 + 0.5f * fabsf(s->rudder) * s->speed / fmaxf(s->max_speed, 1));
+    sigma *= command_accuracy(w, i) / (1 + 0.15f * officer_level(s, OFF_FIRE_CONTROL));
     float rel = hypotf(tvx - fvx, tvz - fvz);
     float lead = T * LEAD_ERROR * fmaxf(rel, t->speed * 0.5f);
     float turn = 0.25f * fabsf(t->rudder) * t->max_yaw * t->speed * T * T;
@@ -309,7 +310,7 @@ static void fire(world *w, int i, int m, int j, float aim_yaw)
     }
     /* Damaged turrets and thinned-out gun crews load slower. */
     tu->reload = fmaxf(2.0f, wp->fire_rate * RELOAD_SCALE) * (module_health(s, MOD_TURRET, m) < 0.5f ? 1.8f : 1)
-               / (0.4f + 0.6f * crew_factor(s));
+               / (0.4f + 0.6f * crew_factor(s)) / (1 + 0.2f * officer_level(s, OFF_GUNNERY));
     fx(w, FX_MUZZLE, mx, my, mz);
 }
 
@@ -343,7 +344,8 @@ static void fire_control(world *w, int i)
         }
         float cur = wrap_angle(tu->yaw - mt->arc_center);
         float goal = clampf(wrap_angle(want - mt->arc_center), -mt->arc_half, mt->arc_half);
-        float step = traverse_rate(wp) * SIM_DT * (module_health(s, MOD_TURRET, m) < 0.5f ? 0.5f : 1);
+        float step = traverse_rate(wp) * SIM_DT * (module_health(s, MOD_TURRET, m) < 0.5f ? 0.5f : 1)
+                   * (1 + 0.3f * officer_level(s, OFF_GUNNERY));
         cur += clampf(goal - cur, -step, step);
         tu->yaw = wrap_angle(cur + mt->arc_center);
         if (tu->target >= 0 && tu->reload <= 0 && fabsf(wrap_angle(want - tu->yaw)) < ON_BEARING && mount_ready(s, m))

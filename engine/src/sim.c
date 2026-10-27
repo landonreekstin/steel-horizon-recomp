@@ -13,6 +13,7 @@ void world_init(world *w)
     memset(w, 0, sizeof *w);
     world_seed(w, 1);
     w->sides[0].yard = w->sides[1].yard = -1;
+    for (int p = 0; p < FLEET_PLAYERS; p++) w->flagship_of[p] = -1;
 }
 
 int world_spawn(world *w, const ship_class *cls, int side, float x, float z, float heading)
@@ -22,6 +23,7 @@ int world_spawn(world *w, const ship_class *cls, int side, float x, float z, flo
     memset(s, 0, sizeof *s);
     s->cls = cls;
     s->side = side;
+    s->owner = side;          /* by default player n commands side n; scenarios reassign */
     s->alive = 1;
     s->x = s->prev_x = x;
     s->z = s->prev_z = z;
@@ -49,7 +51,8 @@ int world_spawn(world *w, const ship_class *cls, int side, float x, float z, flo
 static float top_speed(const ship *s)
 {
     float engines = module_health(s, MOD_ENGINE, -1);
-    return s->max_speed * clampf(engines * 1.25f, 0, 1) * clampf(1 - s->water * 1.5f, 0.2f, 1);
+    return s->max_speed * clampf(engines * 1.25f, 0, 1) * clampf(1 - s->water * 1.5f, 0.2f, 1)
+         * (1 + 0.08f * officer_level(s, OFF_ENGINEERING));
 }
 
 static void steer(world *w, int i)
@@ -92,7 +95,8 @@ static void steer(world *w, int i)
      * the after station, the helm answers at half rate. */
     float rate = RUDDER_RATE * (module_health(s, MOD_BRIDGE, -1) < 0.3f ? 0.5f : 1);
     if (!s->jammed) s->rudder += clampf(rudder_target - s->rudder, -rate * SIM_DT, rate * SIM_DT);
-    float dv = clampf(target_speed - s->speed, -s->accel * SIM_DT, s->accel * SIM_DT);
+    float acc = s->accel * (1 + 0.2f * officer_level(s, OFF_ENGINEERING));
+    float dv = clampf(target_speed - s->speed, -acc * SIM_DT, acc * SIM_DT);
     s->speed = fmaxf(0, s->speed + dv);
 }
 
@@ -115,13 +119,15 @@ void world_step(world *w)
         steer(w, i);
         /* A ship needs way on to turn: rudder authority scales with speed. */
         float authority = clampf(s->speed / fmaxf(s->max_speed, 1e-3f) * 1.5f, 0.15f, 1.0f);
-        s->heading = wrap_angle(s->heading + s->rudder * s->max_yaw * authority * SIM_DT);
+        s->heading = wrap_angle(s->heading + s->rudder * s->max_yaw * authority * SIM_DT
+                                * (1 + 0.25f * officer_level(s, OFF_NAVIGATION)));
         s->x += sinf(s->heading) * s->speed * SIM_DT;
         s->z += cosf(s->heading) * s->speed * SIM_DT;
     }
     combat_step(w);
     air_step(w);
     base_step(w);
+    fleet_step(w);
     if (w->tick % (2 * SIM_HZ) == 0) ai_step(w);
     w->tick++;
 }

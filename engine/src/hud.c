@@ -88,20 +88,50 @@ static void report_text(const world *w, const captain_report *r, char *msg, int 
     }
 }
 
-void hud_act_top(world *w)
+void hud_issue(command_queue *q, const world *w, const command *c)
+{
+    cmdq_push(q, c, w->tick);
+}
+
+static void report_cmd(command_queue *q, const world *w, int player, const captain_report *r, cmd_kind kind)
+{
+    command c;
+    memset(&c, 0, sizeof c);
+    c.kind = (uint8_t)kind;
+    c.player = (uint8_t)player;
+    c.a = r->ship;
+    c.b = r->kind;
+    hud_issue(q, w, &c);
+}
+
+/* This player's reports only: other fleets' captains report to their own admirals. */
+static int my_reports(const world *w, int player, captain_report *out, int max)
+{
+    captain_report all[64];
+    int side = -1;
+    for (int i = 0; i < w->count && side < 0; i++)
+        if (w->ships[i].owner == player) side = w->ships[i].side;
+    if (side < 0) return 0;
+    int n = captain_reports(w, side, all, 64), k = 0;
+    for (int i = 0; i < n && k < max; i++)
+        if (w->ships[all[i].ship].owner == player) out[k++] = all[i];
+    return k;
+}
+
+void hud_act_top(hud *h, command_queue *q, const world *w)
 {
     captain_report rep[32];
-    int n = captain_reports(w, 0, rep, 32);
+    int n = my_reports(w, h->player, rep, 32);
     for (int i = 0; i < n; i++)
-        if (rep[i].kind != REP_BRIDGE_LOST) { captain_act(w, &rep[i]); return; }
+        if (rep[i].kind != REP_BRIDGE_LOST) { report_cmd(q, w, h->player, &rep[i], CMD_CAPTAIN_ACT); return; }
 }
 
 /* ---- Captain's Command bar (top right) ------------------------------------------------ */
 
-static void captain_bar(hud *h, world *w, int sw, float t)
+static void captain_bar(hud *h, world *w, command_queue *q, int sw, float t)
 {
     captain_report rep[32];
-    int n = captain_reports(w, 0, rep, 32), pending = 0;
+    int n = my_reports(w, h->player, rep, 32), pending = 0;
     for (int i = 0; i < n; i++) pending += rep[i].kind != REP_BRIDGE_LOST;
     float lh = ui_line_height();
     if (!h->show_captain) {
@@ -117,7 +147,7 @@ static void captain_bar(hud *h, world *w, int sw, float t)
         return;
     }
     float bw = 430, x0 = (float)sw - bw - 10, y = 10;
-    int shown = n < 7 ? n : 7;
+    int cap = h->show_fleet ? 4 : 7, shown = n < cap ? n : cap;
     float height = lh + 14 + (float)(shown ? shown : 1) * (2 * lh + 16) + (n > shown ? lh + 6 : 0);
     box(h, x0, y, x0 + bw, y + height, PANEL);
     ui_text(x0 + PAD, y + 5, "CAPTAIN'S COMMAND", 1, 0.85f, 0.5f, 1);
@@ -137,8 +167,8 @@ static void captain_bar(hud *h, world *w, int sw, float t)
         ui_text(x0 + PAD + 4, cy + lh + 6, msg, action ? TEXT[0] : DIM[0], action ? TEXT[1] : DIM[1], action ? TEXT[2] : DIM[2], 1);
         if (!action) continue;
         float bx = x0 + bw - 4 - PAD - (ui_text_width(action) + 2 * PAD) - 30;
-        if (button(h, bx, cy + lh / 2, action, 0.2f, 0.45f, 0.25f)) captain_act(w, &rep[i]);
-        if (button(h, x0 + bw - 30, cy + lh / 2, "x", 0.3f, 0.3f, 0.32f)) captain_dismiss(w, &rep[i]);
+        if (button(h, bx, cy + lh / 2, action, 0.2f, 0.45f, 0.25f)) report_cmd(q, w, h->player, &rep[i], CMD_CAPTAIN_ACT);
+        if (button(h, x0 + bw - 30, cy + lh / 2, "x", 0.3f, 0.3f, 0.32f)) report_cmd(q, w, h->player, &rep[i], CMD_CAPTAIN_DISMISS);
     }
     if (n > shown) {
         char more[48];
@@ -300,10 +330,14 @@ static void ship_readout(hud *h, const world *w, const unsigned char *selected, 
 
 /* ---- shipyard (left, below the controls) and the game-mode banner ---------------------- */
 
-static float shipyard_panel(hud *h, world *w, float y)
+static float shipyard_panel(hud *h, world *w, command_queue *q, float y)
 {
-    const side_state *st = &w->sides[0];
-    if (st->yard < 0) return y;
+    int side = -1;
+    for (int i = 0; i < w->count && side < 0; i++)
+        if (w->ships[i].owner == h->player) side = w->ships[i].side;
+    if (side < 0) return y;
+    const side_state *st = &w->sides[side];
+    if (st->yard < 0 || w->ships[st->yard].owner != h->player) return y;
     const ship *yard = &w->ships[st->yard];
     float lh = ui_line_height(), x0 = 10, bw = 400;
     int mark = ui_mark(), rect = h->rect_count;
@@ -334,13 +368,115 @@ static float shipyard_panel(hud *h, world *w, float y)
         float bwid = ui_text_width(label) + 2 * PAD;
         if (bx + bwid > x0 + bw - PAD) { bx = x0 + PAD; y += lh + 10; }
         int ok = st->budget >= class_cost(c) && st->queue_count < MAX_QUEUE;
-        if (button(h, bx, y, label, ok ? 0.22f : 0.2f, ok ? 0.36f : 0.2f, ok ? 0.5f : 0.22f) && ok) order_build(w, 0, c);
+        if (button(h, bx, y, label, ok ? 0.22f : 0.2f, ok ? 0.36f : 0.2f, ok ? 0.5f : 0.22f) && ok) {
+            command bc;
+            memset(&bc, 0, sizeof bc);
+            bc.kind = CMD_BUILD;
+            bc.player = (uint8_t)h->player;
+            bc.b = o;
+            hud_issue(q, w, &bc);
+        }
         bx += bwid + 6;
     }
     y += lh + 16;
     ui_set_bottom(mark, y);
     h->rects[rect][3] = y;
     return y + 8;
+}
+
+/* ---- fleet toolbar (bottom right): a card per ship with a live damage thumbnail ---- */
+
+static const char OFFICER_LETTER[OFFICER_KINDS] = {'G', 'F', 'D', 'E', 'A', 'N', 'V'};
+static const char *OFFICER_NAME[OFFICER_KINDS] = {"gunnery", "fire control", "damage control", "engineering",
+                                                  "anti-aircraft", "navigation", "aviation"};
+
+static void fleet_bar(hud *h, renderer *r, world *w, command_queue *q, unsigned char *selected, int sw, int sh, float t)
+{
+    if (!h->show_fleet) return;
+    int ids[MAX_SHIPS], n = 0, side = -1;
+    for (int i = 0; i < w->count; i++)
+        if (w->ships[i].owner == h->player) {
+            if (side < 0) side = w->ships[i].side;
+            if (w->ships[i].alive && !is_shore(&w->ships[i])) ids[n++] = i;
+        }
+    if (side < 0) return;
+    float lh = ui_line_height(), cw = 250, ch = 46, x0 = (float)sw - cw - 10;
+    int shown = n < 9 ? n : 9;
+    int officers = w->officer_count[side & 1];
+    float top = (float)sh - 10 - (float)shown * (ch + 4) - (officers ? 2 * lh + 18 : 0) - lh - 10;
+    box(h, x0 - 4, top, x0 + cw + 4, (float)sh - 6, PANEL);
+    ui_text(x0 + 4, top + 4, "FLEET [F2]   L: flagship", 1, 0.85f, 0.5f, 1);
+    float y = top + lh + 8;
+    if (officers) {
+        /* Officers: click one, then a ship card, to post him there. */
+        float bx = x0;
+        for (int k = 0; k < officers; k++) {
+            int at = w->officer_ship[side & 1][k];
+            char lab[16];
+            if (at == -2) snprintf(lab, sizeof lab, "%c:x", OFFICER_LETTER[w->officer_kind_of[side & 1][k]]);
+            else if (at >= 0) snprintf(lab, sizeof lab, "%c:%d", OFFICER_LETTER[w->officer_kind_of[side & 1][k]], at + 1);
+            else snprintf(lab, sizeof lab, "%c:-", OFFICER_LETTER[w->officer_kind_of[side & 1][k]]);
+            float bwid = ui_text_width(lab) + 2 * PAD;
+            if (bx + bwid > x0 + cw) { bx = x0; y += lh + 8; }
+            int picked = h->pending_officer == k;
+            if (button(h, bx, y, lab, picked ? 0.7f : 0.3f, picked ? 0.55f : 0.3f, picked ? 0.15f : 0.35f) && at != -2)
+                h->pending_officer = picked ? -1 : k;
+            bx += bwid + 4;
+        }
+        y += lh + 10;
+        if (h->pending_officer >= 0 && h->pending_officer < officers)
+            ui_text(x0, y - 2, OFFICER_NAME[w->officer_kind_of[side & 1][h->pending_officer]], DIM[0], DIM[1], DIM[2], 1);
+        y += 4;
+    }
+    for (int c = 0; c < shown; c++, y += ch + 4) {
+        int i = ids[c];
+        const ship *s = &w->ships[i];
+        const float bg[4] = {selected[i] ? 0.16f : 0.1f, selected[i] ? 0.3f : 0.12f, selected[i] ? 0.2f : 0.15f, 0.95f};
+        box(h, x0, y, x0 + cw, y + ch, bg);
+        ui_ship_profile(r, s, x0 + 4, y + 4, 110, ch - 8, 0, t);
+        char name[32], who[64];
+        ship_label(w, i, who, sizeof who);
+        snprintf(name, sizeof name, "%.13s", who);
+        ui_text(x0 + 120, y + 3, name, s->flagship ? 1.0f : TEXT[0], s->flagship ? 0.85f : TEXT[1], s->flagship ? 0.4f : TEXT[2], 1);
+        if (s->flagship) ui_text(x0 + cw - 14, y + 3, "*", 1, 0.85f, 0.3f, 1);
+        float cf = s->hp / s->cls->max_health;
+        ui_rect(x0 + 120, y + lh + 6, x0 + cw - 6, y + lh + 10, 0.08f, 0.08f, 0.1f, 1);
+        ui_rect(x0 + 120, y + lh + 6, x0 + 120 + (cw - 126) * cf, y + lh + 10,
+                cf > 0.66f ? 0.3f : cf > 0.33f ? 0.95f : 0.95f, cf > 0.66f ? 0.9f : cf > 0.33f ? 0.8f : 0.25f, cf > 0.66f ? 0.35f : 0.2f, 1);
+        /* Afflictions: fires, water, list; officers aboard. */
+        int fires = 0;
+        for (int k = 0; k < s->cls->comp_count; k++) fires += s->comp[k].fire > 0;
+        char st[48];
+        float sx = x0 + 120;
+        if (fires) { snprintf(st, sizeof st, "^%d ", fires); sx += ui_text(sx, y + lh + 12, st, 1, 0.5f, 0.15f, 1); }
+        if (s->water > 0.02f) { snprintf(st, sizeof st, "~%.0f%% ", 100 * s->water / s->cls->reserve_buoyancy); sx += ui_text(sx, y + lh + 12, st, 0.4f, 0.65f, 1, 1); }
+        if (fabsf(s->list) > 0.03f) { snprintf(st, sizeof st, "/%.0f ", fabsf(s->list) * 180 / PI_F); sx += ui_text(sx, y + lh + 12, st, 0.9f, 0.9f, 0.6f, 1); }
+        for (int k = 0; k < OFFICER_KINDS; k++)
+            if (s->officers[k]) { snprintf(st, sizeof st, "%c", OFFICER_LETTER[k]); sx += ui_text(sx, y + lh + 12, st, 0.95f, 0.8f, 0.4f, 1); }
+        if (clicked(h, x0, y, x0 + cw, y + ch)) {
+            if (h->pending_officer >= 0) {                   /* post the picked officer here */
+                command oc;
+                memset(&oc, 0, sizeof oc);
+                oc.kind = CMD_OFFICER;
+                oc.player = (uint8_t)h->player;
+                oc.a = h->pending_officer;
+                cmd_set_ship(&oc, i);
+                hud_issue(q, w, &oc);
+                h->pending_officer = -1;
+            } else {
+                if (!(SDL_GetModState() & KMOD_SHIFT)) memset(selected, 0, MAX_SHIPS);
+                selected[i] = 1;
+                if (h->last_card == i && t - h->last_click_t < 0.5f) h->focus = i;
+                h->last_card = i;
+                h->last_click_t = t;
+            }
+        }
+    }
+    if (n > shown) {
+        char more[32];
+        snprintf(more, sizeof more, "+%d more", n - shown);
+        ui_text(x0 + 4, y - 2, more, DIM[0], DIM[1], DIM[2], 1);
+    }
 }
 
 static void mode_banner(const world *w, int sw)
@@ -361,13 +497,15 @@ static void mode_banner(const world *w, int sw)
     ui_text((float)sw / 2 - tw / 2, 15, msg, 1, 0.85f, 0.5f, 1);
 }
 
-int hud_draw(hud *h, renderer *r, world *w, const unsigned char *selected, int sw, int sh, float t)
+int hud_draw(hud *h, renderer *r, world *w, command_queue *q, int player, unsigned char *selected, int sw, int sh, float t)
 {
     h->rect_count = 0;
+    h->player = player;
     mode_banner(w, sw);
     int key = controls_bar(h, w, selected);
-    shipyard_panel(h, w, h->controls_bottom + 8);
-    captain_bar(h, w, sw, t);
+    shipyard_panel(h, w, q, h->controls_bottom + 8);
+    captain_bar(h, w, q, sw, t);
+    fleet_bar(h, r, w, q, selected, sw, sh, t);
     ship_readout(h, w, selected, sw, sh);
     int result = world_winner(w);
     if (result >= 0) {

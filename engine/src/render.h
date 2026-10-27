@@ -16,6 +16,14 @@ typedef struct {
 
 typedef struct renderer renderer;
 
+/* A model's side profile (from its vertices): per slice along z, the top and bottom. */
+#define PROFILE_BINS 64
+typedef struct {
+    int ok;
+    float z0, z1, ymin, ymax, deck;
+    float top[PROFILE_BINS], bot[PROFILE_BINS];
+} ship_profile;
+
 renderer *renderer_create(const char *files_dir);
 void renderer_destroy(renderer *r);
 
@@ -37,6 +45,9 @@ int ui_mark(void);                          /* vertex index of the next ui_rect 
 void ui_set_bottom(int mark, float y1);     /* resize that rect once its contents are laid out */
 float ui_line_height(void);
 void ui_flush(renderer *r, int w, int h);
+const ship_profile *renderer_profile(renderer *r, const ship_class *c);
+/* Draws ship s's profile into the box, showing her damage (detail: the full panel). */
+void ui_ship_profile(renderer *r, const ship *s, float x, float y, float w, float h, int detail, float t);
 
 /* Sea surface height at (x, z) and time t, matching the ocean shader's waves. */
 float sea_height(float x, float z, float t);

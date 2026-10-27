@@ -15,6 +15,12 @@
 #define MAX_AIRCRAFT 256
 #define REP_KINDS_MAX 12       /* >= REP_KINDS (report_kind is declared after ship) */
 #define MAX_BUILD_OPTIONS 8
+#define MAX_OFFICERS 8         /* per team */
+#define FLEET_PLAYERS 8        /* = MAX_PLAYERS in command.h */
+
+/* Distinguished officers: each boosts one aspect of the ship he serves on. */
+typedef enum { OFF_GUNNERY, OFF_FIRE_CONTROL, OFF_DAMAGE_CONTROL, OFF_ENGINEERING, OFF_AA,
+               OFF_NAVIGATION, OFF_AVIATION, OFFICER_KINDS } officer_kind;
 #define MAX_QUEUE 6
 
 /* Tuning (design choices for the RTS, not values from the original). */
@@ -101,7 +107,8 @@ typedef struct {
 
 typedef struct {
     const ship_class *cls;
-    int side;                  /* 0 = player, 1 = enemy */
+    int side;                  /* team: 0 or 1 */
+    int owner;                 /* player commanding her (command.h); -1 none (AI) */
     int alive;
     float x, z, heading;       /* position and heading (radians) */
     float speed, rudder;       /* current speed (u/s), rudder -1..1 */
@@ -130,6 +137,8 @@ typedef struct {
     int jammed;                /* steering gear out: rudder stuck */
     int returning;             /* AI: heading home to the shipyard for repairs */
     int committed;             /* AI: part of an attack wave (else mustering at the rally point) */
+    int flagship;              /* her owner's flagship */
+    unsigned char officers[OFFICER_KINDS];   /* distinguished officers aboard, by speciality */
     int cause;                 /* why she went down: 0 afloat, 1 flooding, 2 capsized, 3 magazine, 4 structure, 5 abandoned */
     float launch_timer;        /* carrier: seconds until the next plane can take off */
     waypoint wp[MAX_WAYPOINTS];
@@ -171,6 +180,12 @@ typedef struct {
     int penetrations, ricochets, fires_started, magazine_explosions;
     game_mode mode;
     side_state sides[2];
+    /* Each team's officers: speciality and the ship they serve on (-1 ashore, -2 lost). */
+    int officer_count[2];
+    officer_kind officer_kind_of[2][MAX_OFFICERS];
+    int officer_ship[2][MAX_OFFICERS];
+    int flagship_of[FLEET_PLAYERS];      /* ship index, -1 none */
+    float shaken[FLEET_PLAYERS];         /* seconds the fleet is rattled after losing her */
     int defender;              /* MODE_DEFEND: the side holding the shipyard */
     float time_limit;          /* MODE_DEFEND: seconds the defender must hold */
 } world;
@@ -259,6 +274,17 @@ void base_step(world *w);    /* part of world_step: income, production, repairs,
 float repair_radius(const ship *yard);
 int at_yard(const world *w, int i);          /* moored in reach of her side's working drydock */
 float mode_time_left(const world *w);        /* MODE_DEFEND, seconds; else 0 */
+
+/* Fleet command (src/fleet.c). */
+void order_flagship(world *w, int player, int ship);
+void order_officer(world *w, int player, int officer, int ship);   /* ship -1: ashore */
+int officer_add(world *w, int side, officer_kind kind);            /* returns its index */
+/* Strength of a speciality aboard: 0 none, 1 one officer, 1.5 two, 1.75 three ... */
+float officer_level(const ship *s, officer_kind k);
+/* Multiplier on gunnery spread from flagship status, her nearby presence and a lost
+ * flagship (< 1 is better). */
+float command_accuracy(const world *w, int i);
+void fleet_step(world *w);   /* part of world_step */
 
 /* Simple enemy commander for ships with ai set: close to gun range, turn broadside. */
 void ai_step(world *w);

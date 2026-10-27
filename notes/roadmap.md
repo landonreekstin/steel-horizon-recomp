@@ -104,6 +104,22 @@ withdraw/evade tuning. Original list:
 - UI: ship cards, damage panels, minimap.
 - Audio: `.at3` music, sound banks.
 
+### 8b. Fleet command *(requested)*
+- **Flagship**: one ship per fleet designated flagship; she gets boosts (and the
+  fleet suffers if she's lost).
+- **Distinguished officers**: n per team, assigned to ships (several may serve on one
+  ship); each boosts one aspect of that ship: repairs, AA, main-turret operation,
+  gunnery, engineering, damage control...
+- **Fleet toolbar**: one card per ship in your fleet, with a thumbnail showing her
+  current status; click to select (double-click to centre the camera).
+- **Cross-section that looks like the ship**: the damage panel drawn from the ship's
+  real side profile instead of blocks.
+
+### 8c. Online multiplayer *(requested)*
+- Teams with several players per team, each commanding a fleet; deterministic
+  lockstep over the network (the sim is already fixed-tick and seeded), lobby,
+  team and fleet assignment, chat, reconnect.
+
 ### 9. Tutorial *(requested; last, once everything else is in place)*
 - An in-game tutorial campaign that teaches the controls toolbar, fleet movement,
   focus and macro targeting, the accuracy readout, damage control and the Captain's

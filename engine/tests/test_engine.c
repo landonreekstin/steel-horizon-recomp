@@ -13,6 +13,7 @@
 
 #include "asset.h"
 #include "data.h"
+#include "command.h"
 #include "math3d.h"
 #include "sim.h"
 
@@ -866,6 +867,133 @@ static void test_bases(class_table *ct)
     CHECK(jp >= 2 && us == 1, "AI yard built %d ships, reinforcements %d", jp, us);
 }
 
+static command mk(cmd_kind k, int player, int ship)
+{
+    command c;
+    memset(&c, 0, sizeof c);
+    c.kind = (uint8_t)k;
+    c.player = (uint8_t)player;
+    if (ship >= 0) cmd_set_ship(&c, ship);
+    return c;
+}
+
+static void test_fleet(const class_table *ct)
+{
+    const ship_class *bb = class_find(ct, "AmericanBattleship"), *dd = class_find(ct, "AmericanDestroyer");
+    const ship_class *jbb = class_find(ct, "JapaneseBattleship");
+    world w;
+
+    /* Commands: a player orders his own ships, not his teammate's or the enemy's. */
+    world_init(&w);
+    int mine = world_spawn(&w, dd, 0, 0, 0, 0), mate = world_spawn(&w, dd, 0, 500, 0, 0);
+    int foe = world_spawn(&w, dd, 1, 0, 5000, PI_F);
+    w.ships[mate].owner = 2;                             /* a second player on team 0 */
+    command c = mk(CMD_MOVE, 0, mine);
+    cmd_set_ship(&c, mate);
+    cmd_set_ship(&c, foe);
+    c.x = 0;
+    c.z = 3000;
+    world_apply(&w, &c);
+    CHECK(w.ships[mine].wp_count == 1 && w.ships[mate].wp_count == 0 && w.ships[foe].wp_count == 0,
+          "move: own %d, teammate's %d, enemy's %d", w.ships[mine].wp_count, w.ships[mate].wp_count, w.ships[foe].wp_count);
+    c = mk(CMD_ATTACK, 0, mine);
+    c.a = mate;                                          /* can't focus fire on a friend */
+    c.b = 1 << BAT_MAIN;
+    world_apply(&w, &c);
+    CHECK(w.ships[mine].order_target[BAT_MAIN] == -1, "no friendly focus fire");
+
+    /* Flagship: one per player, tighter gunnery, nearby ships helped, the fleet rattled
+     * when she goes. */
+    world_init(&w);
+    int f = world_spawn(&w, bb, 0, 0, 0, 0), other = world_spawn(&w, bb, 0, 600, 0, 0), far = world_spawn(&w, bb, 0, 9000, 0, 0);
+    world_spawn(&w, jbb, 1, 0, 2500, PI_F);
+    float before = command_accuracy(&w, other);
+    c = mk(CMD_FLAGSHIP, 0, f);
+    world_apply(&w, &c);
+    CHECK(w.ships[f].flagship && w.flagship_of[0] == f, "flagship set");
+    CHECK(command_accuracy(&w, f) < 0.9f && command_accuracy(&w, other) < before && command_accuracy(&w, far) == before,
+          "flagship %.2f, near %.2f, far %.2f", command_accuracy(&w, f), command_accuracy(&w, other), command_accuracy(&w, far));
+    c = mk(CMD_FLAGSHIP, 0, other);
+    world_apply(&w, &c);
+    CHECK(!w.ships[f].flagship && w.ships[other].flagship, "only one flagship per player");
+    damage_hit(&w, other, HIT_SHELL, 0, 0, 1e6f, 99, 0);
+    world_step(&w);
+    CHECK(!w.ships[other].alive && w.shaken[0] > 0 && command_accuracy(&w, f) > 1.1f, "losing her rattles the fleet (%.2f)",
+          command_accuracy(&w, f));
+
+    /* Officers: assign, stack, lose with the ship. */
+    world_init(&w);
+    int a = world_spawn(&w, bb, 0, 0, 0, 0), b = world_spawn(&w, bb, 0, 600, 0, 0);
+    int g1 = officer_add(&w, 0, OFF_GUNNERY), g2 = officer_add(&w, 0, OFF_GUNNERY), dc = officer_add(&w, 0, OFF_DAMAGE_CONTROL);
+    c = mk(CMD_OFFICER, 0, a);
+    c.a = g1;
+    world_apply(&w, &c);
+    c.a = g2;
+    world_apply(&w, &c);
+    c = mk(CMD_OFFICER, 0, b);
+    c.a = dc;
+    world_apply(&w, &c);
+    CHECK(w.ships[a].officers[OFF_GUNNERY] == 2 && officer_level(&w.ships[a], OFF_GUNNERY) == 1.5f &&
+          w.ships[b].officers[OFF_DAMAGE_CONTROL] == 1, "officers aboard");
+    /* Gunnery officers reload faster: compare shots over a minute against a twin without. */
+    int shots[2];
+    for (int pass = 0; pass < 2; pass++) {
+        world_init(&w);
+        world_spawn(&w, bb, 0, 0, 0, 0);
+        world_spawn(&w, jbb, 1, 2400, 0, 0);
+        w.ships[1].hold_fire = 1;
+        if (pass) { int o = officer_add(&w, 0, OFF_GUNNERY); order_officer(&w, 0, o, 0); }
+        for (int t = 0; t < 120 * SIM_HZ; t++) { world_step(&w); damage_init(&w.ships[1]); }
+        shots[pass] = w.shots;
+    }
+    CHECK(shots[1] > shots[0], "gunnery officer: %d shells vs %d", shots[1], shots[0]);
+    /* A DC officer adds a team. */
+    world_init(&w);
+    world_spawn(&w, bb, 0, 0, 0, 0);
+    int o = officer_add(&w, 0, OFF_DAMAGE_CONTROL);
+    order_officer(&w, 0, o, 0);
+    for (int k = 0; k < bb->comp_count; k++) w.ships[0].comp[k].fire = 0.3f;
+    world_step(&w);
+    int teams = 0;
+    for (int k = 0; k < bb->comp_count; k++) teams += w.ships[0].comp[k].crews;
+    CHECK(teams == bb->dc_crews + 1, "DC officer: %d teams", teams);
+    damage_hit(&w, 0, HIT_SHELL, 0, 0, 1e6f, 99, 0);
+    world_step(&w);
+    CHECK(w.officer_ship[0][o] == -2, "officer lost with his ship");
+
+    /* Replays: the same command stream reproduces the battle exactly. */
+    float final[2][4];
+    for (int pass = 0; pass < 2; pass++) {
+        static command_queue q;
+        memset(&q, 0, sizeof q);
+        world_init(&w);
+        world_seed(&w, 5);
+        for (int k = 0; k < 2; k++) {
+            world_spawn(&w, bb, 0, (float)k * 500, 0, 0);
+            world_spawn(&w, jbb, 1, (float)k * 500, 4000, PI_F);
+        }
+        w.ships[1].ai = w.ships[3].ai = 1;
+        command m = mk(CMD_MOVE, 0, 0);
+        cmd_set_ship(&m, 2);
+        m.x = 2000;
+        m.z = 2000;
+        cmdq_push(&q, &m, 100);
+        command at = mk(CMD_ATTACK, 0, 0);
+        at.a = 3;
+        at.b = 1 << BAT_MAIN;
+        cmdq_push(&q, &at, 400);
+        command ev = mk(CMD_EVADE, 0, 2);
+        ev.x = 30;
+        cmdq_push(&q, &ev, 900);
+        for (int t = 0; t < 180 * SIM_HZ; t++) {
+            cmdq_apply_due(&q, &w);
+            world_step(&w);
+        }
+        for (int k = 0; k < 4; k++) final[pass][k] = w.ships[k].hp + w.ships[k].x;
+    }
+    CHECK(!memcmp(final[0], final[1], sizeof final[0]), "replayed commands give the same battle");
+}
+
 int main(int argc, char **argv)
 {
     const char *assets = argc > 1 ? argv[1] : "assets";
@@ -889,6 +1017,7 @@ int main(int argc, char **argv)
     test_damage(&ct);
     test_command(&ct);
     test_bases(&ct);
+    test_fleet(&ct);
     printf("%d failures\n", failures);
     return failures != 0;
 }
