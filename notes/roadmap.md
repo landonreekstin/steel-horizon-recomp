@@ -13,6 +13,11 @@ Full plan: `~/.claude/plans/i-want-to-recompile-snoopy-pearl.md`. Status per pha
   counter-flooding, fires, magazine detonation, engine/steering/bridge/radar/turret/
   AA/flight-deck modules, damage-control teams with priority policies, flooding
   magazines, a cross-section panel for the selected ship (notes/battle-logic.md).
+- 7b (first pass): accuracy model with relative speed and turning, shown in the HUD;
+  macro targeting (T); crew and casualties; repair limit; carrier hangar lifts;
+  evasive manoeuvres (Z); Captain's Command bar (reports, one-click actions, dismiss,
+  collapsed alert, bridge-out ships listed); clickable controls toolbar (F1); text
+  rendering (DejaVu Sans Mono baked by tools/bakefont.py).
 
 ## Next
 
@@ -41,8 +46,32 @@ with its own state, and shells/bombs/torpedoes resolved against that layout:
 - Model swaps (01/02/03) follow overall condition; a ship sinks from lost buoyancy
   or capsizes from list, not from an HP counter.
 
+### 7b. Command and crew *(requested)* — first pass done (above); still open: an
+accuracy readout while choosing a target (hovering an enemy), per-turret aim, and
+withdraw/evade tuning. Original list:
+- **Accuracy metric** per firing ship and target: gun, crew quality, range, the speed
+  difference between the two ships (and own turning), fire-control damage; shown when
+  targeting, since you don't aim shells yourself.
+- **Targeting**: general (fire at the ship) or **macro targets**: aim for the engines,
+  magazines, steering, bridge or guns, at an accuracy cost (fewer hits, but they land
+  in the chosen compartment).
+- **Captain's Command toolbar**: each ship's captain reports the recommended immediate
+  action (fire near a magazine → flood it, list → counter-flood, torpedoes inbound →
+  evade, steering jammed, losing a duel → withdraw); clicking a report carries it out
+  without selecting that ship. The bar can be dismissed and alerts when reports are
+  pending. A ship whose bridge is destroyed sends no reports; the bar shows her as
+  out of contact.
+- **Carrier hangar lifts**: destroyable; with the lifts out, planes can land but can't
+  be struck below to rearm or repair.
+- **Repair limits**: modules can be repaired until damaged past a critical point;
+  beyond it they're lost for the battle.
+- **Crew**: a crew count per ship; casualties from hits, fires and flooding slow damage
+  control, reloading and every other operation.
+- **Evasive manoeuvres**: one key (or a captain's report) to comb incoming torpedoes or
+  zig-zag against gunfire, at the cost of your own accuracy.
+
 ### 8. Battle layer
-- **Controls toolbar** *(requested, War Thunder style)*: an on-screen bar listing
+- **Controls toolbar** *(requested, War Thunder style)*, alongside the Captain's Command bar: an on-screen bar listing
   every control and hotkey for the current selection (move, focus/split/hold fire,
   launch strikes, damage control), with tooltips; clickable as an alternative to keys.
 - **Carrier attack types** *(requested)*: separate **dive bombers** (steep dive,
@@ -66,3 +95,8 @@ with its own state, and shells/bombs/torpedoes resolved against that layout:
 - Fleet-level AI commander (targeting, formations, strike timing).
 - UI: ship cards, damage panels, minimap.
 - Audio: `.at3` music, sound banks.
+
+### 9. Tutorial *(requested; last, once everything else is in place)*
+- An in-game tutorial campaign that teaches the controls toolbar, fleet movement,
+  focus and macro targeting, the accuracy readout, damage control and the Captain's
+  Command bar, carrier strikes, and the shipyard modes, step by step.

@@ -128,3 +128,29 @@ each kill planes (fighters more); Japan won all 4 after the fighter fix.
 - Measured (seeds 1–3, both sides AI): m01 3–3.5 min; fleet 9–11 min, sinkings by
   flooding, structure, magazines and the odd capsize; carriers 23–51 min. Mirrored
   identical fleets over 40 seeds: 19–21 and 22–18, so no side bias.
+
+## Command and crew (phase 7b) — design
+- **Accuracy:** each shell's aim error per axis is √(σ² + lead² + turn²): σ = the gun's
+  dispersion at range from the original's accuracy table, × fire control (radar/bridge),
+  × crew (up to +60% short-handed), × 1.25 when aiming at a part of the ship, × 1.3 while
+  evading, × the firer's own turning; lead = 15% of the *relative* speed of the two
+  ships × time of flight; turn = the target's turn over the flight. `hit_probability`
+  integrates that over the tapered hull outline and is what the HUD shows; the test
+  checks it against fired shells (60% vs 59% still, 50% vs 50% crossing at 2,100).
+- **Macro targets (T):** the aim point moves to the compartment of the chosen engines,
+  magazines, steering, bridge or main guns; aiming at the steering puts >2× the share
+  of damage in the two stern compartments.
+- **Crew:** complement per class (BB 2,500, CV 2,600, CA 1,100, DD 330, PT 17, SS 80 …);
+  penetrations, splinters, fires and rising water kill men. Fewer men → fewer teams
+  (⌈teams × min(1, 1.4·crew)⌉), slower teams, slower reloads; below 8% she's abandoned.
+- **Repair limit:** a module knocked below 10% is lost for the battle; others repair to 70%.
+- **Hangar lifts:** two per carrier; with them out, landed planes stay on deck unrearmed.
+- **Evasive (Z):** for 60 s, comb any torpedo whose closest approach is within her
+  length + 60 in the next 45 s (turn parallel to the track, smaller turn), else
+  zig-zag ±35° every 12 s; costs 30% accuracy.
+- **Captain's reports** (`captain.c`): fire by a dry magazine → flood it; torpedoes
+  inbound → evade; list > 6° → counter-flood; water > 40% of reserve → pumps first;
+  2+ fires → fight fires; condition < 30% with an enemy within 3,500 → withdraw;
+  carrier with bombers and a target in range → strike. Acting quiets that report for
+  45 s, dismissing for 60 s. A ship with her bridge destroyed reports nothing and is
+  listed as such.

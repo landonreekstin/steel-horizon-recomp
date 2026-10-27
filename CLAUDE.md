@@ -68,6 +68,9 @@ python3 -I tools/preview.py assets/files MODEL.pingu out.png [GUN.pingu]
 - Damage model (phase 7, first pass): compartments, armour/penetration, flooding, list
   and counter-flooding, fires, magazines, destroyable modules, damage-control teams,
   cross-section panel. Rules in `notes/battle-logic.md`; tests incl. two mutants.
+- Command and crew (7b): accuracy model + HUD readout (calibrated against fired
+  shells), macro targeting, crew casualties, repair limits, hangar lifts, evasive
+  manoeuvres, Captain's Command bar, clickable controls toolbar, baked font.
 
 Build/run the engine:
 
@@ -79,5 +82,7 @@ engine/build/shrts --assets assets [--scenario m01|fleet|carriers]
 #   H hold fire, F fire at will, S stop, WASD/QE/wheel camera, Space pause, +/- speed
 #   carrier selected: B air strike (focus target or nearest), G fighter patrol, R recall
 #   damage control: P crew priority, X counter-flood, M flood magazines
+#   T aim (ship/engines/magazines/steering/bridge/guns), Z evasive, Enter top report,
+#   C Captain's Command bar, F1 controls toolbar (both clickable)
 engine/build/shrts --assets assets --scenario fleet --ai-both --headless 900   # balance run
 ```
