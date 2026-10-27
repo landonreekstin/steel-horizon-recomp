@@ -27,6 +27,8 @@ typedef struct {
 renderer *renderer_create(const char *files_dir);
 /* 1: draw ships from genship.c's generated models instead of the game's (--models generated). */
 void renderer_set_generated(renderer *r, int on);
+/* Fog of war: draw only what this side can see (-1: everything). */
+void renderer_set_view_side(renderer *r, int side);
 void renderer_destroy(renderer *r);
 
 /* Preload the models a class uses (all damage stages + gun). Returns 0 on success. */

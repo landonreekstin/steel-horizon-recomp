@@ -176,7 +176,7 @@ static int nearest_enemy_ship(const world *w, const aircraft *a, float max_d)
     float bd = max_d;
     for (int i = 0; i < w->count; i++) {
         const ship *s = &w->ships[i];
-        if (!s->alive || s->side == a->side || s->cls->submerged) continue;
+        if (!s->alive || s->side == a->side || s->cls->submerged || !visible_to(w, a->side, i)) continue;
         float d = hypotf(s->x - a->x, s->z - a->z);
         if (d < bd) { bd = d; best = i; }
     }
@@ -301,6 +301,26 @@ static void fighter_step(world *w, int k)
     }
 }
 
+/* Recon: out to the point, circle it until fuel runs low, back to the ship that
+ * launched her, recovered alongside. Spots for her side (vision.c) all the while. */
+static void recon_step(world *w, aircraft *a)
+{
+    const ship *home = &w->ships[a->carrier];
+    if (a->state != AIR_RETURN && a->fuel < 60) a->state = AIR_RETURN;
+    if (a->state == AIR_RETURN) {
+        if (!home->alive) { fly_to(a, a->x + sinf(a->heading + 0.3f) * 500, CRUISE_ALT, a->z + cosf(a->heading + 0.3f) * 500, 30, 45); return; }
+        fly_to(a, home->x, 40, home->z, 30, 45);
+        if (hypotf(home->x - a->x, home->z - a->z) < 150) a->state = AIR_LOST;    /* hoisted aboard */
+        return;
+    }
+    float d = hypotf(a->recon_x - a->x, a->recon_z - a->z);
+    if (d > 900) fly_to(a, a->recon_x, CRUISE_ALT + 100, a->recon_z, 30, 45);
+    else {
+        float ang = atan2f(a->x - a->recon_x, a->z - a->recon_z) + 0.3f;
+        fly_to(a, a->recon_x + sinf(ang) * 800, CRUISE_ALT + 100, a->recon_z + cosf(ang) * 800, 30, 45);
+    }
+}
+
 static void return_step(world *w, aircraft *a)
 {
     int home = home_carrier(w, a);
@@ -382,6 +402,7 @@ void air_step(world *w)
         case AIR_OUT: case AIR_ATTACK: case AIR_RETURN:
             a->fuel -= SIM_DT;
             if (a->fuel <= 0) { a->state = AIR_FALLING; w->planes_ditched++; break; }   /* out of fuel */
+            if (a->type == PLANE_RECON) { recon_step(w, a); break; }
             if (a->state != AIR_RETURN && (a->fuel < 90 || home_carrier(w, a) < 0)) a->state = AIR_RETURN;
             if (a->state == AIR_RETURN) return_step(w, a);
             else if (a->type == PLANE_BOMBER) bomber_step(w, a);

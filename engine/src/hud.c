@@ -200,7 +200,8 @@ static int controls_bar(hud *h, const world *w, const unsigned char *selected)
     static const char *hints[] = {
         "LMB select / drag box   Shift add", "RMB sea: move   Shift: queue",
         "RMB enemy: focus fire   Ctrl: secondaries", "1-9 groups   Ctrl+1-9 set",
-        "WASD/QE/wheel/MMB camera", "Space pause   +/- speed", "Enter: top captain's report", "C captain's bar"};
+        "WASD/QE/wheel/MMB camera", "Space pause   +/- speed", "Enter: top captain's report", "C captain's bar",
+        "V recon plane to the cursor"};
     float bw = 400;
     int mark = ui_mark(), rect = h->rect_count;
     box(h, x0, y, x0 + bw, y + 10, PANEL);          /* bottom edge set once laid out */
@@ -567,6 +568,14 @@ static void minimap(hud *h, const world *w, int sh)
     for (int i = 0; i < w->count; i++) {
         const ship *s = &w->ships[i];
         if (!s->alive) continue;
+        if (side >= 0 && !visible_to(w, side, i)) {           /* fog: where we last saw her */
+            if (w->last_seen[side][i] >= 0) {
+                float lx = MX(w->last_x[side][i]), lz = MY(w->last_z[side][i]);
+                ui_rect(lx - 1.5f, lz - 0.4f, lx + 1.5f, lz + 0.4f, 0.8f, 0.4f, 0.35f, 0.7f);
+                ui_rect(lx - 0.4f, lz - 1.5f, lx + 0.4f, lz + 1.5f, 0.8f, 0.4f, 0.35f, 0.7f);
+            }
+            continue;
+        }
         float r = is_shore(s) ? 5 : s->cls->half_length > 80 ? 2.5f : 1.6f;
         float cr = s->side != side ? 0.95f : s->owner == h->player ? 0.35f : 0.4f;
         float cg = s->side != side ? 0.3f : s->owner == h->player ? 0.95f : 0.7f;

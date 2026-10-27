@@ -269,7 +269,8 @@ static int enemy_at(const game *g, int mx, int my, int w, int h)
     for (int i = 0; i < g->w.count; i++) {
         const ship *s = &g->w.ships[i];
         float sx, sy;
-        if (s->side == g->side || !s->alive || !project(vp, v3(s->x, 10, s->z), w, h, &sx, &sy)) continue;
+        if (s->side == g->side || !s->alive || !visible_to(&g->w, g->side, i) ||
+            !project(vp, v3(s->x, 10, s->z), w, h, &sx, &sy)) continue;
         float d = (sx - (float)mx) * (sx - (float)mx) + (sy - (float)my) * (sy - (float)my);
         if (d < best_d) { best_d = d; best = i; }
     }
@@ -564,7 +565,7 @@ int main(int argc, char **argv)
 {
     const char *assets = "assets", *shot = NULL, *scenario = "m01";
     unsigned long long seed = 1;
-    int mute = 0, sound = 0, scenario_given = 0, generated = 0;
+    int mute = 0, sound = 0, scenario_given = 0, generated = 0, no_fog = 0;
     int ai_both = 0, host_port = -1, mp_players = 2, teams[MAX_PLAYERS] = {0}, teams_given = 0, bot = 0;
     long desync_at = -1;
     const char *join_addr = NULL, *player_name = "Admiral";
@@ -584,6 +585,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--name") && i + 1 < argc) player_name = argv[++i];
         else if (!strcmp(argv[i], "--bot")) bot = 1;
         else if (!strcmp(argv[i], "--mute")) mute = 1;
+        else if (!strcmp(argv[i], "--no-fog")) no_fog = 1;
         else if (!strcmp(argv[i], "--sound")) sound = 1;   /* sound in --screenshot runs too */
         else if (!strcmp(argv[i], "--models") && i + 1 < argc) generated = !strcmp(argv[++i], "generated");
         else if (!strcmp(argv[i], "--desync-test") && i + 1 < argc) desync_at = atol(argv[++i]);
@@ -674,6 +676,7 @@ int main(int argc, char **argv)
     }
     if (setup_scenario(&g, scenario)) return 1;
     world_seed(&g.w, seed);
+    g.w.fog = !no_fog || g.net;                          /* online games always have fog */
     for (int i = 0; ai_both && i < g.w.count; i++) g.w.ships[i].ai = 1;
     if (g.net) assign_players(&g, &ng);
 
@@ -762,6 +765,7 @@ int main(int argc, char **argv)
     snprintf(bank_path, sizeof bank_path, "%s/sound/banks/game.bnk", path);
     g.snd = (shot && !sound) || mute ? NULL : audio_open(bank_path);
     renderer_set_generated(r, generated);
+    renderer_set_view_side(r, g.w.fog && !shot ? g.side : -1);
     for (int i = 0; i < g.w.count; i++)
         if (renderer_load_class(r, g.w.ships[i].cls)) return 1;
     for (int s = 0; s < 2; s++)                     /* ships the yards can build */
@@ -816,6 +820,16 @@ int main(int argc, char **argv)
                     g.chat_in[0] = 0;
                     g.typing = 0;
                     SDL_StopTextInput();
+                }
+            } else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_v) {
+                float vx, vz;                            /* V: recon plane to the cursor */
+                int mx, my;
+                SDL_GetMouseState(&mx, &my);
+                if (mouse_to_sea(&g, mx, my, w, h, &vx, &vz)) {
+                    command c = sel_cmd(&g, CMD_RECON);
+                    c.x = vx;
+                    c.z = vz;
+                    issue(&g, &c);
                 }
             } else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_y && g.net) {
                 g.typing = 1;                            /* Y: say something */

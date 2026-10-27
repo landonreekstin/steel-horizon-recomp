@@ -150,12 +150,35 @@ void ai_step(world *w)
         float bd = INFINITY;
         for (int j = 0; j < w->count; j++) {
             const ship *t = &w->ships[j];
-            if (!t->alive || t->side == s->side) continue;
+            if (!t->alive || t->side == s->side || !visible_to(w, s->side, j)) continue;
             float d = hypotf(t->x - s->x, t->z - s->z) + (t->cls->submerged ? 4000 : 0);
             if (d < bd) { bd = d; best = j; }
         }
         if (best < 0) {
-            order_stop(w, &i, 1);
+            /* Nothing in sight: search. Toward the latest sighting, else toward where
+             * intelligence puts the enemy (their fleet's centre); send recon ahead. */
+            int sd = s->side & 1;
+            long latest = -1;
+            float gx = 0, gz = 0;
+            for (int j = 0; j < w->count; j++)
+                if (w->ships[j].side != s->side && w->ships[j].alive && w->last_seen[sd][j] > latest) {
+                    latest = w->last_seen[sd][j];
+                    gx = w->last_x[sd][j];
+                    gz = w->last_z[sd][j];
+                }
+            if (latest < 0 || hypotf(gx - s->x, gz - s->z) < 600) {
+                int n = 0;
+                gx = gz = 0;
+                for (int j = 0; j < w->count; j++)
+                    if (w->ships[j].side != s->side && w->ships[j].alive) { gx += w->ships[j].x; gz += w->ships[j].z; n++; }
+                if (!n) { order_stop(w, &i, 1); continue; }
+                gx /= (float)n;
+                gz /= (float)n;
+            }
+            if (can_recon(s)) order_recon(w, i, gx, gz);
+            if (is_carrier(s)) continue;                 /* carriers wait for the scouts */
+            float to = atan2f(gx - s->x, gz - s->z);
+            order_move(w, &i, 1, s->x + sinf(to) * 800, s->z + cosf(to) * 800, 0);
             continue;
         }
         const ship *t = &w->ships[best];
@@ -203,7 +226,7 @@ void ai_step(world *w)
             int nb = -1;
             for (int j = 0; j < w->count; j++) {
                 const ship *o = &w->ships[j];
-                if (!o->alive || o->side == s->side || is_shore(o) || o->cls->submerged) continue;
+                if (!o->alive || o->side == s->side || is_shore(o) || o->cls->submerged || !visible_to(w, s->side, j)) continue;
                 float d = hypotf(o->x - s->x, o->z - s->z);
                 if (d < near) { near = d; nb = j; }
             }

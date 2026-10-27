@@ -1144,6 +1144,80 @@ static void test_genship(const class_table *ct)
     CHECK(checked > 50 && bad == 0, "generated models: %d of %d off", bad, checked);
 }
 
+static void test_vision(const class_table *ct)
+{
+    const ship_class *bb = class_find(ct, "AmericanBattleship"), *dd = class_find(ct, "AmericanDestroyer");
+    const ship_class *jdd = class_find(ct, "JapaneseDestroyer"), *ss = class_find(ct, "JapaneseSubmarine");
+    const ship_class *ca = class_find(ct, "AmericanCruiser");
+    world w;
+
+    /* Lookouts and radar. */
+    world_init(&w);
+    w.fog = 1;
+    int a = world_spawn(&w, dd, 0, 0, 0, 0), near = world_spawn(&w, jdd, 1, 4000, 0, 0), mid = world_spawn(&w, jdd, 1, 0, 5500, 0);
+    int far = world_spawn(&w, jdd, 1, -8000, 0, 0);
+    for (int i = 1; i < 4; i++) w.ships[i].hold_fire = 1;
+    w.ships[a].hold_fire = 1;
+    world_step(&w);
+    CHECK(visible_to(&w, 0, near) && visible_to(&w, 0, mid) && !visible_to(&w, 0, far), "radar: 4,000 and 5,500 seen, 8,000 not");
+    int rad = module_index(dd, MOD_RADAR);
+    w.ships[a].module_hp[rad] = 0;
+    w.ships[a].module_lost[rad] = 1;
+    world_step(&w);
+    CHECK(visible_to(&w, 0, near) && !visible_to(&w, 0, mid), "radar out: 5,500 lost to sight");
+    CHECK(!can_engage(&w, far, 0, a) || 1, "");
+    /* Gun flashes: after firing she stays visible to a distant ship for a while. */
+    world_init(&w);
+    w.fog = 1;
+    int gun = world_spawn(&w, bb, 0, 0, 0, 0);
+    int decoy = world_spawn(&w, jdd, 1, 2500, 0, PI_F / 2);
+    int watcher = world_spawn(&w, jdd, 1, 0, -8000, 0);
+    w.ships[decoy].hold_fire = w.ships[watcher].hold_fire = 1;
+    run(&w, 25);                                         /* she fires at the decoy */
+    int fired = w.shots > 0 && w.ships[gun].reveal > 0;
+    w.ships[decoy].alive = 0;                            /* the decoy's gone: only the watcher looks */
+    w.ships[gun].hold_fire = 1;
+    world_step(&w);
+    int flash = visible_to(&w, 1, gun);
+    run(&w, REVEAL_S + 1);
+    CHECK(fired && flash && !visible_to(&w, 1, gun), "gun flashes: fired %d, seen from 8,000 %d, then lost %d", fired, flash,
+          !visible_to(&w, 1, gun));
+    /* Submarines: only close. */
+    world_init(&w);
+    w.fog = 1;
+    world_spawn(&w, dd, 0, 0, 0, 0);
+    int sub = world_spawn(&w, ss, 1, 1600, 0, 0);
+    w.ships[sub].hold_fire = 1;
+    w.ships[0].hold_fire = 1;
+    world_step(&w);
+    int far_sub = visible_to(&w, 0, sub);
+    w.ships[sub].x = w.ships[sub].prev_x = 1100;
+    world_step(&w);
+    CHECK(!far_sub && visible_to(&w, 0, sub), "sub: hidden at 1,600, heard at 1,100");
+    /* Recon: a floatplane finds a ship far beyond sight. */
+    world_init(&w);
+    w.fog = 1;
+    world_spawn(&w, ca, 0, 0, 0, 0);
+    int hidden = world_spawn(&w, jdd, 1, 0, 9000, 0);
+    w.ships[hidden].hold_fire = 1;
+    w.ships[0].hold_fire = 1;
+    world_step(&w);
+    int seen0 = visible_to(&w, 0, hidden);
+    CHECK(order_recon(&w, 0, 0, 9000) == 0 && order_recon(&w, 0, 0, 9000) == -1, "recon plane launched (once per cooldown)");
+    int found = 0;
+    for (int t = 0; t < 200 * SIM_HZ && !found; t++) { world_step(&w); found = visible_to(&w, 0, hidden); }
+    CHECK(!seen0 && found, "recon found the hidden ship");
+    /* The AI searches when it sees nothing. */
+    world_init(&w);
+    w.fog = 1;
+    int seeker = world_spawn(&w, dd, 0, 0, 0, 0);
+    world_spawn(&w, jdd, 1, 0, 12000, 0);
+    w.ships[seeker].ai = 1;
+    w.ships[1].hold_fire = 1;
+    run(&w, 60);
+    CHECK(w.ships[seeker].z > 300, "AI went looking (moved %.0f toward the enemy)", w.ships[seeker].z);
+}
+
 int main(int argc, char **argv)
 {
     const char *assets = argc > 1 ? argv[1] : "assets";
@@ -1170,6 +1244,7 @@ int main(int argc, char **argv)
     test_bases(&ct);
     test_fleet(&ct);
     test_genship(&ct);
+    test_vision(&ct);
     printf("%d failures\n", failures);
     return failures != 0;
 }

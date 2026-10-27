@@ -245,3 +245,16 @@ each kill planes (fighters more); Japan won all 4 after the fighter fix.
   fleet by two. (A bug picked guards by ship index; with two yards building in turn
   that gave one side half guards and the other none.) A 60-minute limit decides on
   points (build cost of enemy ships sunk).
+
+## Fog of war and recon (phase 8, `engine/src/vision.c`) — design
+- Each side sees enemy ships within 4,500 of one of its ships (6,500 with working
+  radar; shore stations 6,500), within 3,500 of one of its aircraft, or within 9,000
+  for 10 s after they fire their guns. Submerged boats: sonar at 900 (1,350 for ships
+  with depth charges), aircraft at 1,400. Shipyards are always known.
+- Only seen ships can be engaged; bombers re-target only seen ships; the AI only acts
+  on what it sees and, seeing nothing, heads for the latest sighting (else the enemy
+  fleet's rough centre) and sends recon planes ahead. Last-known positions show on the
+  minimap. On by default (offline `--no-fog` turns it off; online games always fog).
+- Recon (V, toward the cursor): cruisers, battleships, battlecruisers and carriers
+  launch one plane per 3 minutes; it flies out, circles the point at 350, spots, and
+  comes back to be hoisted aboard (300 s endurance, 400 HP, unarmed).

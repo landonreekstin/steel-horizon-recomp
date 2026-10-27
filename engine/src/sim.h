@@ -4,6 +4,8 @@
 #ifndef SIM_H
 #define SIM_H
 
+#include <stdint.h>
+
 #include "data.h"
 
 #define SIM_HZ 20
@@ -49,9 +51,19 @@ typedef enum { FX_NONE, FX_MUZZLE, FX_SPLASH, FX_HIT, FX_NEAR_MISS, FX_TORP_HIT,
                FX_FLAK, FX_AIR_GUN, FX_PLANE_DOWN, FX_RICOCHET, FX_MAGAZINE, FX_TORP_LAUNCH, FX_DC_LAUNCH,
                FX_TAKEOFF, FX_LANDING } fx_kind;
 
-typedef enum { PLANE_FIGHTER, PLANE_BOMBER /* dive bomber */, PLANE_TORPEDO } plane_type;
+typedef enum { PLANE_FIGHTER, PLANE_BOMBER /* dive bomber */, PLANE_TORPEDO, PLANE_RECON } plane_type;
 typedef enum { AIR_HANGAR, AIR_OUT, AIR_ATTACK, AIR_RETURN, AIR_DECK, AIR_FALLING, AIR_LOST } air_state;
-typedef enum { MISSION_NONE, MISSION_CAP, MISSION_ESCORT, MISSION_STRIKE } air_mission;
+typedef enum { MISSION_NONE, MISSION_CAP, MISSION_ESCORT, MISSION_STRIKE, MISSION_RECON } air_mission;
+
+/* Fog of war (src/vision.c, design). */
+#define VIS_RANGE 4500.0f      /* lookouts: masthead sighting of a ship */
+#define RADAR_RANGE 6500.0f    /* with working radar */
+#define SUB_DETECT 900.0f      /* a submerged boat: sonar range */
+#define AIR_VIS 3500.0f        /* what a plane can see around it */
+#define FLASH_RANGE 9000.0f    /* gun flashes seen this far */
+#define REVEAL_S 10.0f
+#define RECON_COOLDOWN 180.0f
+#define SHIP_WORDS ((MAX_SHIPS + 63) / 64)
 
 typedef struct {
     plane_type type;
@@ -63,6 +75,7 @@ typedef struct {
     float prev_x, prev_y, prev_z, prev_heading;
     float hp, max_hp, fuel, timer, gun_reload;
     int stage;                 /* 1..3 picks the AS01/02/03 model */
+    float recon_x, recon_z;    /* MISSION_RECON: the point to circle */
 } aircraft;
 
 typedef struct {
@@ -135,7 +148,9 @@ typedef struct {
     float evade;               /* seconds of evasive manoeuvring left */
     float evade_heading;       /* course being steered while evading */
     float evade_base;          /* the course she was on when told to evade */
-    float report_cool[REP_KINDS_MAX];  /* per report_kind: seconds before the captain raises it again */
+    float report_cool[REP_KINDS_MAX];
+    float reveal;              /* seconds her gun flashes still give her away */
+    float recon_cool;          /* seconds until her floatplane / scout can go again */  /* per report_kind: seconds before the captain raises it again */
     float list, trim;          /* radians: + list to starboard, + trim bow down */
     float water;               /* flooded fraction of the whole hull */
     dc_policy policy;
@@ -187,6 +202,10 @@ typedef struct {
     int air_torps;             /* aerial torpedoes dropped */
     game_mode mode;
     side_state sides[2];
+    uint64_t seen[2][SHIP_WORDS];        /* which ships each side has in sight */
+    float last_x[2][MAX_SHIPS], last_z[2][MAX_SHIPS];   /* where each side last saw them */
+    long last_seen[2][MAX_SHIPS];        /* tick, -1 never */
+    int fog;                             /* 1: fog of war on */
     /* Each team's officers: speciality and the ship they serve on (-1 ashore, -2 lost). */
     int officer_count[2];
     officer_kind officer_kind_of[2][MAX_OFFICERS];
@@ -289,6 +308,15 @@ void base_step(world *w);    /* part of world_step: income, production, repairs,
 float repair_radius(const ship *yard);
 int at_yard(const world *w, int i);          /* moored in reach of her side's working drydock */
 float mode_time_left(const world *w);        /* MODE_DEFEND, seconds; else 0 */
+
+/* Fog of war (src/vision.c). Ships of one's own side, shore installations, and
+ * everything with fog off are always visible. */
+int visible_to(const world *w, int side, int j);
+void vision_step(world *w);  /* part of world_step */
+/* Launch a recon plane (a floatplane off a cruiser or battleship, a scout off a
+ * carrier) to circle (x, z). Returns 0 if one went. */
+int order_recon(world *w, int ship, float x, float z);
+int can_recon(const ship *s);
 
 /* Fleet command (src/fleet.c). */
 void order_flagship(world *w, int player, int ship);

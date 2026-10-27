@@ -13,6 +13,8 @@ void world_init(world *w)
     memset(w, 0, sizeof *w);
     world_seed(w, 1);
     w->sides[0].yard = w->sides[1].yard = -1;
+    for (int sd = 0; sd < 2; sd++)
+        for (int i = 0; i < MAX_SHIPS; i++) w->last_seen[sd][i] = -1;
     for (int p = 0; p < FLEET_PLAYERS; p++) w->flagship_of[p] = -1;
 }
 
@@ -125,6 +127,7 @@ void world_step(world *w)
         s->x += sinf(s->heading) * s->speed * SIM_DT;
         s->z += cosf(s->heading) * s->speed * SIM_DT;
     }
+    vision_step(w);
     combat_step(w);
     air_step(w);
     base_step(w);

@@ -206,7 +206,10 @@ struct renderer {
     char tex_name[MAX_TEX_INDEX][64];     /* lower-case basename without .bog */
     char tex_path[MAX_TEX_INDEX][512];
     int generated;             /* draw generated ships instead of the original models */
+    int view_side;             /* fog of war: whose eyes (-1 all) */
 };
+
+void renderer_set_view_side(renderer *r, int side) { r->view_side = side; }
 
 void renderer_set_generated(renderer *r, int on) { r->generated = on; }
 
@@ -679,6 +682,7 @@ renderer *renderer_create(const char *files_dir)
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
     /* UI quads: (x, y, u, v, r, g, b, a). */
+    r->view_side = -1;
     r->ui_prog = program(UI_VS, UI_FS);
     glGenVertexArrays(1, &r->ui_vao);
     glBindVertexArray(r->ui_vao);
@@ -1035,6 +1039,7 @@ void renderer_draw(renderer *r, const camera *cam, int w, int h, const world *wd
     for (int i = 0; i < wd->count; i++) {
         const ship *s = &wd->ships[i];
         int shore = s->cls->hull_type == HULL_SHIPYARD;
+        if (r->view_side >= 0 && !visible_to(wd, r->view_side, i)) continue;   /* fog of war */
         if (!s->alive && s->sink > 90 && !shore) continue;   /* gone under */
         int stage = s->stage < 1 ? 1 : s->stage > 3 ? 3 : s->stage;
         const gpu_model *m = ship_model(r, s->cls, stage);
@@ -1259,7 +1264,7 @@ void renderer_draw(renderer *r, const camera *cam, int w, int h, const world *wd
     ortho.m[13] = 1;
     for (int i = 0; i < wd->count; i++) {
         const ship *s = &wd->ships[i];
-        if (!s->alive) continue;
+        if (!s->alive || (r->view_side >= 0 && !visible_to(wd, r->view_side, i))) continue;
         float x = s->prev_x + (s->x - s->prev_x) * alpha, z = s->prev_z + (s->z - s->prev_z) * alpha;
         float cx = vp.m[0] * x + vp.m[4] * 70 + vp.m[8] * z + vp.m[12];
         float cy = vp.m[1] * x + vp.m[5] * 70 + vp.m[9] * z + vp.m[13];

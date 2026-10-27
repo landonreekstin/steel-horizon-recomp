@@ -221,7 +221,7 @@ float hit_probability(const world *w, int i, int m, int j)
 int can_engage(const world *w, int i, int m, int j)
 {
     const ship *s = &w->ships[i], *t = &w->ships[j];
-    if (i == j || !t->alive || t->side == s->side) return 0;
+    if (i == j || !t->alive || t->side == s->side || !visible_to(w, s->side, j)) return 0;
     const turret_mount *mt = &s->cls->mounts[m];
     const class_weapon *wp = &s->cls->weapons[mt->weapon];
     if ((wp->ammo == AMMO_DC) != (t->cls->submerged != 0)) return 0;
@@ -284,6 +284,7 @@ static void fire(world *w, int i, int m, int j, float aim_yaw)
     float mx, my, mz;
     mount_world(s, mt, &mx, &my, &mz);
     float d = hypotf(t->x - mx, t->z - mz);
+    if (wp->ammo == AMMO_SHELL) s->reveal = REVEAL_S;   /* gun flashes give her away */
 
     if (wp->ammo == AMMO_TORPEDO) {
         /* A spread of three running straight down the bearing the tube trained to. */
