@@ -93,6 +93,7 @@ engine/build/shrts --assets assets [--scenario m01|fleet|carriers|assault|attack
 #   T aim (ship/engines/magazines/steering/bridge/guns), Z evasive, Enter top report,
 #   C Captain's Command bar, F1 controls toolbar (both clickable), F2 fleet bar, L flagship
 #   submarines: J dive, K surface (surface / periscope / deep; battery charges on the surface)
+#   every order, pause/speed, groups, chat and quit are also buttons in the controls panel (F1)
 # online (LAN/forwarded port): one host, the others join; teams default 0,1,0,1...
 engine/build/shrts --assets assets --host 47800 --players 3 --teams 0,1,0 --scenario fleet --name Me
 engine/build/shrts --assets assets --join HOSTADDR:47800 --name Friend

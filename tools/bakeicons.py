@@ -157,6 +157,19 @@ ICONS = [
     ("dive", sub(12) + [rect(14.5, 17, 17.5, 24), head((16, 31), 90, 7)]),
     ("surface", sub(25) + [rect(14.5, 8, 17.5, 15), head((16, 1), -90, 7)]),
     ("battery", [rect(3, 9, 27, 25), hole(rect(6, 12, 24, 22)), rect(27, 13, 30, 21), rect(8, 14, 12, 20)]),
+    # Fire orders, movement and command.
+    ("split_fire", polyline([(16, 30), (16, 18)], 3) + polyline([(16, 18), (7, 8)], 3) + polyline([(16, 18), (25, 8)], 3)
+     + [head((4, 4.5), -132, 7), head((28, 4.5), -48, 7)]),
+    ("queue", polyline([(5, 27), (12, 12), (21, 22), (27, 6)], 2.4) + [circle(5, 27, 3.4, 16), circle(12, 12, 3.4, 16),
+                                                                      circle(21, 22, 3.4, 16), circle(27, 6, 3.4, 16)]),
+    ("flagship", [rect(6, 3, 9, 30), fill([(9, 4), (27, 4), (22, 10), (27, 16), (9, 16)]), rect(3, 27, 16, 30)]),
+    ("special", [star(16, 16, 6, 15, 5)]),
+    ("recon", [fill([(1, 16)] + [(16 + 15 * math.cos(math.radians(a)), 16 - 10 * math.sin(math.radians(a))) for a in range(180, -1, -15)]
+                    + [(16 + 15 * math.cos(math.radians(a)), 16 + 10 * math.sin(math.radians(a))) for a in range(15, 180, 15)]),
+               hole(circle(16, 16, 7.5)), circle(16, 16, 4.5, 16)]),
+    ("torpedo_strike", plane(16, 10, 0.75) + [rect(9, 23, 22, 26.5), fill([(22, 23), (26, 24.75), (22, 26.5)]), rect(7, 21.5, 9, 28)]),
+    ("dive_strike", move(rot(plane(0, 0, 0.75), 180, 0, 0), 16, 11)
+     + [rect(14.8, 21, 17.2, 25), head((16, 31), 90, 6)]),
 ]
 
 

@@ -98,6 +98,9 @@ withdraw/evade tuning. Original list:
   icon per report kind on the Captain's cards (16 vector icons baked by
   `tools/bakeicons.py` into `engine/src/icon_atlas.h`, drawn from the UI font texture).
   Captain's cards also carry a live damage thumbnail of the ship.
+- **Everything clickable** *(requested)*: done. Every order has a toolbar button (split fire
+  and recon as click-a-target modes, a Queue toggle for waypoints, torpedo/dive strikes,
+  flagship, special), plus pause/speed, control groups, chat, quit and fleet-bar reopen.
 - **Controls toolbar** *(requested, War Thunder style)*, alongside the Captain's Command bar: an on-screen bar listing
   every control and hotkey for the current selection (move, focus/split/hold fire,
   launch strikes, damage control), with tooltips; clickable as an alternative to keys.

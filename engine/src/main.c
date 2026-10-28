@@ -45,6 +45,8 @@ typedef struct {
     custom_spec custom;        /* the "custom" scenario's fleets */
     /* Online chat: the line being typed (Y opens it), and recent lines on screen. */
     int typing;
+    click_mode click;          /* recon / split fire: the next left click picks the point or ship */
+    int queue_moves;           /* the toolbar's Queue toggle: moves append like Shift */
     char chat_in[80];
     char chat_log[6][96];
     float chat_time[6];
@@ -601,6 +603,55 @@ static void bot_orders(game *g)
     }
 }
 
+static void recon_order(game *g, float x, float z)
+{
+    command c = sel_cmd(g, CMD_RECON);
+    c.x = x;
+    c.z = z;
+    issue(g, &c);
+}
+
+/* Special ability for each selected ship: on `tgt`, else her focus target, else what her
+ * guns are on. */
+static void special_order(game *g, int tgt)
+{
+    int ids[MAX_SHIPS], n = selected_ids(g, ids);
+    for (int q = 0; q < n; q++) {
+        const ship *s = &g->w.ships[ids[q]];
+        command c = sel_cmd(g, CMD_SPECIAL);
+        memset(c.ships, 0, sizeof c.ships);
+        cmd_set_ship(&c, ids[q]);
+        c.a = tgt >= 0 ? tgt : s->order_target[BAT_MAIN];
+        for (int m = 0; m < s->cls->mount_count && c.a < 0; m++) c.a = s->turrets[m].target;
+        issue(g, &c);
+    }
+}
+
+static void start_chat(game *g)
+{
+    g->typing = 1;
+    g->chat_in[0] = 0;
+    SDL_StartTextInput();
+}
+
+/* A left click while a toolbar pick is pending. */
+static void pick(game *g, int x, int y, int w, int h)
+{
+    float px, pz;
+    if (g->click == CLICK_RECON && mouse_to_sea(g, x, y, w, h, &px, &pz)) recon_order(g, px, pz);
+    else if (g->click == CLICK_SPLIT) {
+        int enemy = enemy_at(g, x, y, w, h);
+        if (enemy < 0) return;                      /* keep waiting for an enemy */
+        command c = sel_cmd(g, CMD_ATTACK);
+        c.a = enemy;
+        c.b = 1 << BAT_SECONDARY;
+        issue(g, &c);
+    }
+    g->click = CLICK_NONE;
+}
+
+static unsigned strike_types;   /* toolbar torpedo / dive strike: the plane types for the next B */
+
 /* Orders from a key (or the controls toolbar, which sends the same keys). */
 static void order_key(game *g, SDL_Keycode k, int ctrl, hud *hd)
 {
@@ -656,7 +707,8 @@ static void order_key(game *g, SDL_Keycode k, int ctrl, hud *hd)
             }
             one.a = t;
             /* Shift+B: torpedo bombers only; Ctrl+B: dive bombers only. */
-            if (k == SDLK_b && (SDL_GetModState() & KMOD_SHIFT)) one.b = 1 << PLANE_TORPEDO;
+            if (k == SDLK_b && strike_types) one.b = (int)strike_types;
+            else if (k == SDLK_b && (SDL_GetModState() & KMOD_SHIFT)) one.b = 1 << PLANE_TORPEDO;
             else if (k == SDLK_b && ctrl) one.b = 1 << PLANE_BOMBER;
             issue(g, &one);
         }
@@ -685,6 +737,36 @@ static void order_key(game *g, SDL_Keycode k, int ctrl, hud *hd)
         else memcpy(g->selected, g->groups[gi], sizeof g->selected);
     }
     if (c.kind != CMD_NONE) issue(g, &c);
+}
+
+/* A HUD button: its key's order, or one of the actions with no single key. */
+static void hud_key(game *g, int key, hud *hd)
+{
+    switch (key) {
+    case HUD_PAUSE: if (!g->net) g->paused = !g->paused; break;
+    case HUD_SLOWER: g->time_scale = g->time_scale > 1 ? g->time_scale / 2 : 1; break;
+    case HUD_FASTER: if (!g->net) g->time_scale = g->time_scale < 4 ? g->time_scale * 2 : 4; break;
+    case HUD_QUEUE: g->queue_moves = !g->queue_moves; break;
+    case HUD_SPLIT: g->click = g->click == CLICK_SPLIT ? CLICK_NONE : CLICK_SPLIT; break;
+    case HUD_RECON: g->click = g->click == CLICK_RECON ? CLICK_NONE : CLICK_RECON; break;
+    case HUD_SPECIAL: special_order(g, -1); break;
+    case HUD_TORP_STRIKE: case HUD_DIVE_STRIKE:
+        strike_types = key == HUD_TORP_STRIKE ? 1u << PLANE_TORPEDO : 1u << PLANE_BOMBER;
+        order_key(g, SDLK_b, 0, hd);
+        strike_types = 0;
+        break;
+    case HUD_CHAT: if (g->net) start_chat(g); break;
+    case HUD_GROUP_SAVE:                         /* into the first empty group */
+        for (int gi = 1; gi <= 9; gi++) {
+            int used = 0;
+            for (int i = 0; i < g->w.count; i++) used |= g->groups[gi][i] && g->w.ships[i].alive;
+            if (!used) { memcpy(g->groups[gi], g->selected, sizeof g->selected); break; }
+        }
+        break;
+    default:
+        if (key > HUD_GROUP && key <= HUD_GROUP + 9) memcpy(g->selected, g->groups[key - HUD_GROUP], sizeof g->selected);
+        else order_key(g, key, 0, hd);
+    }
 }
 
 static int video_init(SDL_Window **win, SDL_GLContext *ctx)
@@ -1031,35 +1113,20 @@ int main(int argc, char **argv)
                 float vx, vz;                            /* V: recon plane to the cursor */
                 int mx, my;
                 SDL_GetMouseState(&mx, &my);
-                if (mouse_to_sea(&g, mx, my, w, h, &vx, &vz)) {
-                    command c = sel_cmd(&g, CMD_RECON);
-                    c.x = vx;
-                    c.z = vz;
-                    issue(&g, &c);
-                }
+                if (mouse_to_sea(&g, mx, my, w, h, &vx, &vz)) recon_order(&g, vx, vz);
             } else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_u) {
                 /* U: special ability, on the enemy under the cursor, else her current target. */
                 int mx, my;
                 SDL_GetMouseState(&mx, &my);
-                int ids[MAX_SHIPS], n = selected_ids(&g, ids), tgt = enemy_at(&g, mx, my, w, h);
-                for (int q = 0; q < n; q++) {
-                    command c = sel_cmd(&g, CMD_SPECIAL);
-                    memset(c.ships, 0, sizeof c.ships);
-                    cmd_set_ship(&c, ids[q]);
-                    c.a = tgt >= 0 ? tgt : g.w.ships[ids[q]].order_target[BAT_MAIN];
-                    if (c.a < 0)
-                        for (int m = 0; m < g.w.ships[ids[q]].cls->mount_count && c.a < 0; m++) c.a = g.w.ships[ids[q]].turrets[m].target;
-                    issue(&g, &c);
-                }
+                special_order(&g, enemy_at(&g, mx, my, w, h));
             } else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_y && g.net) {
-                g.typing = 1;                            /* Y: say something */
-                g.chat_in[0] = 0;
-                SDL_StartTextInput();
+                start_chat(&g);                          /* Y: say something */
             }
             else if (e.type == SDL_KEYDOWN) {
                 SDL_Keycode k = e.key.keysym.sym;
                 int ctrl = (e.key.keysym.mod & KMOD_CTRL) != 0;
-                if (k == SDLK_ESCAPE) running = 0;
+                if (k == SDLK_ESCAPE && g.click) g.click = CLICK_NONE;   /* cancel a pick */
+                else if (k == SDLK_ESCAPE) running = 0;
                 else if (k == SDLK_SPACE && !g.net) g.paused = !g.paused;   /* online: no pause, real time */
                 else if ((k == SDLK_EQUALS || k == SDLK_PLUS || k == SDLK_KP_PLUS) && !g.net) g.time_scale = g.time_scale < 4 ? g.time_scale * 2 : 4;
                 else if (k == SDLK_MINUS || k == SDLK_KP_MINUS) g.time_scale = g.time_scale > 1 ? g.time_scale / 2 : 1;
@@ -1070,6 +1137,10 @@ int main(int argc, char **argv)
                     hd.click = 1;
                     hd.click_x = (float)e.button.x;
                     hd.click_y = (float)e.button.y;
+                } else if (e.button.button == SDL_BUTTON_LEFT && g.click) {
+                    pick(&g, e.button.x, e.button.y, w, h);   /* the toolbar asked for a point or ship */
+                } else if (e.button.button == SDL_BUTTON_RIGHT && g.click) {
+                    g.click = CLICK_NONE;                    /* RMB cancels a pick */
                 } else if (e.button.button == SDL_BUTTON_LEFT) {
                     g.box.x0 = g.box.x1 = e.button.x;
                     g.box.y0 = g.box.y1 = e.button.y;
@@ -1079,7 +1150,7 @@ int main(int argc, char **argv)
                     command c = sel_cmd(&g, CMD_MOVE);          /* RMB on the minimap: go there */
                     c.x = mx_w;
                     c.z = mz_w;
-                    c.flag = (SDL_GetModState() & KMOD_SHIFT) != 0;
+                    c.flag = (SDL_GetModState() & KMOD_SHIFT) != 0 || g.queue_moves;
                     issue(&g, &c);
                 } else if (e.button.button == SDL_BUTTON_RIGHT) {
                     float x, z;
@@ -1096,7 +1167,7 @@ int main(int argc, char **argv)
                         command c = sel_cmd(&g, CMD_MOVE);
                         c.x = x;
                         c.z = z;
-                        c.flag = (SDL_GetModState() & KMOD_SHIFT) != 0;
+                        c.flag = (SDL_GetModState() & KMOD_SHIFT) != 0 || g.queue_moves;
                         issue(&g, &c);
                     }
                 } else if (e.button.button == SDL_BUTTON_MIDDLE) {
@@ -1178,7 +1249,26 @@ int main(int argc, char **argv)
             hd.cam_z = g.cam.target.z;
             hd.cam_yaw = g.cam.yaw;
         }
+        hd.paused = g.paused;
+        hd.time_scale = g.time_scale;
+        hd.online = g.net != NULL;
+        hd.queue_on = g.queue_moves;
+        hd.click_mode = g.click;
+        hd.groups = 0;
+        for (int gi = 1; gi <= 9; gi++)
+            for (int i = 0; i < g.w.count; i++)
+                if (g.groups[gi][i] && g.w.ships[i].alive) { hd.groups |= 1u << gi; break; }
         int key = hud_draw(&hd, r, &g.w, &g.q, g.player, g.selected, w, h, (float)sim_time);
+        if (g.click) {                                   /* what the pending pick wants */
+            int mx, my;
+            SDL_GetMouseState(&mx, &my);
+            const char *what = g.click == CLICK_RECON ? "Click the sea for the recon plane" : "Click an enemy for the secondaries";
+            ui_rect((float)mx + 14, (float)my + 14, (float)mx + 22 + ui_text_width(what), (float)my + 18 + 2 * ui_line_height(),
+                    0.03f, 0.04f, 0.05f, 0.9f);
+            ui_text((float)mx + 18, (float)my + 16, what, 1, 0.85f, 0.5f, 1);
+            ui_text((float)mx + 18, (float)my + 18 + ui_line_height(), "right-click or Esc: cancel", 0.6f, 0.65f, 0.7f, 1);
+            ui_flush(r, w, h);
+        }
         if (g.net) {                                     /* chat: new lines in, recent lines shown */
             char line[96];
             while (net_chat_take(g.net, line, sizeof line)) {
@@ -1215,7 +1305,8 @@ int main(int argc, char **argv)
             g.cam.target = v3(g.w.ships[hd.focus].x, 0, g.w.ships[hd.focus].z);
             hd.focus = -1;
         }
-        if (key) order_key(&g, key, 0, &hd);
+        if (key == HUD_QUIT) running = 0;
+        else if (key) hud_key(&g, key, &hd);
         if (record) {
             rec_frame(&rc, g.snd);
             glBindFramebuffer(GL_READ_FRAMEBUFFER, rc.fbo);  /* show what is being recorded */

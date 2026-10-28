@@ -8,6 +8,15 @@
 
 #define HUD_MAX_RECTS 64
 
+/* What a HUD button can return besides an SDL keycode: actions with no single key. */
+enum {
+    HUD_PAUSE = 0x7000, HUD_SLOWER, HUD_FASTER, HUD_QUEUE, HUD_SPLIT, HUD_RECON, HUD_SPECIAL,
+    HUD_TORP_STRIKE, HUD_DIVE_STRIKE, HUD_GROUP_SAVE, HUD_CHAT, HUD_QUIT,
+    HUD_GROUP = 0x7100           /* + n: select control group n (1..9) */
+};
+/* Click modes: the next left click on the world picks the point or ship for an order. */
+typedef enum { CLICK_NONE, CLICK_RECON, CLICK_SPLIT } click_mode;
+
 typedef struct {
     int show_captain, show_controls, show_fleet;
     int player;                /* local player: whose reports and fleet are shown */
@@ -25,6 +34,10 @@ typedef struct {
     int click;                 /* a left click waiting to be handled this frame */
     float click_x, click_y;
     float controls_bottom;     /* where the controls toolbar ended, for the panel below it */
+    /* Game state the buttons show, set by the caller each frame. */
+    int paused, time_scale, online, queue_on, click_mode;
+    unsigned groups;           /* bit n: control group n holds ships */
+    int confirm_quit;
     int rect_count;            /* last frame's UI boxes, for hud_over */
     float rects[HUD_MAX_RECTS][4];
 } hud;
