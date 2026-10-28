@@ -76,6 +76,8 @@ python3 -I tools/preview.py assets/files MODEL.pingu out.png [GUN.pingu]
   drydock repairs, reinforcement waves, AI waves; `--trace N` prints the battle state.
 - Fleet command (8b): command stream (replayable), flagships (L), officers, fleet bar
   (F2) with damage thumbnails, real-profile cross-section, dive/torpedo bombers.
+- Tutorial (9): eight lessons from the main menu (`tutorial.c`, scenarios in main.c),
+  steps complete when the player does them; `test_tutorial` walks them without a window.
 - Submarines: surface / periscope / deep with a battery, deck guns; depth charges only
   on destroyers and escorts, short throw (notes/battle-logic.md, last section).
 
@@ -83,8 +85,9 @@ Build/run the engine:
 
 ```
 cmake -S engine -B engine/build -G Ninja && ninja -C engine/build
-engine/build/test_engine assets && python3 -I tests/test_engine_port.py
-engine/build/shrts --assets assets      # front end: skirmish, custom battle, host/join online
+engine/build/test_engine assets && engine/build/test_tutorial assets && python3 -I tests/test_engine_port.py
+engine/build/shrts --assets assets      # front end: tutorial, skirmish, custom battle, host/join online
+engine/build/shrts --assets assets --scenario tutorial1   # a tutorial lesson directly (1..8)
 engine/build/shrts --standalone         # no game files needed: own ship data, generated models
 engine/build/shrts --assets assets [--scenario m01|fleet|carriers|assault|attack|defend|custom]
 #   LMB select, RMB move (Shift queues), RMB enemy focus fire (Ctrl: secondaries only),

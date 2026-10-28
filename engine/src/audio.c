@@ -209,6 +209,11 @@ int audio_music(audio *a, const char *music_dir, const char *playlist)
     return a->music.pcm ? 0 : -1;
 }
 
+void audio_restart(audio *a)
+{
+    if (a) a->last_tick = -1;
+}
+
 void audio_update(audio *a)
 {
     if (a && a->music_looped && a->playlist_len > 1) next_track(a);

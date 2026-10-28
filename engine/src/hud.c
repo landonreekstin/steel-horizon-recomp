@@ -1,6 +1,7 @@
 /* In-battle HUD, immediate mode: each frame lays out and draws its boxes, and a
  * pending click is matched against them as they are drawn. */
 #include "hud.h"
+#include "tutorial.h"
 
 #include <SDL.h>
 #include <math.h>
@@ -11,17 +12,23 @@
 
 #define PAD 8.0f
 
-/* Icons in engine/src/icon_atlas.h, in tools/bakeicons.py order. */
-enum {
-    ICON_HOLD_FIRE, ICON_FIRE_AT_WILL, ICON_AIM, ICON_EVASIVE, ICON_STOP, ICON_CREW_PRIORITY, ICON_COUNTER_FLOOD,
-    ICON_FLOOD_MAGAZINES, ICON_STRIKE, ICON_PATROL, ICON_RECALL, ICON_FIRE, ICON_TORPEDO, ICON_WATER, ICON_WITHDRAW,
-    ICON_BRIDGE_LOST, ICON_DIVE, ICON_SURFACE, ICON_BATTERY, ICON_SPLIT_FIRE, ICON_QUEUE, ICON_FLAGSHIP, ICON_SPECIAL,
-    ICON_RECON, ICON_TORPEDO_STRIKE, ICON_DIVE_STRIKE
-};
+static void box(hud *h, float x0, float y0, float x1, float y1, const float *c);
+static int button(hud *h, float x, float y, const char *label, float r, float g, float b);
+
 
 static const float PANEL[4] = {0.04f, 0.06f, 0.08f, 0.82f};
 static const float TEXT[3] = {0.92f, 0.94f, 0.96f};
 static const float DIM[3] = {0.6f, 0.65f, 0.7f};
+
+void hud_box(hud *h, float x0, float y0, float x1, float y1, const float *c)
+{
+    box(h, x0, y0, x1, y1, c);
+}
+
+int hud_button(hud *h, float x, float y, const char *label, float r, float g, float b)
+{
+    return button(h, x, y, label, r, g, b);
+}
 
 static void box(hud *h, float x0, float y0, float x1, float y1, const float *c)
 {
@@ -167,12 +174,13 @@ static void captain_bar(hud *h, renderer *r, world *w, command_queue *q, int sw,
         float flash = pending ? 0.5f + 0.5f * sinf(t * 6) : 0;
         float x = (float)sw - ui_text_width(tab) - 3 * PAD;
         const float c[4] = {0.25f + 0.55f * flash, 0.18f + 0.2f * flash, 0.08f, 0.9f};
-        box(h, x, 10, (float)sw - 10, 10 + lh + 10, c);
-        ui_text(x + PAD, 15, tab, 1, 1, 1, 1);
-        if (clicked(h, x, 10, (float)sw - 10, 10 + lh + 10)) h->show_captain = 1;
+        float ty = h->right_top;
+        box(h, x, ty, (float)sw - 10, ty + lh + 10, c);
+        ui_text(x + PAD, ty + 5, tab, 1, 1, 1, 1);
+        if (clicked(h, x, ty, (float)sw - 10, ty + lh + 10)) h->show_captain = 1;
         return;
     }
-    float bw = 560, x0 = (float)sw - bw - 10, y = 10;
+    float bw = 560, x0 = (float)sw - bw - 10, y = h->right_top;
     int cap = h->show_fleet ? 4 : 7, shown = n < cap ? n : cap;
     float height = lh + 14 + (float)(shown ? shown : 1) * (2 * lh + 16) + (n > shown ? lh + 6 : 0);
     box(h, x0, y, x0 + bw, y + height, PANEL);
@@ -827,6 +835,13 @@ int hud_draw(hud *h, renderer *r, world *w, command_queue *q, int player, unsign
     mode_banner(w, sw);
     int key = controls_bar(h, w, selected);
     float left_bottom = shipyard_panel(h, w, q, h->controls_bottom + 8);
+    h->right_top = 10;
+    h->tut_action = 0;
+    if (h->tut) {                                   /* the lesson's panel, above the Captain's bar */
+        tut_action act;
+        h->right_top = tutorial_frame(h->tut, h, w, selected, sw, t, &act);
+        h->tut_action = act;
+    }
     captain_bar(h, r, w, q, sw, t);
     fleet_bar(h, r, w, q, selected, sw, sh, t);
     minimap(h, w, sh, left_bottom);

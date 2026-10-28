@@ -154,8 +154,8 @@ helps most at range, costs some of her own fire). Original list:
   lockstep over the network (the sim is already fixed-tick and seeded), lobby,
   team and fleet assignment, chat, reconnect.
 
-### 9. Tutorial *(requested; last, once everything else is in place)*
-Design (2026-10-28, not started in code): lessons as scenarios `tutorial1..8` in
+### 9. Tutorial *(requested; last, once everything else is in place)* — done
+Built to this design (main menu → Tutorial; `engine/src/tutorial.c`, `tests/test_tutorial.c`): lessons as scenarios `tutorial1..8` in
 main.c's setup_scenario (fog off), a `tutorial.c` step machine fed every issued command
 (hook in main.c `issue()`) plus world/HUD state; a panel top right (the Captain's bar
 moves below it via a hud y offset) showing the step text, its icon and key, Skip step /

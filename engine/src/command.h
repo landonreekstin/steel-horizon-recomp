@@ -37,6 +37,9 @@ int cmd_has_ship(const command *c, int i);
 int cmd_ships(const world *w, const command *c, int *ids);
 /* Applies one command. Orders for ships the player doesn't own are ignored. */
 void world_apply(world *w, const command *c);
+/* Watches every command applied (the tutorial); must not change the world. */
+extern void (*world_apply_observer)(const world *w, const command *c, void *ud);
+extern void *world_apply_observer_data;
 
 /* A small FIFO of commands waiting for their tick. */
 #define CMD_QUEUE 256

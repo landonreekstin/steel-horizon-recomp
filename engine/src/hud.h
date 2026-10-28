@@ -8,6 +8,14 @@
 
 #define HUD_MAX_RECTS 64
 
+/* Icons in engine/src/icon_atlas.h, in tools/bakeicons.py order. */
+enum {
+    ICON_HOLD_FIRE, ICON_FIRE_AT_WILL, ICON_AIM, ICON_EVASIVE, ICON_STOP, ICON_CREW_PRIORITY, ICON_COUNTER_FLOOD,
+    ICON_FLOOD_MAGAZINES, ICON_STRIKE, ICON_PATROL, ICON_RECALL, ICON_FIRE, ICON_TORPEDO, ICON_WATER, ICON_WITHDRAW,
+    ICON_BRIDGE_LOST, ICON_DIVE, ICON_SURFACE, ICON_BATTERY, ICON_SPLIT_FIRE, ICON_QUEUE, ICON_FLAGSHIP, ICON_SPECIAL,
+    ICON_RECON, ICON_TORPEDO_STRIKE, ICON_DIVE_STRIKE
+};
+
 /* What a HUD button can return besides an SDL keycode: actions with no single key. */
 enum {
     HUD_PAUSE = 0x7000, HUD_SLOWER, HUD_FASTER, HUD_QUEUE, HUD_SPLIT, HUD_RECON, HUD_SPECIAL,
@@ -17,7 +25,7 @@ enum {
 /* Click modes: the next left click on the world picks the point or ship for an order. */
 typedef enum { CLICK_NONE, CLICK_RECON, CLICK_SPLIT, CLICK_TURRET, CLICK_STRIKE } click_mode;
 
-typedef struct {
+typedef struct hud_s {
     int show_captain, show_controls, show_fleet;
     int player;                /* local player: whose reports and fleet are shown */
     int focus;                 /* set to a ship index when a fleet card is double-clicked */
@@ -41,6 +49,9 @@ typedef struct {
     int paused, time_scale, online, queue_on, click_mode;
     unsigned groups;           /* bit n: control group n holds ships */
     int confirm_quit;
+    struct tutorial_s *tut;    /* a running tutorial lesson, or NULL */
+    int tut_action;            /* tut_action the tutorial panel asked for this frame */
+    float right_top;           /* where the Captain's bar starts (below the tutorial panel) */
     int rect_count;            /* last frame's UI boxes, for hud_over */
     float rects[HUD_MAX_RECTS][4];
 } hud;
@@ -49,6 +60,9 @@ typedef struct {
  * (or dismissed) directly; a toolbar button returns its key (SDL keycode) for the
  * caller to act on as if pressed. Returns 0 otherwise. */
 int hud_draw(hud *h, renderer *r, world *w, command_queue *q, int player, unsigned char *selected, int sw, int sh, float t);
+/* A panel box / labelled button that counts as HUD for clicks (for the tutorial panel). */
+void hud_box(hud *h, float x0, float y0, float x1, float y1, const float *c);
+int hud_button(hud *h, float x, float y, const char *label, float r, float g, float b);
 /* Queues a command for the next tick. */
 void hud_issue(command_queue *q, const world *w, const command *c);
 /* Screen point on the minimap -> world (x, z); 0 if not on it. */

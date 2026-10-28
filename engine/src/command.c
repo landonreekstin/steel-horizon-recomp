@@ -28,9 +28,13 @@ static int player_side(const world *w, int player)
     return -1;
 }
 
+void (*world_apply_observer)(const world *w, const command *c, void *ud);
+void *world_apply_observer_data;
+
 void world_apply(world *w, const command *c)
 {
     int ids[MAX_SHIPS], n = cmd_ships(w, c, ids);
+    if (world_apply_observer) world_apply_observer(w, c, world_apply_observer_data);
     switch ((cmd_kind)c->kind) {
     case CMD_MOVE: order_move(w, ids, n, c->x, c->z, c->flag); break;
     case CMD_STOP: order_stop(w, ids, n); break;

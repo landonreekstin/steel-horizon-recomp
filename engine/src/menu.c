@@ -1,6 +1,7 @@
 /* Front end: main menu, skirmish list, custom-battle fleet picker, host and join
  * screens, and the online lobby. Immediate-mode UI over a slowly orbiting ocean. */
 #include "menu.h"
+#include "tutorial.h"
 
 #include <SDL.h>
 #include <math.h>
@@ -160,7 +161,7 @@ void menu_defaults(menu_config *c)
 
 menu_result menu_run(SDL_Window *win, renderer *r, const class_table *ct, menu_config *cfg)
 {
-    enum { MAIN, SKIRMISH, CUSTOM, HOST, JOIN } screen = MAIN;
+    enum { MAIN, SKIRMISH, CUSTOM, HOST, JOIN, TUTORIAL } screen = MAIN;
     if (getenv("SHRTS_MENU_SCREEN")) screen = atoi(getenv("SHRTS_MENU_SCREEN"));
     ui_in in = {0};
     SDL_StartTextInput();
@@ -171,16 +172,32 @@ menu_result menu_run(SDL_Window *win, renderer *r, const class_table *ct, menu_c
         switch (screen) {
         case MAIN: {
             title((float)sw, "STEEL HORIZON  -  NAVAL COMMAND", "a real-time naval battle game on the 1940s seas");
-            ui_rect(cx - bw / 2 - 20, 130, cx + bw / 2 + 20, 485, BG[0], BG[1], BG[2], BG[3]);
+            ui_rect(cx - bw / 2 - 20, 130, cx + bw / 2 + 20, 530, BG[0], BG[1], BG[2], BG[3]);
             ui_text(cx - bw / 2, 145, "Admiral's name", 0.7f, 0.75f, 0.8f, 1);
             field(&in, cx - bw / 2, 165, bw, cfg->name, sizeof cfg->name);
-            if (btn(&in, cx - bw / 2, 215, bw, "Skirmish", 1)) screen = SKIRMISH;
-            if (btn(&in, cx - bw / 2, 260, bw, "Custom battle", 1)) screen = CUSTOM;
-            if (btn(&in, cx - bw / 2, 305, bw, "Host an online game", 1)) screen = HOST;
-            if (btn(&in, cx - bw / 2, 350, bw, "Join an online game", 1)) screen = JOIN;
-            if (btn(&in, cx - bw / 2, 395, bw, cfg->generated ? "Ship models: generated" : "Ship models: original", 1))
+            if (btn(&in, cx - bw / 2, 215, bw, "Tutorial", 1)) screen = TUTORIAL;
+            if (btn(&in, cx - bw / 2, 260, bw, "Skirmish", 1)) screen = SKIRMISH;
+            if (btn(&in, cx - bw / 2, 305, bw, "Custom battle", 1)) screen = CUSTOM;
+            if (btn(&in, cx - bw / 2, 350, bw, "Host an online game", 1)) screen = HOST;
+            if (btn(&in, cx - bw / 2, 395, bw, "Join an online game", 1)) screen = JOIN;
+            if (btn(&in, cx - bw / 2, 440, bw, cfg->generated ? "Ship models: generated" : "Ship models: original", 1))
                 cfg->generated = !cfg->generated;
-            if (btn(&in, cx - bw / 2, 425, bw, "Quit", 1)) return MENU_QUIT;
+            if (btn(&in, cx - bw / 2, 470, bw, "Quit", 1)) return MENU_QUIT;
+            break;
+        }
+        case TUTORIAL: {
+            title((float)sw, "TUTORIAL", "eight short lessons; each one leads on to the next");
+            float w2 = 520;
+            ui_rect(cx - w2 / 2 - 20, 120, cx + w2 / 2 + 20, 140 + TUT_LESSONS * 46.0f + 70, BG[0], BG[1], BG[2], BG[3]);
+            for (int k = 0; k < TUT_LESSONS; k++) {
+                char lab[64];
+                snprintf(lab, sizeof lab, "%d. %s", k + 1, tutorial_title(k));
+                if (btn(&in, cx - w2 / 2, 135 + (float)k * 46, w2, lab, 1)) {
+                    snprintf(cfg->scenario, sizeof cfg->scenario, "tutorial%d", k + 1);
+                    return MENU_PLAY;
+                }
+            }
+            if (btn(&in, cx - 90, 140 + TUT_LESSONS * 46.0f + 10, 180, "Back", 1)) screen = MAIN;
             break;
         }
         case SKIRMISH: {

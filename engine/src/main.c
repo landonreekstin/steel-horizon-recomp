@@ -29,6 +29,7 @@
 #include "math3d.h"
 #include "render.h"
 #include "sim.h"
+#include "tutorial.h"
 
 typedef struct {
     world w;
@@ -92,10 +93,121 @@ static int yard(game *g, const char *nation, int side, float x, float z, float h
  * four US battleships in a 2x2 box 600 units apart against four German destroyers.
  * "fleet": a mixed US task force against a Japanese one, with torpedo boats and a
  * submarine on each side (design, not from the original). */
+/* A target that neither moves on its own nor shoots (tutorial lessons). */
+static void passive(game *g, int id)
+{
+    if (id < 0) return;
+    g->w.ships[id].ai = 0;
+    g->w.ships[id].hold_fire = 1;
+}
+
+/* The tutorial's lessons (tutorial.c holds their steps). Small, quiet setups: the
+ * player's ships near the origin heading north (+z), the camera on them. */
+static void tutorial_observe(const world *w, const command *c, void *ud)
+{
+    (void)w;
+    tutorial_command(ud, c);
+}
+
+static int tutorial_setup(game *g, int lesson)
+{
+    int err = 0, id;
+    g->cam.target = v3(0, 0, 0);
+    switch (lesson) {
+    case 0:                                      /* command basics: two destroyers, an enemy far off */
+        err |= spawn(g, "AmericanDestroyer", 0, 0, 0, 0) < 0;
+        err |= spawn(g, "AmericanDestroyer", 0, 300, -200, 0) < 0;
+        passive(g, id = spawn(g, "JapaneseDestroyer", 1, 0, 40000, PI_F));
+        err |= id < 0;
+        break;
+    case 1:                                      /* gunnery: a battleship and a destroyer target */
+        err |= spawn(g, "AmericanBattleship", 0, 0, 0, 0) < 0;
+        passive(g, id = spawn(g, "JapaneseDestroyer", 1, 1500, 2600, PI_F / 2));
+        err |= id < 0;
+        if (id >= 0) order_move(&g->w, &id, 1, 30000, 2600, 0);
+        g->cam.target = v3(700, 0, 1300);
+        break;
+    case 2: {                                    /* damage control: a cruiser on fire, flooding, listing */
+        err |= (id = spawn(g, "AmericanCruiser", 0, 0, 0, 0)) < 0;
+        passive(g, spawn(g, "JapaneseDestroyer", 1, 0, 40000, PI_F));
+        if (id < 0) break;
+        ship *s = &g->w.ships[id];
+        /* A torpedo amidships (flooding, a list) and three fires, none by a magazine:
+         * enough to need attention, not enough to sink her before the player acts. */
+        damage_hit(&g->w, id, HIT_TORPEDO, s->x + 30, s->z, 120, 0, 0);
+        int lit = 0;
+        for (int k = 1; k < s->cls->comp_count - 1 && lit < 3; k += 2) {
+            int mag = 0;
+            for (int m = 0; m < s->cls->module_count; m++)
+                mag |= s->cls->modules[m].kind == MOD_MAGAZINE && (s->cls->modules[m].comp == k ||
+                       s->cls->modules[m].comp == k - 1 || s->cls->modules[m].comp == k + 1);
+            if (!mag) { s->comp[k].fire = 0.3f; lit++; }
+        }
+        break;
+    }
+    case 3:                                      /* torpedoes: two PT boats run in */
+        err |= spawn(g, "AmericanBattleship", 0, 0, 0, 0) < 0;
+        err |= spawn(g, "JapaneseTorpedoBoat", 1, -600, 4500, PI_F) < 0;
+        err |= spawn(g, "JapaneseTorpedoBoat", 1, 600, 4700, PI_F) < 0;
+        g->cam.target = v3(0, 0, 1500);
+        break;
+    case 4:                                      /* carriers: strike a cruiser */
+        err |= spawn(g, "AmericanAircraftCarrier", 0, 0, 0, 0) < 0;
+        err |= spawn(g, "AmericanDestroyer", 0, 500, 300, 0) < 0;
+        passive(g, id = spawn(g, "JapaneseCruiser", 1, 1000, 8000, PI_F / 2));
+        err |= id < 0;
+        break;
+    case 5:                                      /* submarines: a target ahead, an escort later */
+        err |= spawn(g, "AmericanSubmarine", 0, 0, 0, 0) < 0;
+        passive(g, id = spawn(g, "JapaneseDestroyer", 1, 0, 2600, PI_F / 2));
+        err |= id < 0;
+        err |= spawn(g, "JapaneseDestroyer", 1, 0, 9000, PI_F) < 0;   /* the escort, AI: hunts her */
+        break;
+    case 6:                                      /* fleet command: a squadron each */
+        err |= spawn(g, "AmericanBattleship", 0, 0, 0, 0) < 0;
+        err |= spawn(g, "AmericanCruiser", 0, 450, -150, 0) < 0;
+        err |= spawn(g, "AmericanDestroyer", 0, -450, 300, 0) < 0;
+        err |= spawn(g, "AmericanDestroyer", 0, 900, 300, 0) < 0;
+        err |= spawn(g, "JapaneseCruiser", 1, 0, 9000, PI_F) < 0;
+        err |= spawn(g, "JapaneseDestroyer", 1, 450, 9200, PI_F) < 0;
+        err |= spawn(g, "JapaneseDestroyer", 1, -450, 9200, PI_F) < 0;
+        for (int i = 0; i < g->w.count; i++)           /* the enemy waits until the lesson's last step */
+            if (g->w.ships[i].side == 1) passive(g, i);
+        g->w.officer_count[0] = 2;
+        g->w.officer_kind_of[0][0] = OFF_GUNNERY;
+        g->w.officer_kind_of[0][1] = OFF_DAMAGE_CONTROL;
+        g->w.officer_ship[0][0] = g->w.officer_ship[0][1] = -1;
+        break;
+    case 7: {                                    /* shipyards: build, repair, defend */
+        static const char *opts[] = {"AmericanDestroyer", "AmericanCruiser", "AmericanTorpedoBoat"};
+        err |= yard(g, "American", 0, 0, -2500, 0, opts, 3);
+        g->w.sides[0].budget = 900;
+        err |= (id = spawn(g, "AmericanCruiser", 0, 1800, -800, 0)) < 0;
+        if (id >= 0) {                           /* battered, but not burning: a drydock job */
+            ship *s = &g->w.ships[id];
+            for (int k = 0; k < s->cls->comp_count; k++) s->comp[k].structure = k % 2 ? 0.45f : 0.7f;
+            damage_hit(&g->w, id, HIT_NEAR_MISS, s->x, s->z, 1, 0, 0);   /* recomputes her condition */
+        }
+        err |= spawn(g, "JapaneseDestroyer", 1, -400, 16000, PI_F) < 0;
+        err |= spawn(g, "JapaneseDestroyer", 1, 400, 16200, PI_F) < 0;
+        g->cam.target = v3(600, 0, -1800);
+        break;
+    }
+    default: return -1;
+    }
+    g->w.fog = 0;
+    g->cam.yaw = 0.55f;
+    g->cam.pitch = 0.42f;
+    g->cam.dist = lesson == 1 || lesson == 4 ? 4500 : 2300;
+    g->time_scale = 1;
+    return err;
+}
+
 static int setup_scenario(game *g, const char *name)
 {
     world_init(&g->w);
     int err = 0;
+    if (!strncmp(name, "tutorial", 8)) return tutorial_setup(g, atoi(name + 8) - 1);
     if (!strcmp(name, "m01")) {
         const float bbh = 2.32f, ddh = -1.68f;      /* headings read from the original */
         err |= spawn(g, "AmericanBattleship", 0, 5268, 6191, bbh) < 0;
@@ -967,6 +1079,13 @@ int main(int argc, char **argv)
     world_seed(&g.w, seed);
     g.w.fog = !no_fog || g.net;                          /* online games always have fog */
     g.w.no_commander = no_cmdr;
+    static tutorial tut = {.lesson = -1};
+    if (!strncmp(scenario, "tutorial", 8)) {           /* a lesson: no fog, the step panel */
+        g.w.fog = 0;
+        tutorial_begin(&tut, atoi(scenario + 8) - 1, g.player, g.cam.target.x, g.cam.target.z);
+        world_apply_observer = tutorial_observe;
+        world_apply_observer_data = &tut;
+    }
     for (int i = 0; ai_both && i < g.w.count; i++) g.w.ships[i].ai = 1;
     if (g.net) assign_players(&g, &ng);
 
@@ -1091,6 +1210,7 @@ int main(int argc, char **argv)
     float mx_w, mz_w;
     static hud hd = {.show_captain = 1, .show_controls = 1, .show_fleet = 1, .focus = -1, .pending_officer = -1,
                      .last_card = -1, .hover = -1};
+    if (tut.lesson >= 0) hd.tut = &tut;
     if (shot) {                                     /* deterministic picture for checking */
         /* Select the player's ships and steam them halfway to the enemy. */
         int ids[MAX_SHIPS], n = 0, ne = 0;
@@ -1362,6 +1482,34 @@ int main(int argc, char **argv)
         if (hd.focus >= 0 && hd.focus < g.w.count) {     /* double-clicked a fleet card */
             g.cam.target = v3(g.w.ships[hd.focus].x, 0, g.w.ships[hd.focus].z);
             hd.focus = -1;
+        }
+        if (tut.lesson >= 0) {
+            if (hd.tut_action == TUT_QUIT) running = 0;
+            else if (hd.tut_action == TUT_NEXT && tut.lesson + 1 < TUT_LESSONS) {
+                /* The next lesson, in place: a new world, its ships' models, a fresh HUD. */
+                char name[16];
+                int next = tut.lesson + 1;
+                snprintf(name, sizeof name, "tutorial%d", next + 1);
+                memset(g.selected, 0, sizeof g.selected);
+                memset(g.groups, 0, sizeof g.groups);
+                g.click = CLICK_NONE;
+                g.queue_moves = 0;
+                g.paused = 0;
+                g.time_scale = 1;
+                if (setup_scenario(&g, name)) { fprintf(stderr, "can't set up %s\n", name); running = 0; }
+                world_seed(&g.w, seed);
+                g.w.fog = 0;
+                for (int i = 0; i < g.w.count; i++) renderer_load_class(r, g.w.ships[i].cls);
+                audio_restart(g.snd);
+                acc = 0;
+                tutorial_begin(&tut, next, g.player, g.cam.target.x, g.cam.target.z);
+                hd.pending_officer = hd.hover = -1;
+                hd.confirm_quit = 0;
+            }
+            /* Fleet command: the enemy squadron waits until the lesson's last step. */
+            if (tut.lesson == 6 && tut.step >= 5)
+                for (int i = 0; i < g.w.count; i++)
+                    if (g.w.ships[i].side == 1 && !g.w.ships[i].ai) { g.w.ships[i].ai = 1; g.w.ships[i].hold_fire = 0; }
         }
         if (key == HUD_QUIT) running = 0;
         else if (key) hud_key(&g, key, &hd);

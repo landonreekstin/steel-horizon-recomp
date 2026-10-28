@@ -19,7 +19,7 @@ add_library(shcore STATIC src/asset.c src/data.c src/json.c src/sim.c src/combat
 target_compile_options(shcore PRIVATE -Wall -Wextra)
 target_link_libraries(shcore PUBLIC m)
 
-add_executable(shrts src/main.c src/render.c src/gl.c src/hud.c src/audio.c src/menu.c)
+add_executable(shrts src/main.c src/render.c src/gl.c src/hud.c src/audio.c src/menu.c src/tutorial.c)
 target_compile_options(shrts PRIVATE -Wall -Wextra)
 target_link_libraries(shrts PRIVATE shcore PkgConfig::SDL2)
 
@@ -28,3 +28,7 @@ add_executable(test_engine tests/test_engine.c)
 target_include_directories(test_engine PRIVATE src)
 target_link_libraries(test_engine PRIVATE shcore)
 add_test(NAME engine COMMAND test_engine ${CMAKE_SOURCE_DIR}/../assets)
+add_executable(test_tutorial tests/test_tutorial.c src/tutorial.c)
+target_include_directories(test_tutorial PRIVATE src)
+target_link_libraries(test_tutorial PRIVATE shcore)
+add_test(NAME tutorial COMMAND test_tutorial ${CMAKE_SOURCE_DIR}/../assets)
