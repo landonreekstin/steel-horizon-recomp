@@ -37,7 +37,8 @@ Full plan: `~/.claude/plans/i-want-to-recompile-snoopy-pearl.md`. Status per pha
   step toward not needing the ISO.
 - Standalone mode (`--standalone`, or automatic without game data): our own ship table
   of 26 historical classes, generated models and aircraft; the game runs with no game
-  files at all. Each standalone class now has a "plan" read off published profile drawings (turret, tower, funnel, mast, aft-superstructure and island positions; approximate), and genship.c builds her from it. Still to do: our own sounds.
+  files at all. Each standalone class now has a "plan" read off published profile drawings (turret, tower, funnel, mast, aft-superstructure and island positions; approximate), and genship.c builds her from it. Sounds without the game's bank: `synth.c` synthesises every
+  effect the battle uses (first pass, not tuned by ear); no crew voices.
 
 ## Next
 
@@ -67,9 +68,9 @@ with its own state, and shells/bombs/torpedoes resolved against that layout:
 - Model swaps (01/02/03) follow overall condition; a ship sinks from lost buoyancy
   or capsizes from list, not from an HP counter.
 
-### 7b. Command and crew *(requested)* — first pass done (above); still open: an
-accuracy readout while choosing a target (hovering an enemy), per-turret aim, and
-withdraw/evade tuning. Original list:
+### 7b. Command and crew *(requested)* — first pass done (above), hover accuracy readout
+done; per-turret aim done (right-click a gun on the cross-section, then click an enemy;
+a battery order or Fire at will puts it back); still open: withdraw/evade tuning. Original list:
 - **Accuracy metric** per firing ship and target: gun, crew quality, range, the speed
   difference between the two ships (and own turning), fire-control damage; shown when
   targeting, since you don't aim shells yourself.

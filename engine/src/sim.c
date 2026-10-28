@@ -49,7 +49,7 @@ int world_spawn(world *w, const ship_class *cls, int side, float x, float z, flo
     damage_init(s);
     for (int m = 0; m < cls->mount_count; m++) {
         s->turrets[m].yaw = cls->mounts[m].arc_center;
-        s->turrets[m].target = -1;
+        s->turrets[m].target = s->turrets[m].ordered = -1;
         s->turrets[m].ammo = ammo_capacity(cls, m);
     }
     int id = w->count++;

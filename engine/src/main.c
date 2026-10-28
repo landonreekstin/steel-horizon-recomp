@@ -45,7 +45,8 @@ typedef struct {
     custom_spec custom;        /* the "custom" scenario's fleets */
     /* Online chat: the line being typed (Y opens it), and recent lines on screen. */
     int typing;
-    click_mode click;          /* recon / split fire: the next left click picks the point or ship */
+    click_mode click;          /* recon / split fire / one turret: the next left click picks the point or ship */
+    int pick_ship, pick_mount; /* CLICK_TURRET: whose mount */
     int queue_moves;           /* the toolbar's Queue toggle: moves append like Shift */
     char chat_in[80];
     char chat_log[6][96];
@@ -639,7 +640,15 @@ static void pick(game *g, int x, int y, int w, int h)
 {
     float px, pz;
     if (g->click == CLICK_RECON && mouse_to_sea(g, x, y, w, h, &px, &pz)) recon_order(g, px, pz);
-    else if (g->click == CLICK_SPLIT) {
+    else if (g->click == CLICK_TURRET) {
+        int enemy = enemy_at(g, x, y, w, h);
+        command c = sel_cmd(g, CMD_TURRET_TARGET);
+        memset(c.ships, 0, sizeof c.ships);
+        cmd_set_ship(&c, g->pick_ship);
+        c.a = g->pick_mount;
+        c.b = enemy;                                /* -1 (not an enemy): back under the battery */
+        issue(g, &c);
+    } else if (g->click == CLICK_SPLIT) {
         int enemy = enemy_at(g, x, y, w, h);
         if (enemy < 0) return;                      /* keep waiting for an enemy */
         command c = sel_cmd(g, CMD_ATTACK);
@@ -1155,6 +1164,11 @@ int main(int argc, char **argv)
                     pick(&g, e.button.x, e.button.y, w, h);   /* the toolbar asked for a point or ship */
                 } else if (e.button.button == SDL_BUTTON_RIGHT && g.click) {
                     g.click = CLICK_NONE;                    /* RMB cancels a pick */
+                } else if (e.button.button == SDL_BUTTON_RIGHT && hud_over(&hd, (float)e.button.x, (float)e.button.y) &&
+                           !hud_minimap_point(&hd, (float)e.button.x, (float)e.button.y, &mx_w, &mz_w)) {
+                    hd.rclick = 1;                           /* the HUD's (aim a turret from the panel) */
+                    hd.rclick_x = (float)e.button.x;
+                    hd.rclick_y = (float)e.button.y;
                 } else if (e.button.button == SDL_BUTTON_LEFT) {
                     g.box.x0 = g.box.x1 = e.button.x;
                     g.box.y0 = g.box.y1 = e.button.y;
@@ -1273,11 +1287,19 @@ int main(int argc, char **argv)
         for (int gi = 1; gi <= 9; gi++)
             for (int i = 0; i < g.w.count; i++)
                 if (g.groups[gi][i] && g.w.ships[i].alive) { hd.groups |= 1u << gi; break; }
+        hd.aim_mount = -1;
         int key = hud_draw(&hd, r, &g.w, &g.q, g.player, g.selected, w, h, (float)sim_time);
+        if (hd.aim_mount >= 0) {                         /* a turret right-clicked on the panel */
+            g.click = CLICK_TURRET;
+            g.pick_ship = hd.aim_ship;
+            g.pick_mount = hd.aim_mount;
+        }
         if (g.click) {                                   /* what the pending pick wants */
             int mx, my;
             SDL_GetMouseState(&mx, &my);
-            const char *what = g.click == CLICK_RECON ? "Click the sea for the recon plane" : "Click an enemy for the secondaries";
+            const char *what = g.click == CLICK_RECON ? "Click the sea for the recon plane"
+                             : g.click == CLICK_TURRET ? "Click an enemy for this turret (own ship: back to its battery)"
+                             : "Click an enemy for the secondaries";
             ui_rect((float)mx + 14, (float)my + 14, (float)mx + 22 + ui_text_width(what), (float)my + 18 + 2 * ui_line_height(),
                     0.03f, 0.04f, 0.05f, 0.9f);
             ui_text((float)mx + 18, (float)my + 16, what, 1, 0.85f, 0.5f, 1);

@@ -236,10 +236,16 @@ int can_engage(const world *w, int i, int m, int j)
     return fabsf(wrap_angle(rel - mt->arc_center)) <= mt->arc_half;
 }
 
+/* The target the player gave this mount: its own, else its battery's; -1 none. */
+static int mount_order(const ship *s, int m)
+{
+    return s->turrets[m].ordered >= 0 ? s->turrets[m].ordered : s->order_target[s->cls->mounts[m].bat];
+}
+
 static int pick_target(const world *w, int i, int m)
 {
     const ship *s = &w->ships[i];
-    int ordered = s->order_target[s->cls->mounts[m].bat];
+    int ordered = mount_order(s, m);
     if (ordered >= 0 && can_engage(w, i, m, ordered)) return ordered;
     int best = -1;
     float bd = INFINITY;
@@ -354,7 +360,7 @@ static void fire_control(world *w, int i)
         turret *tu = &s->turrets[m];
         tu->reload = fmaxf(0, tu->reload - SIM_DT);
         tu->retarget -= SIM_DT;
-        int ordered = s->order_target[mt->bat];
+        int ordered = mount_order(s, m);
         if (s->hold_fire) tu->target = -1;
         else if (tu->target < 0 || tu->retarget <= 0 || !can_engage(w, i, m, tu->target) ||
                  (ordered >= 0 && tu->target != ordered && can_engage(w, i, m, ordered))) {
@@ -499,7 +505,21 @@ void order_attack(world *w, const int *ids, int n, int target, unsigned mask)
 {
     for (int i = 0; i < n; i++)
         for (int b = 0; b < BATTERIES; b++)
-            if (mask & (1u << b)) w->ships[ids[i]].order_target[b] = target;
+            if (mask & (1u << b)) {
+                ship *s = &w->ships[ids[i]];
+                s->order_target[b] = target;
+                for (int m = 0; m < s->cls->mount_count; m++)   /* a battery order overrides single mounts' */
+                    if (s->cls->mounts[m].bat == (battery)b) s->turrets[m].ordered = -1;
+            }
+}
+
+void order_turret(world *w, int ship_id, int mount, int target)
+{
+    if (ship_id < 0 || ship_id >= w->count || target < -1 || target >= w->count) return;
+    ship *s = &w->ships[ship_id];
+    if (mount < 0 || mount >= s->cls->mount_count) return;
+    s->turrets[mount].ordered = target;
+    s->turrets[mount].retarget = 0;                 /* look again now */
 }
 
 void order_aim(world *w, const int *ids, int n, int kind, unsigned mask)

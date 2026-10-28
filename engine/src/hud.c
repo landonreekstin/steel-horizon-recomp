@@ -400,6 +400,17 @@ static void compartment_tip(hud *h, renderer *r, const world *w, command_queue *
     int nl = 0;
     snprintf(lines[nl++], 96, "Compartment %d of %d%s  (click: damage control here first)", k + 1, c->comp_count,
              cp->priority ? "  [PRIORITY]" : "");
+    int gun = -1;                                   /* the gun mount nearest the cursor, for aiming */
+    float gd = INFINITY;
+    for (int m = 0; m < c->module_count; m++) {
+        const module_def *d = &c->modules[m];
+        if (d->comp != k || d->kind != MOD_TURRET || c->weapons[c->mounts[d->mount].weapon].ammo != AMMO_SHELL) continue;
+        float dz = fabsf(c->mounts[d->mount].pos[2] - z);
+        if (dz < gd) { gd = dz; gun = d->mount; }
+    }
+    if (gun >= 0 && s->owner == h->player)
+        snprintf(lines[nl++], 96, "  right-click: aim %s at a ship of your choice",
+                 c->mounts[gun].name[0] ? c->mounts[gun].name : "this mount");
     snprintf(lines[nl++], 96, "structure %.0f%%  water P %.0f%% S %.0f%%%s  fire %.0f%%  teams %d", 100 * cp->structure,
              100 * cp->flood[0], 100 * cp->flood[1], cp->leak[0] + cp->leak[1] > 0 ? " (leaking)" : "", 100 * cp->fire, cp->crews);
     for (int m = 0; m < c->module_count && nl < 7; m++) {
@@ -407,10 +418,18 @@ static void compartment_tip(hud *h, renderer *r, const world *w, command_queue *
         if (d->comp != k) continue;
         if (d->kind == MOD_MAGAZINE)
             snprintf(lines[nl++], 96, "  magazine%s", cp->mag_flooded ? " (flooded)" : cp->fire > 0 ? " - FIRE NEARBY" : "");
-        else if (d->kind == MOD_TURRET)
-            snprintf(lines[nl++], 96, "  %s %s %.0f%%%s  ammo %d", c->mounts[d->mount].name[0] ? c->mounts[d->mount].name : "mount",
+        else if (d->kind == MOD_TURRET) {
+            char own[48] = "";
+            int o = s->turrets[d->mount].ordered;
+            if (o >= 0 && o < w->count && w->ships[o].alive) {
+                char who[40];
+                ship_label(w, o, who, sizeof who);
+                snprintf(own, sizeof own, "  on %s", who);
+            }
+            snprintf(lines[nl++], 96, "  %s %s %.0f%%%s  ammo %d%s", c->mounts[d->mount].name[0] ? c->mounts[d->mount].name : "mount",
                      c->weapons[c->mounts[d->mount].weapon].name, 100 * s->module_hp[m], s->module_lost[m] ? " LOST" : "",
-                     s->turrets[d->mount].ammo);
+                     s->turrets[d->mount].ammo, own);
+        }
         else
             snprintf(lines[nl++], 96, "  %s %.0f%%%s", MODULE_NAME[d->kind], 100 * s->module_hp[m], s->module_lost[m] ? " LOST" : "");
     }
@@ -428,6 +447,11 @@ static void compartment_tip(hud *h, renderer *r, const world *w, command_queue *
         cmd_set_ship(&cmd, i);
         hud_issue(q, w, &cmd);
         h->click = 0;
+    }
+    if (h->rclick && gun >= 0 && s->owner == h->player) {
+        h->aim_ship = i;
+        h->aim_mount = gun;
+        h->rclick = 0;
     }
 }
 
@@ -815,6 +839,7 @@ int hud_draw(hud *h, renderer *r, world *w, command_queue *q, int player, unsign
         ui_text((float)sw / 2 - tw / 2, 67, msg, 1, 0.85f, 0.4f, 1);
     }
     h->click = 0;              /* a click that hit nothing here belongs to the world */
+    h->rclick = 0;
     ui_flush(r, sw, sh);
     return key;
 }

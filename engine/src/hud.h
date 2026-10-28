@@ -15,7 +15,7 @@ enum {
     HUD_GROUP = 0x7100           /* + n: select control group n (1..9) */
 };
 /* Click modes: the next left click on the world picks the point or ship for an order. */
-typedef enum { CLICK_NONE, CLICK_RECON, CLICK_SPLIT } click_mode;
+typedef enum { CLICK_NONE, CLICK_RECON, CLICK_SPLIT, CLICK_TURRET } click_mode;
 
 typedef struct {
     int show_captain, show_controls, show_fleet;
@@ -33,6 +33,9 @@ typedef struct {
     float mouse_x, mouse_y;
     int click;                 /* a left click waiting to be handled this frame */
     float click_x, click_y;
+    int rclick;                /* a right click on the HUD, waiting likewise */
+    float rclick_x, rclick_y;
+    int aim_ship, aim_mount;   /* set (aim_mount >= 0) when a turret was right-clicked on the panel */
     float controls_bottom;     /* where the controls toolbar ended, for the panel below it */
     /* Game state the buttons show, set by the caller each frame. */
     int paused, time_scale, online, queue_on, click_mode;

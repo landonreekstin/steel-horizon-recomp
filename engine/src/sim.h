@@ -137,6 +137,7 @@ typedef struct {
     float reload;              /* seconds until loaded */
     float retarget;            /* seconds until the next target search */
     int target;                /* ship index, -1 none */
+    int ordered;               /* this mount's own target from the player, -1 the battery's */
     int ammo;                  /* rounds (torpedo tubes: spreads) left in the magazine */
 } turret;
 
@@ -274,6 +275,8 @@ void order_move(world *w, const int *ids, int n, float x, float z, int append);
 void order_stop(world *w, const int *ids, int n);
 /* Focus the given batteries (bit mask of 1 << battery) on target; -1 = fire at will. */
 void order_attack(world *w, const int *ids, int n, int target, unsigned mask);
+/* One mount's own target (-1: back to the battery's), over its battery's order. */
+void order_turret(world *w, int ship, int mount, int target);
 void order_hold_fire(world *w, const int *ids, int n, int hold);
 
 /* Original-inspired accuracy (FUN_088e94fc: range bands and hull-vs-hull counters,

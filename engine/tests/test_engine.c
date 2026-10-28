@@ -504,6 +504,27 @@ static void test_combat(const class_table *ct)
     CHECK(w.ships[0].depth == DEPTH_SHALLOW && w.ships[0].speed < 0.6f * vs && w.ships[0].battery < 1,
           "dived: %.1f vs %.1f surfaced", w.ships[0].speed, vs);
 
+    /* One turret on its own target: F1 on the second destroyer while the battery is
+     * focused on the first; a new battery order puts it back under the battery. */
+    world_init(&w);
+    world_spawn(&w, bb, 0, 0, 0, 0);
+    world_spawn(&w, dd, 1, -300, 1500, 0);
+    world_spawn(&w, dd, 1, 300, 1500, 0);
+    w.ships[1].hold_fire = w.ships[2].hold_fire = 1;
+    order_attack(&w, (int[]){0}, 1, 1, 1 << BAT_MAIN);
+    int solo = -1;
+    for (int m = 0; m < bb->mount_count; m++) if (!strcmp(bb->mounts[m].name, "F1")) solo = m;
+    order_turret(&w, 0, solo, 2);
+    run(&w, 2);
+    int others_on_1 = 1;
+    for (int m = 0; m < bb->mount_count; m++)
+        if (bb->mounts[m].bat == BAT_MAIN && m != solo && can_engage(&w, 0, m, 1)) others_on_1 &= w.ships[0].turrets[m].target == 1;
+    CHECK(solo >= 0 && w.ships[0].turrets[solo].target == 2 && others_on_1, "F1 on her own target (%d), the rest on the focus",
+          solo >= 0 ? w.ships[0].turrets[solo].target : -9);
+    order_attack(&w, (int[]){0}, 1, 1, 1 << BAT_MAIN);
+    run(&w, 2);
+    CHECK(solo >= 0 && w.ships[0].turrets[solo].ordered == -1 && w.ships[0].turrets[solo].target == 1, "battery order: F1 back with the battery");
+
     /* An AI submarine stalks a battleship at periscope depth and torpedoes her. */
     world_init(&w);
     world_spawn(&w, bb, 0, 0, 0, PI_F / 2);

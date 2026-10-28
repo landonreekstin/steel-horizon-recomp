@@ -35,6 +35,7 @@ void world_apply(world *w, const command *c)
     case CMD_MOVE: order_move(w, ids, n, c->x, c->z, c->flag); break;
     case CMD_STOP: order_stop(w, ids, n); break;
     case CMD_DEPTH: order_depth(w, ids, n, c->a); break;
+    case CMD_TURRET_TARGET: for (int k = 0; k < n; k++) order_turret(w, ids[k], c->a, c->b); break;   /* a mount, b target */
     case CMD_ATTACK:
         if (c->a >= 0 && (c->a >= w->count || w->ships[c->a].side == player_side(w, c->player))) break;
         order_attack(w, ids, n, c->a, (unsigned)c->b);
