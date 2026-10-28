@@ -88,3 +88,19 @@ data but not yet confirmed in BOOT.BIN code.
   the US voice lines' F0 is 160–300 Hz at 11.025 kHz (800–1,100 Hz at 44.1 kHz). The
   engine mixes at 44.1 kHz and resamples (audio.c).
 - Music (`sound/music/*.at3`) is ATRAC3 in RIFF; not decoded (no decoder on hand).
+
+## Music (`sound/music/musTrackN.at3`) — `tools/at3wav.py`
+
+RIFF/WAVE, format tag 0x0270 (ATRAC3), 44.1 kHz stereo, 132 kbit/s (block 0x180).
+`fact`: total samples, then the encoder delay (1979). `smpl`: one loop, start = the
+delay, end = delay + samples - 1, so each track loops whole. Ten tracks: 1–5 about
+65 s, 6–10 about 100 s. ffmpeg decodes them; `tools/at3wav.py` writes WAV plus
+`music.json` (loops, playlists) under `assets/music/` (gitignored, 145 MB).
+
+BOOT.BIN, music manager (vtable 0x89d8708, method at 0x8850848, state in a1):
+state 0 plays musTrack10; state 1 cycles a list from {1,2,3,4,1,2,3,4,5}
+(0x89ca910), state 2 from {6,7,9,10,6,7,9,10,8} (0x89ca8ec). In a campaign
+(object+0x148 == 1) a global (0x8830000-0x7150) picks a two-track sub-list:
+< 90 the first pair, 90–179 the second, >= 200 the last track alone; otherwise all
+four cycle. Which of states 1 and 2 is battle music is not traced (notes/unknowns.md);
+the engine plays 6–10 in battle, 10 on the title screen.

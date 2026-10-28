@@ -15,6 +15,11 @@ audio *audio_open_offline(const char *bank_path);
 /* Mixes the next `frames` stereo S16 frames at BANK_RATE into out. */
 void audio_render(audio *a, int16_t *out, int frames);
 void audio_close(audio *a);
+/* Music: plays the named playlist from music_dir/music.json (tools/at3wav.py), moving to
+ * the next track each time one has played through. -1 without the decoded music. */
+int audio_music(audio *a, const char *music_dir, const char *playlist);
+/* Main thread, once a frame: loads the next track when it's due. */
+void audio_update(audio *a);
 void audio_play(audio *a, const char *name, float gain, float pan);
 /* Plays sounds for the world's new events, heard from eye looking along fwd. */
 void audio_events(audio *a, const world *w, vec3 eye, vec3 fwd);

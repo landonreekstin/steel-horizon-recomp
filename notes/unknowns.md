@@ -24,3 +24,7 @@
   cruisers auto-destroy recon planes).
 - Mount-group numbers 1..9 vs .pts names (F/R/P/S) — inferred, not traced.
 - `.ker`, `.bed` (fonts), `.bnk` (sound banks), `.scc`, `.rom`, `.mvl` not looked at.
+- Music: which of the music manager's states 1 (tracks 1–5) and 2 (6–10) is the battle
+  and which the campaign map, and what the global at 0x8830000-0x7150 (thresholds 90 /
+  180 / 200) is: a campaign turn or mission number? The state comes through a virtual
+  call (vtable 0x89d8708 +0x24); callers not traced. The engine assumes 6–10 = battle.

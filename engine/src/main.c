@@ -798,7 +798,7 @@ int main(int argc, char **argv)
 {
     const char *assets = "assets", *shot = NULL, *scenario = "m01";
     unsigned long long seed = 1;
-    int mute = 0, sound = 0, scenario_given = 0, generated = 0, no_fog = 0, standalone = 0;
+    int mute = 0, no_music = 0, sound = 0, scenario_given = 0, generated = 0, no_fog = 0, standalone = 0;
     int ai_both = 0, host_port = -1, mp_players = 2, teams[MAX_PLAYERS] = {0}, teams_given = 0, bot = 0;
     long desync_at = -1;
     const char *join_addr = NULL, *player_name = "Admiral";
@@ -820,6 +820,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--name") && i + 1 < argc) player_name = argv[++i];
         else if (!strcmp(argv[i], "--bot")) bot = 1;
         else if (!strcmp(argv[i], "--mute")) mute = 1;
+        else if (!strcmp(argv[i], "--no-music")) no_music = 1;
         else if (!strcmp(argv[i], "--no-fog")) no_fog = 1;
         else if (!strcmp(argv[i], "--standalone")) standalone = 1;   /* no game files at all */
         else if (!strcmp(argv[i], "--sound")) sound = 1;   /* sound in --screenshot runs too */
@@ -883,9 +884,17 @@ int main(int argc, char **argv)
     g.custom = mc.custom;
     int menu_mode = !scenario_given && headless < 0 && !shot && !record && host_port < 0 && !join_addr;
     snprintf(path, sizeof path, "%s/files", assets);
+    char music_dir[600];
+    snprintf(music_dir, sizeof music_dir, "%s/music", assets);
     if (menu_mode) {
         if (video_init(&win, &ctx)) return 1;
         r = renderer_create(path);
+        if (!mute) {                                 /* the title track under the front end */
+            char bank[600];
+            snprintf(bank, sizeof bank, "%s/sound/banks/game.bnk", path);
+            g.snd = audio_open(bank);
+            if (!no_music) audio_music(g.snd, music_dir, "title");
+        }
         menu_result mr = menu_run(win, r, &g.classes, &mc);
         if (mr == MENU_QUIT) return 0;
         scenario = mc.scenario;
@@ -1037,7 +1046,9 @@ int main(int argc, char **argv)
 
     char bank_path[600];
     snprintf(bank_path, sizeof bank_path, "%s/sound/banks/game.bnk", path);
-    g.snd = record ? audio_open_offline(bank_path) : (shot && !sound) || mute ? NULL : audio_open(bank_path);
+    if (!g.snd) g.snd = record ? audio_open_offline(bank_path) : (shot && !sound) || mute ? NULL : audio_open(bank_path);
+    if (g.snd && !no_music && audio_music(g.snd, music_dir, "battle"))
+        printf("music: none (decode it with tools/at3wav.py)\n");
     static recorder rc;
     if (record) {
         if (rec_open(&rc, record)) return 1;
@@ -1236,6 +1247,7 @@ int main(int argc, char **argv)
             vec3 eye;
             camera_viewproj(&g.cam, w, h, &eye);
             audio_events(g.snd, &g.w, eye, v3norm(v3sub(g.cam.target, eye)));
+            audio_update(g.snd);
         }
         renderer_draw(r, &g.cam, w, h, &g.w, g.paused ? 1.0f : (float)(acc / SIM_DT),
                       g.selected, &g.box, (float)sim_time);

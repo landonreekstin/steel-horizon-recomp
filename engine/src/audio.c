@@ -5,7 +5,17 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "json.h"
+
 #define VOICES 48
+#define MUSIC_GAIN 0.32f
+#define MAX_PLAYLIST 12
+
+/* One decoded music track (tools/at3wav.py): stereo S16 at BANK_RATE, whole in memory. */
+typedef struct {
+    int16_t *pcm;
+    long frames, loop0, loop1;
+} track;
 
 typedef struct {
     const int16_t *pcm;
@@ -19,6 +29,15 @@ struct audio {
     sound_bank bank;
     voice v[VOICES];
     long last_tick;             /* events up to this tick have been played */
+    /* Music: the playing track (mixed in the callback) and the playlist the main thread
+     * moves through; when a track has looped once the next one is loaded and swapped in. */
+    track music;
+    long music_pos;
+    int music_looped;
+    float duck;                 /* smoothed effects level: the music ducks under it */
+    char music_dir[512];
+    char playlist[MAX_PLAYLIST][32];
+    int playlist_len, playlist_at;
     int played;
     unsigned rng;
 };
@@ -40,6 +59,15 @@ static void mix(void *ud, Uint8 *stream, int bytes)
             r += s * vc->gr;
             vc->pos += vc->step;
             if ((int)(vc->pos >> 16) >= vc->len) vc->pcm = NULL;
+        }
+        if (a->music.pcm) {
+            /* Duck under the effects: fast attack, slow release (about 20 ms / 1 s). */
+            float fx = fabsf(l) + fabsf(r);
+            a->duck += (fx - a->duck) * (fx > a->duck ? 0.001f : 0.00003f);
+            float g = MUSIC_GAIN / (1 + a->duck / 6000);
+            l += a->music.pcm[2 * a->music_pos] * g;
+            r += a->music.pcm[2 * a->music_pos + 1] * g;
+            if (++a->music_pos >= a->music.loop1) { a->music_pos = a->music.loop0; a->music_looped = 1; }
         }
         /* Soft limit so a broadside doesn't clip harshly. */
         l = 32767 * tanhf(l / 32767);
@@ -97,11 +125,101 @@ void audio_render(audio *a, int16_t *out, int frames)
     else memset(out, 0, (size_t)frames * 4);
 }
 
+/* ---- music --------------------------------------------------------------------- */
+
+static int load_wav(const char *path, track *out)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return -1;
+    unsigned char hdr[12];
+    int ok = fread(hdr, 1, 12, f) == 12 && !memcmp(hdr, "RIFF", 4) && !memcmp(hdr + 8, "WAVE", 4);
+    int channels = 0, bits = 0;
+    unsigned rate = 0;
+    while (ok) {
+        unsigned char ch[8];
+        if (fread(ch, 1, 8, f) != 8) { ok = 0; break; }
+        unsigned n = ch[4] | ch[5] << 8 | ch[6] << 16 | (unsigned)ch[7] << 24;
+        if (!memcmp(ch, "fmt ", 4)) {
+            unsigned char fm[16];
+            if (n < 16 || fread(fm, 1, 16, f) != 16) { ok = 0; break; }
+            channels = fm[2] | fm[3] << 8;
+            rate = fm[4] | fm[5] << 8 | fm[6] << 16 | (unsigned)fm[7] << 24;
+            bits = fm[14] | fm[15] << 8;
+            fseek(f, (long)(n - 16 + (n & 1)), SEEK_CUR);
+        } else if (!memcmp(ch, "data", 4)) {
+            if (channels != 2 || bits != 16 || rate != BANK_RATE) { ok = 0; break; }
+            out->frames = n / 4;
+            out->pcm = malloc((size_t)n);
+            ok = out->pcm && fread(out->pcm, 4, (size_t)out->frames, f) == (size_t)out->frames;
+            break;
+        } else {
+            fseek(f, (long)(n + (n & 1)), SEEK_CUR);
+        }
+    }
+    fclose(f);
+    if (!ok) { free(out->pcm); out->pcm = NULL; return -1; }
+    out->loop0 = 0;
+    out->loop1 = out->frames;
+    return 0;
+}
+
+/* Loads the playlist's next track and swaps it in. */
+static void next_track(audio *a)
+{
+    if (!a->playlist_len) return;
+    char path[600], meta[600];
+    const char *name = a->playlist[a->playlist_at++ % a->playlist_len];
+    snprintf(path, sizeof path, "%s/%s.wav", a->music_dir, name);
+    track t = {0};
+    if (load_wav(path, &t)) { fprintf(stderr, "music: can't read %s\n", path); a->playlist_len = 0; return; }
+    snprintf(meta, sizeof meta, "%s/music.json", a->music_dir);
+    jnode *doc = json_load_file(meta);                   /* the loop the track carries */
+    const jnode *lp = json_get(json_get(json_get(doc, "tracks"), name), "loop");
+    if (lp && json_len(lp) == 2) {
+        long l0 = (long)lp->child->num, l1 = (long)lp->child->next->num + 1;
+        if (l0 >= 0 && l0 < l1 && l1 <= t.frames) { t.loop0 = l0; t.loop1 = l1; }
+    }
+    json_free(doc);
+    if (a->dev) SDL_LockAudioDevice(a->dev);
+    track old = a->music;
+    a->music = t;
+    a->music_pos = 0;
+    a->music_looped = 0;
+    if (a->dev) SDL_UnlockAudioDevice(a->dev);
+    free(old.pcm);
+    printf("music: %s\n", name);
+}
+
+int audio_music(audio *a, const char *music_dir, const char *playlist)
+{
+    if (!a) return -1;
+    char meta[600];
+    snprintf(meta, sizeof meta, "%s/music.json", music_dir);
+    jnode *doc = json_load_file(meta);
+    const jnode *list = json_get(json_get(doc, "playlists"), playlist);
+    a->playlist_len = 0;
+    for (const jnode *e = list ? list->child : NULL; e && a->playlist_len < MAX_PLAYLIST; e = e->next)
+        if (e->type == J_STR) snprintf(a->playlist[a->playlist_len++], sizeof a->playlist[0], "%s", e->str);
+    json_free(doc);
+    if (!a->playlist_len) return -1;
+    snprintf(a->music_dir, sizeof a->music_dir, "%s", music_dir);
+    a->rng = a->rng * 1103515245u + 12345u;
+    a->playlist_at = (int)((a->rng >> 16) % (unsigned)a->playlist_len);   /* start somewhere in the list */
+    next_track(a);
+    return a->music.pcm ? 0 : -1;
+}
+
+void audio_update(audio *a)
+{
+    if (a && a->music_looped && a->playlist_len > 1) next_track(a);
+}
+
 void audio_close(audio *a)
 {
     if (!a) return;
     printf("audio: %d sounds played\n", a->played);
     if (a->dev) SDL_CloseAudioDevice(a->dev);
+    free(a->music.pcm);
     bnk_free(&a->bank);
     free(a);
 }

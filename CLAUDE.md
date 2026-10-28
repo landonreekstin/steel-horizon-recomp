@@ -33,6 +33,7 @@ python3 -I tools/pingu2gltf.py assets/files/pingus assets/png assets/gltf
 python3 -I tests/test_assets.py        # 0 failures expected
 python3 -I tools/data2json.py assets/files assets/data && python3 -I tests/test_data.py
 python3 -I tools/prx2exec.py BOOT.BIN boot_exec.elf   # BOOT.BIN from PSP_GAME/SYSDIR
+nix shell nixpkgs#ffmpeg-headless -c python3 -I tools/at3wav.py assets/files/sound/music assets/music  # music
 python3 -I tools/preview.py assets/files MODEL.pingu out.png [GUN.pingu]
 ```
 

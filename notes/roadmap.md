@@ -126,7 +126,8 @@ withdraw/evade tuning. Original list:
   archipelago; reinforcement waves; victory on yards, time or points)*.
 - Fleet-level AI commander (targeting, formations, strike timing).
 - UI: ship cards, damage panels, minimap.
-- Audio: `.at3` music, sound banks.
+- Audio: sound banks done; `.at3` music done (title track in the menu, battle playlist
+  in battle, ducked under the effects; `tools/at3wav.py`). Still: battle vs map lists unconfirmed.
 
 ### 8b. Fleet command *(requested)*
 - **Flagship**: one ship per fleet designated flagship; she gets boosts (and the
