@@ -798,6 +798,7 @@ int main(int argc, char **argv)
 {
     const char *assets = "assets", *shot = NULL, *scenario = "m01";
     unsigned long long seed = 1;
+    unsigned no_cmdr = 0;
     int mute = 0, no_music = 0, sound = 0, scenario_given = 0, generated = 0, no_fog = 0, standalone = 0;
     int ai_both = 0, host_port = -1, mp_players = 2, teams[MAX_PLAYERS] = {0}, teams_given = 0, bot = 0;
     long desync_at = -1;
@@ -821,6 +822,7 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--bot")) bot = 1;
         else if (!strcmp(argv[i], "--mute")) mute = 1;
         else if (!strcmp(argv[i], "--no-music")) no_music = 1;
+        else if (!strcmp(argv[i], "--no-commander") && i + 1 < argc) no_cmdr |= 1u << atoi(argv[++i]);   /* A/B tests */
         else if (!strcmp(argv[i], "--no-fog")) no_fog = 1;
         else if (!strcmp(argv[i], "--standalone")) standalone = 1;   /* no game files at all */
         else if (!strcmp(argv[i], "--sound")) sound = 1;   /* sound in --screenshot runs too */
@@ -943,6 +945,7 @@ int main(int argc, char **argv)
     if (setup_scenario(&g, scenario)) return 1;
     world_seed(&g.w, seed);
     g.w.fog = !no_fog || g.net;                          /* online games always have fog */
+    g.w.no_commander = no_cmdr;
     for (int i = 0; ai_both && i < g.w.count; i++) g.w.ships[i].ai = 1;
     if (g.net) assign_players(&g, &ng);
 

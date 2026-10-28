@@ -245,6 +245,21 @@ each kill planes (fighters more); Japan won all 4 after the fighter fix.
   fleet by two. (A bug picked guards by ship index; with two yards building in turn
   that gave one side half guards and the other none.) A 60-minute limit decides on
   points (build cost of enemy ships sunk).
+- Fleet commander (skirmish; `engine/src/commander.c`): per AI fleet, APPROACH /
+  ENGAGE. Approach: formation on the battle line's centre, course to the latest
+  sighting (else the enemy's centre): line abreast 500 apart, screen (DD, DE, PT)
+  1,500 ahead 700 apart, carriers and auxiliaries 2,500 astern; speed = 0.9 x the
+  slowest ship, 0.6 x when 300 ahead of station, flank when 300 behind; one ship sends
+  recon. A fleet with bombers holds once within 9,000 of the enemy. Engage when an
+  enemy surface ship is seen within 9,000 (12,000 with carriers); back after 40 s
+  without. Engaged: priority target = cost x (1.5 - hp fraction) / (1 + d/6000) for the
+  carriers; the screen's torpedo craft go for the enemy's costliest ship (unless a
+  submarine is within 1,000 for an escort); carriers of a fleet strike together (all
+  ready, or 90 s after the first).
+  A/B, 8 seeds, 30 min, score = enemy loss - own loss (hp fractions): fleet scenario
+  side 0 +0.36 -> +0.46, side 1 -0.36 -> -0.26; carriers side 0 -0.16 -> -0.06, side 1
+  +0.16 -> +0.17 (before holding at strike distance it was -0.02: carriers closed into
+  gun range). `--no-commander P` turns fleet P's commander off.
 
 ## Fog of war and recon (phase 8, `engine/src/vision.c`) — design
 - Each side sees enemy ships within 4,500 of one of its ships (6,500 with working

@@ -1456,6 +1456,48 @@ static void test_specials(const class_table *ct)
     CHECK(hits[1] > hits[0] && hits[0] >= 0, "Targeting Torpedo: %d hits vs %d unguided", hits[1], hits[0]);
 }
 
+/* The AI fleet commander: in formation on the approach (the battle line abreast, the
+ * screen ahead, carriers astern) at the slowest ship's pace, then engaged with the
+ * screen's torpedo craft sent at the enemy's biggest ship. */
+static void test_commander(const class_table *ct)
+{
+    const ship_class *bb = class_find(ct, "AmericanBattleship"), *dd = class_find(ct, "AmericanDestroyer");
+    const ship_class *cv = class_find(ct, "AmericanAircraftCarrier"), *pt = class_find(ct, "AmericanTorpedoBoat");
+    const ship_class *ebb = class_find(ct, "JapaneseBattleship"), *edd = class_find(ct, "JapaneseDestroyer");
+    if (!bb || !dd || !cv || !pt || !ebb || !edd) { CHECK(0, "commander classes"); return; }
+    static world w;
+    float spread[2];
+    for (int on = 0; on < 2; on++) {
+        world_init(&w);
+        w.fog = 1;
+        w.no_commander = on ? 0 : 1;
+        const ship_class *fleet[] = {bb, bb, dd, pt, cv};
+        for (int k = 0; k < 5; k++) { world_spawn(&w, fleet[k], 0, (float)k * 300, (float)-k * 200, 0); w.ships[k].ai = 1; }
+        world_spawn(&w, ebb, 1, 0, 30000, PI_F);       /* far out of sight */
+        world_spawn(&w, edd, 1, 300, 30000, PI_F);
+        w.ships[5].hold_fire = w.ships[6].hold_fire = 1;
+        run(&w, 240);
+        spread[on] = w.ships[3].z - w.ships[0].z;      /* how far the PT boat ran ahead of the line */
+        if (on) {
+            const ship *b0 = &w.ships[0], *d = &w.ships[2], *c = &w.ships[4];
+            CHECK(w.cmdr[0].state == CMDR_APPROACH && b0->z > 1500, "approach: the line has advanced (%.0f)", b0->z);
+            CHECK(d->z > b0->z + 800 && c->z < b0->z - 1500, "formation: screen %.0f ahead, carrier %.0f astern of the line",
+                  d->z - b0->z, b0->z - c->z);
+        }
+    }
+    CHECK(fabsf(spread[1] - 1500) < 600, "the fast PT boat keeps her station 1,500 ahead: %.0f (%.0f without a commander)",
+          spread[1], spread[0]);
+    /* In contact: the PT boat and the destroyer go for the battleship, not the nearer destroyer. */
+    world_init(&w);
+    for (int k = 0; k < 3; k++) w.ships[world_spawn(&w, k ? (k == 1 ? dd : pt) : bb, 0, (float)k * 300, 0, 0)].ai = 1;
+    world_spawn(&w, edd, 1, 600, 3000, PI_F);
+    world_spawn(&w, ebb, 1, -2500, 6000, PI_F);
+    w.ships[3].hold_fire = w.ships[4].hold_fire = 1;
+    run(&w, 4);
+    CHECK(w.cmdr[0].state == CMDR_ENGAGE && w.cmdr[0].capital == 4 && w.ships[2].ai_target == 4,
+          "engaged: torpedo craft sent at the battleship (capital %d, PT target %d)", w.cmdr[0].capital, w.ships[2].ai_target);
+}
+
 int main(int argc, char **argv)
 {
     const char *assets = argc > 1 ? argv[1] : "assets";
@@ -1498,6 +1540,7 @@ int main(int argc, char **argv)
     test_air(&ct);
     test_damage(&ct);
     test_command(&ct);
+    test_commander(&ct);
     test_bases(&ct);
     test_fleet(&ct);
     test_genship(&ct);

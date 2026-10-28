@@ -188,12 +188,26 @@ typedef struct {
     int depth, depth_goal;     /* submarines: sub_depth now and ordered */
     float depth_t;             /* seconds into the current depth change */
     float battery;             /* submarines: 0..1 */
+    float cruise;              /* AI formation: speed cap (0 none) */
+    int ai_target;             /* AI commander's choice of target for her, -1 her own */
+    int in_formation;          /* AI: the commander is stationing her this step */
     waypoint wp[MAX_WAYPOINTS];
     int wp_count;
     float prev_x, prev_z, prev_heading;  /* state at the previous tick, for interpolation */
 } ship;
 
 typedef enum { MODE_SKIRMISH, MODE_ASSAULT, MODE_DEFEND } game_mode;
+
+/* An AI fleet's commander (src/commander.c): approach in formation, then engage with a
+ * priority target, torpedo runs by the screen and strikes flown together. */
+typedef enum { CMDR_APPROACH, CMDR_ENGAGE } cmdr_state;
+typedef struct {
+    cmdr_state state;
+    long contact_tick;         /* last tick an enemy surface ship was in sight */
+    int target;                /* priority target, -1 none */
+    int capital;               /* the screen's torpedo target: the enemy's biggest ship */
+    long strike_wait;          /* tick the first carrier was ready to strike, -1 none */
+} commander;
 
 /* Per side: its shipyard, build budget and production queue (src/base.c). */
 typedef struct {
@@ -240,6 +254,8 @@ typedef struct {
     int officer_ship[2][MAX_OFFICERS];
     int flagship_of[FLEET_PLAYERS];      /* ship index, -1 none */
     float shaken[FLEET_PLAYERS];         /* seconds the fleet is rattled after losing her */
+    commander cmdr[FLEET_PLAYERS];
+    unsigned no_commander;     /* bit p: fleet p's ships fend for themselves (A/B tests) */
     int defender;              /* MODE_DEFEND: the side holding the shipyard */
     float time_limit;          /* MODE_DEFEND: seconds the defender must hold; MODE_ASSAULT:
                                 * after this, the side with more points wins (0: no limit) */
@@ -384,5 +400,8 @@ void fleet_step(world *w);   /* part of world_step */
 
 /* Simple enemy commander for ships with ai set: close to gun range, turn broadside. */
 void ai_step(world *w);
+/* AI fleet commanders (src/commander.c): run by ai_step before the ships' own logic. */
+void ai_commander(world *w);
+int commander_strike_ok(const world *w, int carrier);   /* fly now, or wait for the others */
 
 #endif

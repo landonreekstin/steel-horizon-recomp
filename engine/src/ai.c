@@ -1,7 +1,8 @@
-/* Minimal enemy commander (the full fleet AI is phase 8). Every two seconds each
- * ship with ai set closes on the nearest enemy until inside its best weapon's
- * range, then turns to steam across the bearing so every turret bears. Carriers
- * stand off and fly strikes; one with no bombers left fights with its guns. */
+/* AI ships. Every two seconds the fleet commanders (commander.c) station their ships
+ * or hand them targets; then each ship with ai set closes on its target (the
+ * commander's, else the nearest enemy) until inside its best weapon's range, and turns
+ * to steam across the bearing so every turret bears. Carriers stand off and fly
+ * strikes; one with no bombers left fights with its guns. */
 #include <math.h>
 
 #include "math3d.h"
@@ -200,6 +201,7 @@ void ai_step(world *w)
     ai_command(w);
     ai_captains(w);
     ai_focus(w);
+    ai_commander(w);
     for (int i = 0; i < w->count; i++) {
         ship *s = &w->ships[i];
         if (!s->ai || !s->alive || is_shore(s)) continue;
@@ -223,6 +225,7 @@ void ai_step(world *w)
             else order_stop(w, &i, 1);
             continue;
         }
+        if (s->in_formation) continue;              /* the commander has her on station */
         int best = -1, asw = 0;
         float bd = INFINITY;
         for (int m = 0; m < s->cls->mount_count; m++) asw |= s->cls->mounts[m].bat == BAT_ASW;
@@ -233,6 +236,12 @@ void ai_step(world *w)
              * and for her the hunt comes first. */
             float d = hypotf(t->x - s->x, t->z - s->z) + (is_submerged(t) ? (asw ? -1500 : 4000) : 0);
             if (d < bd) { bd = d; best = j; }
+        }
+        /* The commander's choice, unless she has a submarine to hunt close by. */
+        int at = s->ai_target;
+        if (at >= 0 && w->ships[at].alive && visible_to(w, s->side, at) && !(best >= 0 && is_submerged(&w->ships[best]) && bd < 1000)) {
+            best = at;
+            bd = hypotf(w->ships[at].x - s->x, w->ships[at].z - s->z);
         }
         if (best < 0) {
             /* Nothing in sight: search. Toward the latest sighting, else toward where
@@ -338,7 +347,7 @@ void ai_step(world *w)
             /* Strike anything within reach, cover the fleet when enemy planes are up,
              * and keep well clear of the gun line. */
             int ready = strike_ready(w, i);                   /* a full deck load, or all that's left */
-            if (ready >= (bombers_left < 3 ? bombers_left : 3) && bd < STRIKE_RANGE) order_strike(w, i, best);
+            if (ready >= (bombers_left < 3 ? bombers_left : 3) && bd < STRIKE_RANGE && commander_strike_ok(w, i)) order_strike(w, i, best);
             for (int k = 0; k < w->air_count; k++) {
                 const aircraft *a = &w->air[k];
                 if (a->side != s->side && (a->state == AIR_OUT || a->state == AIR_ATTACK) &&

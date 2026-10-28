@@ -15,7 +15,11 @@ void world_init(world *w)
     w->sides[0].yard = w->sides[1].yard = -1;
     for (int sd = 0; sd < 2; sd++)
         for (int i = 0; i < MAX_SHIPS; i++) w->last_seen[sd][i] = -1;
-    for (int p = 0; p < FLEET_PLAYERS; p++) w->flagship_of[p] = -1;
+    for (int p = 0; p < FLEET_PLAYERS; p++) {
+        w->flagship_of[p] = -1;
+        w->cmdr[p].target = w->cmdr[p].capital = -1;
+        w->cmdr[p].strike_wait = -1;
+    }
 }
 
 int world_spawn(world *w, const ship_class *cls, int side, float x, float z, float heading)
@@ -40,6 +44,7 @@ int world_spawn(world *w, const ship_class *cls, int side, float x, float z, flo
     s->stage = 1;
     s->depth = s->depth_goal = cls->submerged ? DEPTH_SHALLOW : DEPTH_SURFACE;
     s->battery = 1;
+    s->ai_target = -1;
     for (int b = 0; b < BATTERIES; b++) s->order_target[b] = -1;
     damage_init(s);
     for (int m = 0; m < cls->mount_count; m++) {
@@ -117,6 +122,7 @@ static void steer(world *w, int i)
             target_speed = fminf(target_speed, fmaxf(v, vmax * 0.15f));
         }
         if (fabsf(err) > PI_F / 2) target_speed *= 0.6f;   /* tighten hard turns */
+        if (s->cruise > 0) target_speed = fminf(target_speed, s->cruise);   /* keeping station */
         break;
     }
     if (s->evade > 0) {
