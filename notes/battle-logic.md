@@ -297,3 +297,44 @@ each kill planes (fighters more); Japan won all 4 after the fighter fix.
   weapon that can still hurt the other (ammunition, a mount intact, depth charges only
   against submarines, strike aircraft left) is a draw; skirmishes end after 90 minutes
   on points (value of enemy ships sunk), level points a draw.
+
+## Submarines and anti-submarine warfare — design, not the original
+
+The original lets battleships, cruisers and carriers lob depth charges 1,400–1,800 units.
+Historically capital ships and carriers carried no ASW weapons (they relied on their
+screen), and depth charges were rolled off stern racks or thrown 50–150 m by K/Y-guns
+(Hedgehog and Squid, 1942–43, reached about 200–300 m). So (`layout.c: naval_rules`):
+
+- Depth charges only on destroyers, destroyer escorts and the flagship destroyer (hull
+  types 6, 7, 15); range capped at `DC_THROW` (200).
+- Submarines without a gun get a deck gun (the 3 Inch's figures: 15 damage, 1,500 range).
+
+Each submarine has a depth (`ship.depth`, `depth_goal`, changed one level at a time:
+surface <-> periscope 20 s, periscope <-> deep 15 s; while diving she counts as the
+shallower level, while surfacing the deeper one) and a battery (0..1):
+
+| | surface | periscope (shallow) | deep |
+|---|---|---|---|
+| speed | 100% | 45% | 35% |
+| weapons | deck gun, torpedoes | torpedoes | none |
+| hit by | shells, torpedoes, bombs, aircraft | depth charges | depth charges x0.6 |
+| seen by | sight at 0.6x range (low profile) | sonar 900 (1.5x on ASW ships), aircraft at 0.4x | sonar at half range; not from the air |
+| battery | charges, flat to full in 180 s | drains | drains |
+
+Drain: (0.15 + 0.85 x speed fraction) / 900 per second, so 15 min at full submerged
+speed, 100 min stopped. A flat battery forces her up and she can't dive again until it
+holds some charge. That is the reason to surface beyond speed and the deck gun.
+
+Orders: J dive, K surface (a level each); captain's report "Battery at n%" (< 20%,
+action: surface). AI (`ai.c: ai_depth`): deep with an escort within 700; up to periscope
+depth when escorts are within 2,000, aircraft within 2,500, a target within 4,000, or the
+battery is full; surfaces to charge below 40% only out of gun range (no surface ship
+within 4,500, no escort within 3,000, no aircraft within 4,000) and to transit when
+everything is over 6,500 away; forced up below 15%. AI submarines steer bow-on (their
+tubes bear 25 deg either side); AI escorts prefer a detected submerged boat over surface
+targets (1,500 closer than she is), other ships discount her by 4,000.
+
+Fleet battles (`--ai-both`, seeds 1–6): escorts land depth charges in some; a lone
+submarine can outlast her fleet for a while but her battery brings her up and she is
+sunk at 16–17 min.
+

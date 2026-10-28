@@ -34,6 +34,7 @@ void world_apply(world *w, const command *c)
     switch ((cmd_kind)c->kind) {
     case CMD_MOVE: order_move(w, ids, n, c->x, c->z, c->flag); break;
     case CMD_STOP: order_stop(w, ids, n); break;
+    case CMD_DEPTH: order_depth(w, ids, n, c->a); break;
     case CMD_ATTACK:
         if (c->a >= 0 && (c->a >= w->count || w->ships[c->a].side == player_side(w, c->player))) break;
         order_attack(w, ids, n, c->a, (unsigned)c->b);

@@ -72,7 +72,7 @@ int order_special(world *w, int i, int target)
         float bd = 900;
         for (int j = 0; j < w->count; j++) {
             const ship *t = &w->ships[j];
-            if (!t->alive || t->side == s->side || !t->cls->submerged || !visible_to(w, s->side, j)) continue;
+            if (!t->alive || t->side == s->side || !is_submerged(t) || !visible_to(w, s->side, j)) continue;
             float d = hypotf(t->x - s->x, t->z - s->z);
             if (d < bd) { bd = d; sub = j; }
         }

@@ -129,7 +129,7 @@ static void ai_focus(world *w)
         float bscore = 0;
         for (int j = 0; j < w->count; j++) {
             const ship *t = &w->ships[j];
-            if (!t->alive || t->cls->submerged) continue;
+            if (!t->alive || is_submerged(t)) continue;
             int reach = 0, side = -1;
             for (int i = 0; i < w->count; i++) {
                 const ship *s = &w->ships[i];
@@ -160,6 +160,40 @@ static int home_guard(const world *w, int i)
     return ord % 4 == 0;
 }
 
+/* AI submarine captains pick a depth: up to charge and run on the surface when nothing
+ * threatens, periscope depth to attack or when escorts or aircraft are about, deep when
+ * an escort is right on top of her, and up again before the battery runs flat. */
+static void ai_depth(world *w, int i)
+{
+    const ship *s = &w->ships[i];
+    float esc = INFINITY, air = INFINITY, tgt = INFINITY;
+    for (int j = 0; j < w->count; j++) {
+        const ship *o = &w->ships[j];
+        if (!o->alive || o->side == s->side || is_shore(o) || !visible_to(w, s->side, j)) continue;
+        float d = hypotf(o->x - s->x, o->z - s->z);
+        int asw = 0;
+        for (int m = 0; m < o->cls->mount_count; m++) asw |= o->cls->mounts[m].bat == BAT_ASW;
+        if (asw) esc = fminf(esc, d);
+        if (!o->cls->submerged) tgt = fminf(tgt, d);
+    }
+    for (int k = 0; k < w->air_count; k++) {
+        const aircraft *a = &w->air[k];
+        if (a->side != s->side && (a->state == AIR_OUT || a->state == AIR_ATTACK || a->state == AIR_RETURN))
+            air = fminf(air, hypotf(a->x - s->x, a->z - s->z));
+    }
+    int want = s->depth_goal;
+    if (s->battery < 0.15f) want = DEPTH_SURFACE;
+    else if (esc < 700) want = DEPTH_DEEP;
+    else if (s->depth == DEPTH_SURFACE)
+        want = s->battery > 0.9f || (tgt < 4000 && s->battery > 0.3f) || esc < 2000 || air < 2500 ? DEPTH_SHALLOW : DEPTH_SURFACE;
+    else if (s->depth == DEPTH_DEEP && esc > 1200) want = DEPTH_SHALLOW;
+    /* Up to charge only out of the enemy's gun range. */
+    else if (s->depth == DEPTH_SHALLOW && s->battery < 0.4f && esc > 3000 && air > 4000 && tgt > 4500) want = DEPTH_SURFACE;
+    /* Far from anything: run on the surface to get there quicker. */
+    else if (s->depth == DEPTH_SHALLOW && tgt > 6500 && esc > 6500 && air > 5000) want = DEPTH_SURFACE;
+    if (want != s->depth_goal) order_depth(w, &i, 1, want);
+}
+
 void ai_step(world *w)
 {
     ai_build(w);
@@ -169,6 +203,7 @@ void ai_step(world *w)
     for (int i = 0; i < w->count; i++) {
         ship *s = &w->ships[i];
         if (!s->ai || !s->alive || is_shore(s)) continue;
+        if (s->cls->submerged) ai_depth(w, i);
         float comb;
         if (s->evade <= 0 && torpedo_threat(w, i, &comb)) {   /* AI captains comb torpedoes too */
             order_evade(w, &i, 1, 30);
@@ -188,12 +223,15 @@ void ai_step(world *w)
             else order_stop(w, &i, 1);
             continue;
         }
-        int best = -1;
+        int best = -1, asw = 0;
         float bd = INFINITY;
+        for (int m = 0; m < s->cls->mount_count; m++) asw |= s->cls->mounts[m].bat == BAT_ASW;
         for (int j = 0; j < w->count; j++) {
             const ship *t = &w->ships[j];
             if (!t->alive || t->side == s->side || !visible_to(w, s->side, j)) continue;
-            float d = hypotf(t->x - s->x, t->z - s->z) + (t->cls->submerged ? 4000 : 0);
+            /* A boat underwater is only worth chasing for a ship with depth charges,
+             * and for her the hunt comes first. */
+            float d = hypotf(t->x - s->x, t->z - s->z) + (is_submerged(t) ? (asw ? -1500 : 4000) : 0);
             if (d < bd) { bd = d; best = j; }
         }
         if (best < 0) {
@@ -270,7 +308,7 @@ void ai_step(world *w)
             int nb = -1;
             for (int j = 0; j < w->count; j++) {
                 const ship *o = &w->ships[j];
-                if (!o->alive || o->side == s->side || is_shore(o) || o->cls->submerged || !visible_to(w, s->side, j)) continue;
+                if (!o->alive || o->side == s->side || is_shore(o) || is_submerged(o) || !visible_to(w, s->side, j)) continue;
                 float d = hypotf(o->x - s->x, o->z - s->z);
                 if (d < near) { near = d; nb = j; }
             }
@@ -320,8 +358,8 @@ void ai_step(world *w)
         }
         float dx = t->x - s->x, dz = t->z - s->z, d = hypotf(dx, dz), R = engage_range(s->cls);
         float bearing = atan2f(dx, dz), go;
-        if (d > R || t->cls->submerged) {
-            go = bearing;                                   /* close the range */
+        if (d > R || is_submerged(t) || s->cls->submerged) {
+            go = bearing;                                   /* close the range; a submarine aims her bow tubes */
         } else {
             /* Beam on: whichever perpendicular is nearer the current heading; edge in
              * or out a little to hold the range. */
@@ -329,7 +367,7 @@ void ai_step(world *w)
             go = fabsf(wrap_angle(a - s->heading)) < fabsf(wrap_angle(b - s->heading)) ? a : b;
             go += (d > R * 0.8f ? 1 : -1) * wrap_angle(bearing - go) * 0.2f;
         }
-        float reach = t->cls->submerged ? fminf(d, 800) : 800;
+        float reach = is_submerged(t) ? fminf(d, 800) : 800;
         order_move(w, &i, 1, s->x + sinf(go) * reach, s->z + cosf(go) * reach, 0);
     }
 }

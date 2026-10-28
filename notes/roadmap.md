@@ -22,6 +22,8 @@ Full plan: `~/.claude/plans/i-want-to-recompile-snoopy-pearl.md`. Status per pha
   production on a budget, the assault and attack/defend modes with reinforcement
   waves, AI that builds, repairs, guards and attacks in escalating waves, a shipyard
   build panel and a mode banner. Placeholder generated yard model.
+- Submarine depth (surface / periscope / deep, battery, deck gun) and historical ASW: depth
+  charges only on destroyers and escorts, short throw *(requested)*.
 - 8b: command stream, flagships, distinguished officers, fleet toolbar with live
   damage thumbnails, ship-profile cross-section, dive and torpedo bombers.
 - 8c (first pass): online lockstep multiplayer, teams of several players each with a

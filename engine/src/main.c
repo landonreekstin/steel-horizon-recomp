@@ -468,6 +468,8 @@ static void print_state(const world *w)
             printf("      structure %.2f water %.2f list %.0f deg fires %d turrets out %d/%d engines %.2f%s\n",
                    st / (float)s->cls->comp_count, s->water, s->list * 180 / PI_F, fires, dead_turrets, turrets,
                    module_health(s, MOD_ENGINE, -1), s->jammed ? " rudder jammed" : "");
+            if (s->cls->submerged)
+                printf("      depth %d (goal %d) battery %.2f\n", s->depth, s->depth_goal, s->battery);
         }
         if (is_carrier(s)) {
             static const char *names[] = {"hangar", "out", "attack", "return", "deck", "falling", "lost"};
@@ -578,7 +580,7 @@ static void bot_orders(game *g)
         float bd = INFINITY;
         for (int j = 0; j < g->w.count; j++) {
             const ship *t = &g->w.ships[j];
-            if (!t->alive || t->side == s->side || t->cls->submerged) continue;
+            if (!t->alive || t->side == s->side || is_submerged(t)) continue;
             float d = hypotf(t->x - s->x, t->z - s->z);
             if (d < bd) { bd = d; best = j; }
         }
@@ -619,6 +621,18 @@ static void order_key(game *g, SDL_Keycode k, int ctrl, hud *hd)
     else if (k == SDLK_F2) hd->show_fleet = !hd->show_fleet;
     else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) hud_act_top(hd, &g->q, &g->w);
     else if (k == SDLK_s && !ctrl) c.kind = CMD_STOP;
+    else if ((k == SDLK_j || k == SDLK_k) && n) {    /* submarines: J dive, K surface, a level at a time */
+        for (int q = 0; q < n; q++) {
+            const ship *s = &g->w.ships[ids[q]];
+            if (!s->cls->submerged) continue;
+            command one = c;
+            memset(one.ships, 0, sizeof one.ships);
+            cmd_set_ship(&one, ids[q]);
+            one.kind = CMD_DEPTH;
+            one.a = s->depth_goal + (k == SDLK_j ? 1 : -1);
+            if (one.a >= DEPTH_SURFACE && one.a <= DEPTH_DEEP) issue(g, &one);
+        }
+    }
     else if (k == SDLK_b || k == SDLK_g || k == SDLK_r) {
         /* Carriers: B strike the focus target (else the nearest enemy ship),
          * G fighter patrol overhead, R recall the air group. */
@@ -635,7 +649,7 @@ static void order_key(game *g, SDL_Keycode k, int ctrl, hud *hd)
                 t = -1;
                 for (int j = 0; j < g->w.count; j++) {
                     const ship *e2 = &g->w.ships[j];
-                    if (!e2->alive || e2->side == cv->side || e2->cls->submerged) continue;
+                    if (!e2->alive || e2->side == cv->side || is_submerged(e2)) continue;
                     float d = hypotf(e2->x - cv->x, e2->z - cv->z);
                     if (d < bd) { bd = d; t = j; }
                 }
@@ -872,6 +886,15 @@ int main(int argc, char **argv)
             if (trace > 0 && t % (int)(trace * SIM_HZ) == 0) {
                 /* Ships afloat per side, yard condition, budget, closest approach to the enemy yard. */
                 printf("t=%6.0f", (double)t / SIM_HZ);
+                for (int i = 0; i < g.w.count; i++) {      /* submarines: depth, battery, who is shooting */
+                    const ship *s = &g.w.ships[i];
+                    if (!s->alive || !s->cls->submerged) continue;
+                    printf("  sub %d: depth %d battery %.2f hp %.0f", i, s->depth, s->battery, s->hp);
+                    for (int j = 0; j < g.w.count; j++)
+                        for (int m = 0; m < g.w.ships[j].cls->mount_count; m++)
+                            if (g.w.ships[j].alive && g.w.ships[j].turrets[m].target == i) { printf(" <-%d", j); break; }
+                    printf(" |");
+                }
                 for (int sd = 0; sd < 2; sd++) {
                     int n = 0;
                     float closest = INFINITY;
@@ -969,7 +992,7 @@ int main(int argc, char **argv)
                 for (int j = 0; j < g.w.count; j++) {
                     const ship *e2 = &g.w.ships[j];
                     float d = hypotf(e2->x - g.w.ships[ids[q]].x, e2->z - g.w.ships[ids[q]].z);
-                    if (e2->side != 0 && !e2->cls->submerged && d < bd) { bd = d; t = j; }
+                    if (e2->side != 0 && !is_submerged(e2) && d < bd) { bd = d; t = j; }
                 }
                 order_strike(&g.w, ids[q], t);
             }
@@ -1214,7 +1237,12 @@ int main(int argc, char **argv)
         static const char *policy_names[] = {"auto", "fires", "flooding", "weapons"};
         if (nsel) {
             const ship *s0 = &g.w.ships[ids[0]];
-            snprintf(dc_info, sizeof dc_info, "  |  DC: %s, list %.0f deg", policy_names[s0->policy], s0->list * 180 / PI_F);
+            static const char *depth_names[] = {"surfaced", "periscope depth", "deep"};
+            if (s0->cls->submerged)
+                snprintf(dc_info, sizeof dc_info, "  |  %s%s, battery %.0f%%", depth_names[s0->depth],
+                         s0->depth != s0->depth_goal ? (s0->depth_goal > s0->depth ? " (diving)" : " (surfacing)") : "",
+                         100 * s0->battery);
+            else snprintf(dc_info, sizeof dc_info, "  |  DC: %s, list %.0f deg", policy_names[s0->policy], s0->list * 180 / PI_F);
         }
         for (int q = 0; q < nsel; q++)
             if (is_carrier(&g.w.ships[ids[q]])) {

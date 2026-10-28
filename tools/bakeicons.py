@@ -115,6 +115,12 @@ def hull(y=0.0):
             rect(11, 12 + y, 20, 18 + y), rect(14, 8 + y, 17, 12 + y)]
 
 
+def sub(y):
+    """A submarine side profile, bow to the right, hull centred on y."""
+    hull = fill([(3, y), (7, y - 3), (25, y - 3), (29.5, y), (25, y + 3), (7, y + 3)])
+    return [hull, rect(12, y - 8, 18, y - 3), rect(14.5, y - 11, 15.8, y - 8)]
+
+
 def star(cx, cy, r0, r1, n=8):
     return fill([(cx + (r1 if i % 2 == 0 else r0) * math.cos(math.pi * i / n - math.pi / 2),
                   cy + (r1 if i % 2 == 0 else r0) * math.sin(math.pi * i / n - math.pi / 2)) for i in range(2 * n)])
@@ -147,6 +153,10 @@ ICONS = [
     ("withdraw", polyline([(27, 16), (9, 16)], 4) + [head((3, 16), 180, 9)]),
     ("bridge_lost", [rect(6, 14, 26, 26), rect(10, 8, 22, 14)] + [hole(rect(9, 17, 23, 21))]
      + [seg((4, 4), (28, 28), 3.2), seg((28, 4), (4, 28), 3.2)]),
+    # Submarines.
+    ("dive", sub(12) + [rect(14.5, 17, 17.5, 24), head((16, 31), 90, 7)]),
+    ("surface", sub(25) + [rect(14.5, 8, 17.5, 15), head((16, 1), -90, 7)]),
+    ("battery", [rect(3, 9, 27, 25), hole(rect(6, 12, 24, 22)), rect(27, 13, 30, 21), rect(8, 14, 12, 20)]),
 ]
 
 

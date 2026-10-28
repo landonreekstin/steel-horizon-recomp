@@ -15,7 +15,7 @@
 enum {
     ICON_HOLD_FIRE, ICON_FIRE_AT_WILL, ICON_AIM, ICON_EVASIVE, ICON_STOP, ICON_CREW_PRIORITY, ICON_COUNTER_FLOOD,
     ICON_FLOOD_MAGAZINES, ICON_STRIKE, ICON_PATROL, ICON_RECALL, ICON_FIRE, ICON_TORPEDO, ICON_WATER, ICON_WITHDRAW,
-    ICON_BRIDGE_LOST
+    ICON_BRIDGE_LOST, ICON_DIVE, ICON_SURFACE, ICON_BATTERY
 };
 
 static const float PANEL[4] = {0.04f, 0.06f, 0.08f, 0.82f};
@@ -91,6 +91,7 @@ static void report_text(const world *w, const captain_report *r, char *msg, int 
     case REP_BRIDGE_LOST: snprintf(msg, (size_t)n, "Bridge destroyed: no reports"); *action = NULL; break;
     case REP_RETURN_TO_YARD: snprintf(msg, (size_t)n, "Needs the drydock (%.0f%%)", 100 * s->hp / s->cls->max_health);
         *action = "Return to yard"; break;
+    case REP_BATTERY_LOW: snprintf(msg, (size_t)n, "Battery at %.0f%%", 100 * s->battery); *action = "Surface"; break;
     default: msg[0] = 0; *action = NULL; break;
     }
 }
@@ -107,6 +108,7 @@ static int report_icon(int kind)
     case REP_LAUNCH_STRIKE: return ICON_STRIKE;
     case REP_BRIDGE_LOST: return ICON_BRIDGE_LOST;
     case REP_RETURN_TO_YARD: return ICON_CREW_PRIORITY;
+    case REP_BATTERY_LOW: return ICON_BATTERY;
     default: return -1;
     }
 }
@@ -232,9 +234,13 @@ static int icon_row(hud *h, float x, float y, const control *c, int n, const flo
 static int controls_bar(hud *h, const world *w, const unsigned char *selected)
 {
     float lh = ui_line_height(), x0 = 10, y = 10;
-    int any = 0, carrier = 0;
+    int any = 0, carrier = 0, subs = 0;
     for (int i = 0; i < w->count; i++)
-        if (selected[i] && w->ships[i].alive) { any = 1; carrier |= is_carrier(&w->ships[i]); }
+        if (selected[i] && w->ships[i].alive) {
+            any = 1;
+            carrier |= is_carrier(&w->ships[i]);
+            subs |= w->ships[i].cls->submerged;
+        }
     if (!h->show_controls) {
         if (button(h, x0, y, "Controls [F1]", 0.15f, 0.2f, 0.26f)) h->show_controls = 1;
         h->controls_bottom = y + lh + 6;
@@ -254,12 +260,15 @@ static int controls_bar(hud *h, const world *w, const unsigned char *selected)
         {SDLK_b, ICON_STRIKE, "Air strike", "On the focus target or nearest; Shift: torpedo bombers, Ctrl: dive bombers"},
         {SDLK_g, ICON_PATROL, "Fighter patrol", "Fighters circle the carrier against incoming strikes"},
         {SDLK_r, ICON_RECALL, "Recall", "All aircraft return to land and rearm"}};
+    static const control depth[] = {
+        {SDLK_j, ICON_DIVE, "Dive", "One level deeper: periscope depth (torpedoes only), then deep (silent, no attacks)"},
+        {SDLK_k, ICON_SURFACE, "Surface", "One level up: on the surface she is fast, charges and uses her deck gun"}};
     static const char *hints[] = {
         "LMB select / drag box   Shift add", "RMB sea: move   Shift: queue",
         "RMB enemy: focus fire   Ctrl: secondaries", "1-9 groups   Ctrl+1-9 set",
         "WASD/QE/wheel/MMB camera", "Space pause   +/- speed", "Enter: top captain's report", "C captain's bar",
         "V recon plane to the cursor", "U special ability (cursor target)"};
-    static const float ORDERS[3] = {0.18f, 0.3f, 0.42f}, DC[3] = {0.4f, 0.25f, 0.15f}, AIR[3] = {0.2f, 0.38f, 0.3f};
+    static const float ORDERS[3] = {0.18f, 0.3f, 0.42f}, DC[3] = {0.4f, 0.25f, 0.15f}, AIR[3] = {0.2f, 0.38f, 0.3f}, DEPTH[3] = {0.1f, 0.3f, 0.4f};
     float bw = 400;
     int mark = ui_mark(), rect = h->rect_count;
     box(h, x0, y, x0 + bw, y + 10, PANEL);          /* bottom edge set once laid out */
@@ -284,6 +293,7 @@ static int controls_bar(hud *h, const world *w, const unsigned char *selected)
     y += row;
     if ((k = icon_row(h, x0 + PAD, y, dc, 3, DC, &hover))) key = k;
     if (carrier && (k = icon_row(h, x0 + PAD + 3 * (ICON_BTN + 6) + 12, y, air, 3, AIR, &hover))) key = k;
+    else if (!carrier && subs && (k = icon_row(h, x0 + PAD + 3 * (ICON_BTN + 6) + 12, y, depth, 2, DEPTH, &hover))) key = k;
     y += row;
     ui_set_bottom(mark, y + 4);
     h->rects[rect][3] = y + 4;

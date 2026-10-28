@@ -1083,7 +1083,15 @@ void renderer_draw(renderer *r, const camera *cam, int w, int h, const world *wd
         if (!m) continue;
         float x = s->prev_x + (s->x - s->prev_x) * alpha, z = s->prev_z + (s->z - s->prev_z) * alpha;
         float hd = s->prev_heading + wrap_angle(s->heading - s->prev_heading) * alpha;
-        float y = s->cls->submerged ? -6.0f : shore ? 0 : sea_height(x, z, t) * 0.5f;
+        float y = shore ? 0 : sea_height(x, z, t) * 0.5f;
+        if (s->cls->submerged) {                         /* her depth, eased while she dives or surfaces */
+            static const float level[] = {0, -6, -20};
+            int next = s->depth_goal > s->depth ? s->depth + 1 : s->depth_goal < s->depth ? s->depth - 1 : s->depth;
+            float need = next == DEPTH_SURFACE || s->depth == DEPTH_SURFACE ? DIVE_S : DEEP_S;
+            float f = next == s->depth ? 0 : fminf(s->depth_t / need, 1);
+            float d = level[s->depth] + (level[next] - level[s->depth]) * f * f * (3 - 2 * f);
+            y = s->depth == DEPTH_SURFACE && next == s->depth ? y : d;
+        }
         y -= s->water * 25;                              /* lower in the water as she floods */
         float roll = s->list, pitch = s->trim;
         if (!s->alive && !shore) {

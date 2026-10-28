@@ -27,7 +27,7 @@ static int nearest_enemy(const world *w, int i, int surface_only, float *dist)
     float bd = INFINITY;
     for (int j = 0; j < w->count; j++) {
         const ship *t = &w->ships[j];
-        if (!t->alive || t->side == s->side || (surface_only && t->cls->submerged)) continue;
+        if (!t->alive || t->side == s->side || (surface_only && is_submerged(t))) continue;
         float d = hypotf(t->x - s->x, t->z - s->z);
         if (d < bd) { bd = d; best = j; }
     }
@@ -83,6 +83,8 @@ int captain_reports(const world *w, int side, captain_report *out, int max)
             module_health(&w->ships[y], MOD_DRYDOCK, -1) >= 0.3f && cool[REP_RETURN_TO_YARD] <= 0 &&
             hypotf(w->ships[y].x - s->x, w->ships[y].z - s->z) > repair_radius(&w->ships[y]))
             n = add(out, n, max, i, REP_RETURN_TO_YARD, 25);
+        if (is_submerged(s) && s->battery < 0.2f && s->depth_goal != DEPTH_SURFACE && cool[REP_BATTERY_LOW] <= 0)
+            n = add(out, n, max, i, REP_BATTERY_LOW, 35 + 100 * (0.2f - s->battery));
         if (is_carrier(s) && !s->ai && cool[REP_LAUNCH_STRIKE] <= 0 && strike_ready(w, i) >= 3 &&
             nearest_enemy(w, i, 1, &d) >= 0 && d < 12000)
             n = add(out, n, max, i, REP_LAUNCH_STRIKE, 20);
@@ -133,6 +135,7 @@ void captain_act(world *w, const captain_report *r)
         order_move(w, &id, 1, yd->x + sinf(yd->heading) * fwd, yd->z + cosf(yd->heading) * fwd, 0);
         break;
     }
+    case REP_BATTERY_LOW: order_depth(w, &id, 1, DEPTH_SURFACE); break;
     default: break;
     }
     s->report_cool[r->kind] = ACT_COOLDOWN;

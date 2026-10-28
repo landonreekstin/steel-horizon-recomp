@@ -9,6 +9,7 @@
 #define MAX_MODULES 32
 
 typedef enum { WK_SURFACE, WK_AIR, WK_SUBMERGED } weapon_kind;
+#define DC_THROW 200.0f        /* depth charges: racks and throwers, a short lob (layout.c) */
 typedef enum { AMMO_NONE, AMMO_SHELL, AMMO_TORPEDO, AMMO_DC, AMMO_BOMB } ammo_kind;
 typedef enum { BAT_MAIN, BAT_SECONDARY, BAT_TORPEDO, BAT_ASW, BATTERIES } battery;
 

@@ -477,6 +477,7 @@ uint32_t world_checksum(const world *w)
         MIX(s->heading);
         MIX(s->hp);
         MIX(s->speed);
+        MIX(s->battery);
     }
     for (int k = 0; k < w->air_count; k++) { MIX(w->air[k].x); MIX(w->air[k].z); }
     uint32_t c = (uint32_t)w->count, t = (uint32_t)w->tick;

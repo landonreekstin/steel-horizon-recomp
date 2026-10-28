@@ -59,6 +59,18 @@ typedef enum { MISSION_NONE, MISSION_CAP, MISSION_ESCORT, MISSION_STRIKE, MISSIO
 #define VIS_RANGE 4500.0f      /* lookouts: masthead sighting of a ship */
 #define RADAR_RANGE 6500.0f    /* with working radar */
 #define SUB_DETECT 900.0f      /* a submerged boat: sonar range */
+/* Submarine depth (notes/battle-logic.md): surfaced she is fast, charges her battery
+ * and fights with her deck gun, but guns, torpedoes and bombs can hit her; at periscope
+ * depth she is slow, drains the battery and fires torpedoes; deep she is slower still,
+ * cannot attack, is heard at half the sonar range and depth charges hurt her less. An
+ * empty battery forces her up. */
+typedef enum { DEPTH_SURFACE, DEPTH_SHALLOW, DEPTH_DEEP } sub_depth;
+#define DIVE_S 20.0f           /* seconds between the surface and periscope depth */
+#define DEEP_S 15.0f           /* seconds between periscope depth and deep */
+#define SUB_ENDURANCE_S 900.0f /* battery seconds at full submerged speed */
+#define SUB_IDLE_DRAIN 0.15f   /* fraction of that drain when stopped */
+#define SUB_CHARGE_S 180.0f    /* seconds surfaced from flat to full */
+#define SUB_DEEP_DC 0.6f       /* depth-charge damage on a deep boat */
 #define AIR_VIS 3500.0f        /* what a plane can see around it */
 #define FLASH_RANGE 9000.0f    /* gun flashes seen this far */
 #define REVEAL_S 10.0f
@@ -173,6 +185,9 @@ typedef struct {
     unsigned char officers[OFFICER_KINDS];   /* distinguished officers aboard, by speciality */
     int cause;                 /* why she went down: 0 afloat, 1 flooding, 2 capsized, 3 magazine, 4 structure, 5 abandoned */
     float launch_timer;        /* carrier: seconds until the next plane can take off */
+    int depth, depth_goal;     /* submarines: sub_depth now and ordered */
+    float depth_t;             /* seconds into the current depth change */
+    float battery;             /* submarines: 0..1 */
     waypoint wp[MAX_WAYPOINTS];
     int wp_count;
     float prev_x, prev_z, prev_heading;  /* state at the previous tick, for interpolation */
@@ -286,7 +301,7 @@ int torpedo_threat(const world *w, int i, float *comb_heading);
 typedef enum { REP_FLOOD_MAGAZINE, REP_COUNTER_FLOOD, REP_EVADE_TORPEDO, REP_FIGHT_FLOODING,
                REP_FIGHT_FIRES, REP_WITHDRAW, REP_LAUNCH_STRIKE,
                REP_BRIDGE_LOST,  /* not an action: her captain can't report any more */
-               REP_RETURN_TO_YARD,
+               REP_RETURN_TO_YARD, REP_BATTERY_LOW,
                REP_KINDS } report_kind;
 typedef struct {
     int ship;
@@ -315,6 +330,10 @@ void air_spawn_group(world *w, int carrier);   /* world_spawn calls it for carri
 
 /* Shipyards and game modes (src/base.c). */
 int is_shore(const ship *s);
+/* A submarine below the surface: only depth charges reach her, sonar finds her. */
+static inline int is_submerged(const ship *s) { return s->cls->submerged && s->depth != DEPTH_SURFACE; }
+float depth_speed(const ship *s);              /* top-speed factor at her depth */
+void order_depth(world *w, const int *ids, int n, int depth);
 int shipyard_spawn(world *w, const ship_class *yard, int side, float x, float z, float heading);
 int order_build(world *w, int side, const ship_class *c);   /* 0 queued, -1 can't */
 void base_step(world *w);    /* part of world_step: income, production, repairs, land */

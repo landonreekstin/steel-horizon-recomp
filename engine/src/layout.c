@@ -48,6 +48,36 @@ static turret_mount *add_mount(ship_class *c, const char *name, float x, float y
     return m;
 }
 
+/* Anti-submarine rules (ours, not the original's: notes/battle-logic.md). Depth charges
+ * only on destroyers and escorts, rolled off the stern or thrown a short way; capital
+ * ships and carriers relied on their screen. Submarines get a deck gun to fight with
+ * on the surface. Returns the deck gun's weapon index, or -1. */
+static int naval_rules(ship_class *c)
+{
+    int h = c->hull_type, escort = h == 6 || h == 7 || h == 15;
+    int has_gun = 0;
+    for (int i = 0; i < c->weapon_count; i++) {
+        class_weapon *w = &c->weapons[i];
+        if (w->ammo == AMMO_DC) {
+            if (!escort) w->ammo = AMMO_NONE;
+            w->min_range = 0;
+            w->max_range = DC_THROW;
+        }
+        has_gun |= w->ammo == AMMO_SHELL;
+    }
+    if (!c->submerged || has_gun || c->weapon_count == MAX_CLASS_WEAPONS) return -1;
+    class_weapon *w = &c->weapons[c->weapon_count];
+    memset(w, 0, sizeof *w);
+    snprintf(w->name, sizeof w->name, "Deck gun");
+    w->kind = WK_SURFACE;
+    w->ammo = AMMO_SHELL;
+    w->mount_group = 1;
+    w->damage = 15;                 /* the 3 Inch's figures */
+    w->max_range = 1500;
+    w->fire_rate = 7;
+    return c->weapon_count++;
+}
+
 static void build_mounts(ship_class *c, const mounts *pts)
 {
     int used[MAX_CLASS_WEAPONS] = {0}, next[8] = {0};
@@ -71,7 +101,7 @@ static void build_mounts(ship_class *c, const mounts *pts)
                   g <= 2 ? 150 * DEG : 80 * DEG, wi);
     }
     /* Everything else gets a virtual mount. */
-    float L = c->half_length, B = c->half_beam, h = 8;
+    float L = c->half_length, B = c->half_beam, h = c->submerged ? 2 : 8;
     for (int i = 0; i < c->weapon_count; i++) {
         const class_weapon *w = &c->weapons[i];
         if (used[i] || w->ammo == AMMO_NONE) continue;
@@ -87,7 +117,7 @@ static void build_mounts(ship_class *c, const mounts *pts)
         } else if (g == 3 || g == 4) {
             add_mount(c, "", g == 3 ? -B : B, h, 0, group_center(g), 80 * DEG, i);
         } else {
-            add_mount(c, "", 0, h, g == 2 ? -L * 0.6f : L * 0.6f, group_center(g), 150 * DEG, i);
+            add_mount(c, "", 0, h, g == 2 ? -L * 0.6f : L * (c->submerged ? 0.3f : 0.6f), group_center(g), 150 * DEG, i);
         }
     }
 }
@@ -259,6 +289,7 @@ int classes_load_layouts(class_table *t, const char *files_dir)
                 mounts_load(path, &pts);
             }
         }
+        naval_rules(c);
         build_mounts(c, &pts);
         build_damage_layout(c);
     }
@@ -400,7 +431,9 @@ int classes_load_standalone(const char *path, class_table *out)
                 add_mount(c, "", B * 0.5f, 4, -0.1f * L, PI_F / 2, 60 * DEG, wtorp);
             }
         }
-        if (wdc >= 0) add_mount(c, "", 0, 2, -L * 0.9f, PI_F, PI_F, wdc);
+        int wdeck = naval_rules(c);
+        if (wdc >= 0 && c->weapons[wdc].ammo == AMMO_DC) add_mount(c, "", 0, 2, -L * 0.9f, PI_F, PI_F, wdc);
+        if (wdeck >= 0) add_mount(c, "", 0, 2, L * 0.3f, 0, 150 * DEG, wdeck);
         build_damage_layout(c);
     }
     json_free(doc);

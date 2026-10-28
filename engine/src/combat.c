@@ -224,7 +224,10 @@ int can_engage(const world *w, int i, int m, int j)
     if (i == j || !t->alive || t->side == s->side || !visible_to(w, s->side, j)) return 0;
     const turret_mount *mt = &s->cls->mounts[m];
     const class_weapon *wp = &s->cls->weapons[mt->weapon];
-    if ((wp->ammo == AMMO_DC) != (t->cls->submerged != 0)) return 0;
+    if ((wp->ammo == AMMO_DC) != is_submerged(t)) return 0;
+    /* A submarine fights with everything on the surface, torpedoes at periscope depth,
+     * nothing deep. */
+    if (s->cls->submerged && (s->depth == DEPTH_DEEP || (s->depth == DEPTH_SHALLOW && wp->ammo != AMMO_TORPEDO))) return 0;
     float mx, my, mz;
     mount_world(s, mt, &mx, &my, &mz);
     float dx = t->x - mx, dz = t->z - mz, d = sqrtf(dx * dx + dz * dz);
@@ -390,7 +393,7 @@ static void shell_impact(world *w, projectile *p)
     float bd = INFINITY;
     for (int j = 0; j < w->count; j++) {
         const ship *t = &w->ships[j];
-        if (j == p->owner || !t->alive || t->cls->submerged) continue;
+        if (j == p->owner || !t->alive || is_submerged(t)) continue;
         float d = hull_distance(t, x, z);
         if (d < bd) { bd = d; best = j; }
     }
@@ -442,7 +445,7 @@ static void projectiles_step(world *w)
             }
             for (int j = 0; j < w->count; j++) {
                 const ship *s = &w->ships[j];
-                if (j == p->owner || !s->alive || s->cls->submerged) continue;
+                if (j == p->owner || !s->alive || is_submerged(s)) continue;
                 if (s->side == p->side && t < TORP_ARM_S) continue;
                 if (hull_distance(s, x, z) <= 0) {
                     damage_hit(w, j, HIT_TORPEDO, x, z, p->damage, 0, 0);
@@ -461,8 +464,8 @@ static void projectiles_step(world *w)
             if (p->homing == -2 && t >= p->flight + 0.5f) {   /* hedgehog: contact fuze, no blast */
                 for (int j = 0; j < w->count; j++) {
                     const ship *s = &w->ships[j];
-                    if (s->alive && s->cls->submerged && s->side != p->side && hull_distance(s, x, z) <= 12) {
-                        damage_hit(w, j, HIT_DEPTH_CHARGE, s->x, s->z, p->damage, 0, 0);
+                    if (s->alive && is_submerged(s) && s->side != p->side && hull_distance(s, x, z) <= 12) {
+                        damage_hit(w, j, HIT_DEPTH_CHARGE, s->x, s->z, p->damage * (s->depth == DEPTH_DEEP ? SUB_DEEP_DC : 1), 0, 0);
                         w->dc_hits++;
                         fx(w, FX_DC_BLAST, x, 0, z);
                     }
@@ -471,8 +474,8 @@ static void projectiles_step(world *w)
             } else if (p->homing != -2 && t >= p->flight + DC_SINK_S) {
                 for (int j = 0; j < w->count; j++) {
                     const ship *s = &w->ships[j];
-                    if (s->alive && s->cls->submerged && s->side != p->side && hull_distance(s, x, z) <= DC_RADIUS) {
-                        damage_hit(w, j, HIT_DEPTH_CHARGE, s->x, s->z, p->damage, 0, 0);
+                    if (s->alive && is_submerged(s) && s->side != p->side && hull_distance(s, x, z) <= DC_RADIUS) {
+                        damage_hit(w, j, HIT_DEPTH_CHARGE, s->x, s->z, p->damage * (s->depth == DEPTH_DEEP ? SUB_DEEP_DC : 1), 0, 0);
                         w->dc_hits++;
                     }
                 }

@@ -38,6 +38,8 @@ int world_spawn(world *w, const ship_class *cls, int side, float x, float z, flo
     s->max_yaw = (12.0f / (1.0f + cls->turn_rate)) * PI_F / 180.0f;
     s->hp = cls->max_health;
     s->stage = 1;
+    s->depth = s->depth_goal = cls->submerged ? DEPTH_SHALLOW : DEPTH_SURFACE;
+    s->battery = 1;
     for (int b = 0; b < BATTERIES; b++) s->order_target[b] = -1;
     damage_init(s);
     for (int m = 0; m < cls->mount_count; m++) {
@@ -55,7 +57,44 @@ static float top_speed(const ship *s)
 {
     float engines = module_health(s, MOD_ENGINE, -1);
     return s->max_speed * clampf(engines * 1.25f, 0, 1) * clampf(1 - s->water * 1.5f, 0.2f, 1)
-         * (1 + 0.08f * officer_level(s, OFF_ENGINEERING));
+         * (1 + 0.08f * officer_level(s, OFF_ENGINEERING)) * depth_speed(s);
+}
+
+float depth_speed(const ship *s)
+{
+    return !s->cls->submerged ? 1 : s->depth == DEPTH_SURFACE ? 1 : s->depth == DEPTH_SHALLOW ? 0.45f : 0.35f;
+}
+
+void order_depth(world *w, const int *ids, int n, int depth)
+{
+    for (int i = 0; i < n; i++) {
+        ship *s = &w->ships[ids[i]];
+        if (!s->cls->submerged || depth < DEPTH_SURFACE || depth > DEPTH_DEEP) continue;
+        if (depth > DEPTH_SURFACE && s->battery <= 0) continue;   /* can't dive on a flat battery */
+        if (s->depth_goal != depth) s->depth_t = 0;
+        s->depth_goal = depth;
+    }
+}
+
+/* Dive and surface one level at a time; the battery drains with speed underwater and
+ * charges on the surface; flat, she has to come up. */
+static void dive_step(ship *s)
+{
+    if (!s->cls->submerged) return;
+    if (s->depth != DEPTH_SURFACE) {
+        float load = SUB_IDLE_DRAIN + (1 - SUB_IDLE_DRAIN) * s->speed / fmaxf(s->max_speed * depth_speed(s), 1e-3f);
+        s->battery = fmaxf(0, s->battery - load / SUB_ENDURANCE_S * SIM_DT);
+        if (s->battery <= 0) s->depth_goal = DEPTH_SURFACE;
+    } else {
+        s->battery = fminf(1, s->battery + SIM_DT / SUB_CHARGE_S);
+    }
+    if (s->depth == s->depth_goal) { s->depth_t = 0; return; }
+    int next = s->depth + (s->depth_goal > s->depth ? 1 : -1);
+    s->depth_t += SIM_DT;
+    if (s->depth_t >= (next == DEPTH_SURFACE || s->depth == DEPTH_SURFACE ? DIVE_S : DEEP_S)) {
+        s->depth = next;
+        s->depth_t = 0;
+    }
 }
 
 static void steer(world *w, int i)
@@ -120,6 +159,7 @@ void world_step(world *w)
             s->z += cosf(s->heading) * s->speed * SIM_DT;
             continue;
         }
+        dive_step(s);
         steer(w, i);
         /* A ship needs way on to turn: rudder authority scales with speed. */
         float authority = clampf(s->speed / fmaxf(s->max_speed, 1e-3f) * 1.5f, 0.15f, 1.0f);

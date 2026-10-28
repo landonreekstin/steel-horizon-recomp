@@ -75,6 +75,8 @@ python3 -I tools/preview.py assets/files MODEL.pingu out.png [GUN.pingu]
   drydock repairs, reinforcement waves, AI waves; `--trace N` prints the battle state.
 - Fleet command (8b): command stream (replayable), flagships (L), officers, fleet bar
   (F2) with damage thumbnails, real-profile cross-section, dive/torpedo bombers.
+- Submarines: surface / periscope / deep with a battery, deck guns; depth charges only
+  on destroyers and escorts, short throw (notes/battle-logic.md, last section).
 
 Build/run the engine:
 
@@ -90,6 +92,7 @@ engine/build/shrts --assets assets [--scenario m01|fleet|carriers|assault|attack
 #   damage control: P crew priority, X counter-flood, M flood magazines
 #   T aim (ship/engines/magazines/steering/bridge/guns), Z evasive, Enter top report,
 #   C Captain's Command bar, F1 controls toolbar (both clickable), F2 fleet bar, L flagship
+#   submarines: J dive, K surface (surface / periscope / deep; battery charges on the surface)
 # online (LAN/forwarded port): one host, the others join; teams default 0,1,0,1...
 engine/build/shrts --assets assets --host 47800 --players 3 --teams 0,1,0 --scenario fleet --name Me
 engine/build/shrts --assets assets --join HOSTADDR:47800 --name Friend

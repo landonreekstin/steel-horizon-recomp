@@ -36,21 +36,25 @@ void vision_step(world *w)
             if (!s->alive || (s->side & 1) != side) continue;
             float d = hypotf(s->x - t->x, s->z - t->z);
             if (w->isle_count && island_blocks(w, s->x, s->z, t->x, t->z)) continue;   /* behind an island */
-            if (t->cls->submerged) {
-                /* Sonar: escorts and anything with depth charges hear farther. */
+            if (is_submerged(t)) {
+                /* Sonar: escorts and anything with depth charges hear farther; a deep
+                 * boat is heard at half the range. */
                 int asw = 0;
                 for (int m = 0; m < s->cls->mount_count; m++) asw |= s->cls->mounts[m].bat == BAT_ASW;
-                seen = d < SUB_DETECT * (asw ? 1.5f : 1);
+                seen = d < SUB_DETECT * (asw ? 1.5f : 1) * (t->depth == DEPTH_DEEP ? 0.5f : 1);
             } else {
                 float range = module_health(s, MOD_RADAR, -1) >= 0.3f && s->cls->module_count ? RADAR_RANGE : VIS_RANGE;
                 if (is_shore(s)) range = RADAR_RANGE;
+                if (t->cls->submerged) range *= 0.6f;   /* a surfaced boat: low in the water */
                 seen = d < range || (t->reveal > 0 && d < FLASH_RANGE);
             }
         }
         for (int k = 0; k < w->air_count && !seen; k++) {
             const aircraft *a = &w->air[k];
             if (a->side != side || (a->state != AIR_OUT && a->state != AIR_ATTACK && a->state != AIR_RETURN)) continue;
-            seen = hypotf(a->x - t->x, a->z - t->z) < (t->cls->submerged ? AIR_VIS * 0.4f : AIR_VIS);
+            /* From the air: a periscope and wake close by; nothing of a deep boat. */
+            if (is_submerged(t) && t->depth == DEPTH_DEEP) continue;
+            seen = hypotf(a->x - t->x, a->z - t->z) < (is_submerged(t) ? AIR_VIS * 0.4f : AIR_VIS);
         }
         if (seen) {
             mark(w, side, j);

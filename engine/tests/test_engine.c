@@ -345,10 +345,14 @@ static void test_combat(const class_table *ct)
               "BB %s carries a 16in main-battery gun", turrets[k]);
     }
     CHECK(fabsf(find_mount(bb, "R1")->arc_center - PI_F) < 1e-5f, "BB R1 trains around the stern");
-    CHECK(count_mounts(bb, BAT_SECONDARY) == 2 && count_mounts(bb, BAT_ASW) == 1,
-          "BB secondaries %d, depth-charge racks %d", count_mounts(bb, BAT_SECONDARY), count_mounts(bb, BAT_ASW));
+    /* Depth charges only on destroyers and escorts (naval_rules), with a short throw. */
+    CHECK(count_mounts(bb, BAT_SECONDARY) == 2 && count_mounts(bb, BAT_ASW) == 0 && count_mounts(dd, BAT_ASW) == 1,
+          "BB secondaries %d, depth-charge racks BB %d DD %d", count_mounts(bb, BAT_SECONDARY), count_mounts(bb, BAT_ASW),
+          count_mounts(dd, BAT_ASW));
+    for (int m = 0; m < dd->mount_count; m++)
+        if (dd->mounts[m].bat == BAT_ASW) CHECK(dd->weapons[dd->mounts[m].weapon].max_range <= DC_THROW, "DC throw is short");
     CHECK(count_mounts(pt, BAT_TORPEDO) == 2, "PT boat torpedo tubes %d", count_mounts(pt, BAT_TORPEDO));
-    CHECK(count_mounts(ss, BAT_TORPEDO) == 1 && count_mounts(ss, BAT_MAIN) == 0, "submarine: bow tubes only");
+    CHECK(count_mounts(ss, BAT_TORPEDO) == 1 && count_mounts(ss, BAT_MAIN) == 1, "submarine: bow tubes and a deck gun");
     CHECK(hit_chance(6, 3, 1000) == 35 && hit_chance(3, 6, 1000) == 85 && hit_chance(3, 3, 3000) == 65,
           "hit chance DD->BB %.0f, BB->DD %.0f, BB->BB at 3000 %.0f",
           hit_chance(6, 3, 1000), hit_chance(3, 6, 1000), hit_chance(3, 3, 3000));
@@ -424,11 +428,90 @@ static void test_combat(const class_table *ct)
     /* Submarines: only depth charges reach them. */
     world_init(&w);
     world_spawn(&w, dd, 0, 0, 0, 0);
-    world_spawn(&w, ss, 1, 700, 0, 0);
+    world_spawn(&w, ss, 1, 150, 0, 0);
     w.ships[1].hold_fire = 1;
     run(&w, 120);
     CHECK(w.shots == 0, "%d shells fired at a submerged boat", w.shots);
     CHECK(w.dc_hits > 0 && w.ships[1].hp < ss->max_health, "depth charges hit the sub (%d, hp %.0f)", w.dc_hits, w.ships[1].hp);
+
+
+    /* Out of reach of the racks: a sub 700 off is left alone by the depth charges. */
+    world_init(&w);
+    world_spawn(&w, dd, 0, 0, 0, 0);
+    world_spawn(&w, ss, 1, 700, 0, 0);
+    w.ships[1].hold_fire = 1;
+    run(&w, 60);
+    CHECK(w.dc_hits == 0, "no depth charges thrown 700 out (%d hits)", w.dc_hits);
+
+    /* Deep: the first pattern hurts her less; sonar hears her at half the range. */
+    float loss[2];
+    for (int deep = 0; deep < 2; deep++) {
+        world_init(&w);
+        world_spawn(&w, dd, 0, 0, 0, 0);
+        world_spawn(&w, ss, 1, 150, 0, 0);
+        w.ships[1].hold_fire = 1;
+        if (deep) w.ships[1].depth = w.ships[1].depth_goal = DEPTH_DEEP;
+        for (int t = 0; t < 120 * SIM_HZ && !w.dc_hits; t++) world_step(&w);
+        loss[deep] = ss->max_health - w.ships[1].hp;
+    }
+    CHECK(loss[0] > 0 && loss[1] > 0 && loss[1] < 0.8f * loss[0], "first DC hit: %.0f deep vs %.0f shallow", loss[1], loss[0]);
+    world_init(&w);
+    w.fog = 1;
+    world_spawn(&w, dd, 0, 0, 0, 0);
+    world_spawn(&w, ss, 1, SUB_DETECT, 0, 0);       /* inside the escort's sonar at periscope depth */
+    w.ships[1].hold_fire = 1;
+    w.ships[1].max_speed = 0;
+    run(&w, 1);
+    int heard_shallow = visible_to(&w, 0, 1);
+    w.ships[1].depth = w.ships[1].depth_goal = DEPTH_DEEP;
+    run(&w, 1);
+    CHECK(heard_shallow && !visible_to(&w, 0, 1), "sonar: heard at periscope depth (%d), not deep (%d)",
+          heard_shallow, visible_to(&w, 0, 1));
+
+    /* Surfaced: the guns can hit her, the racks can't; her deck gun fires back, but
+     * at periscope depth only her torpedoes do, and deep nothing. */
+    world_init(&w);
+    world_spawn(&w, dd, 0, 0, 0, 0);
+    world_spawn(&w, ss, 1, 900, 0, 0);
+    w.ships[1].depth = w.ships[1].depth_goal = DEPTH_SURFACE;
+    int deck = -1;
+    for (int m = 0; m < ss->mount_count; m++) if (ss->mounts[m].bat == BAT_MAIN) deck = m;
+    CHECK(deck >= 0 && can_engage(&w, 1, deck, 0), "surfaced: her deck gun bears");
+    run(&w, 60);
+    CHECK(w.shots > 0 && w.hits > 0 && w.dc_hits == 0, "surfaced sub shelled: %d shots, %d hits, %d DC", w.shots, w.hits, w.dc_hits);
+    w.ships[1].depth = w.ships[1].depth_goal = DEPTH_SHALLOW;
+    CHECK(deck >= 0 && !can_engage(&w, 1, deck, 0), "periscope depth: no deck gun");
+    w.ships[1].depth = w.ships[1].depth_goal = DEPTH_DEEP;
+    int any = 0;
+    for (int m = 0; m < ss->mount_count; m++) any |= can_engage(&w, 1, m, 0);
+    CHECK(!any, "deep: no weapon bears");
+
+    /* Battery: it drains underwater, a flat one brings her up, and the surface charges it. */
+    world_init(&w);
+    world_spawn(&w, ss, 1, 0, 0, 0);
+    w.ships[0].battery = 0.001f;
+    order_move(&w, (int[]){0}, 1, 0, 50000, 0);
+    run(&w, 10);
+    CHECK(w.ships[0].depth_goal == DEPTH_SURFACE, "flat battery: ordered up");
+    run(&w, DIVE_S + 1);
+    float b0 = w.ships[0].battery;
+    run(&w, 30);
+    CHECK(w.ships[0].depth == DEPTH_SURFACE && w.ships[0].battery > b0, "surfaced and charging (%.2f -> %.2f)",
+          b0, w.ships[0].battery);
+    float vs = w.ships[0].speed;
+    order_depth(&w, (int[]){0}, 1, DEPTH_SHALLOW);
+    run(&w, DIVE_S + 20);
+    CHECK(w.ships[0].depth == DEPTH_SHALLOW && w.ships[0].speed < 0.6f * vs && w.ships[0].battery < 1,
+          "dived: %.1f vs %.1f surfaced", w.ships[0].speed, vs);
+
+    /* An AI submarine stalks a battleship at periscope depth and torpedoes her. */
+    world_init(&w);
+    world_spawn(&w, bb, 0, 0, 0, PI_F / 2);
+    world_spawn(&w, ss, 1, 0, 4000, PI_F);
+    w.ships[1].ai = 1;
+    run(&w, 450);                               /* a 3,200 run takes the fish 107 s */
+    CHECK(w.torps > 0 && w.torp_hits > 0 && w.shots == 0, "sub attack: %d torpedoes, %d hit, %d shells at her (depth %d)",
+          w.torps, w.torp_hits, w.shots, w.ships[1].depth);
 
     /* Torpedoes: a PT boat's spread finds a stationary broadside battleship. */
     world_init(&w);
@@ -1245,7 +1328,7 @@ static void test_standalone(void)
     const ship_class *iowa = class_find(&st, "AmericanBattleship"), *yamato = class_find(&st, "JapaneseBattleship");
     const ship_class *fletcher = class_find(&st, "AmericanDestroyer");
     if (!iowa || !yamato || !fletcher) return;
-    CHECK(fabsf(iowa->half_length - 270 * 0.72f / 2) < 1 && iowa->mount_count >= 6 && fletcher->mount_count >= 7,
+    CHECK(fabsf(iowa->half_length - 270 * 0.72f / 2) < 1 && iowa->mount_count >= 5 && fletcher->mount_count >= 7,
           "Iowa %.0f long, %d mounts; Fletcher %d mounts", 2 * iowa->half_length, iowa->mount_count, fletcher->mount_count);
     int torp = 0;
     for (int m = 0; m < fletcher->mount_count; m++) torp += fletcher->mounts[m].bat == BAT_TORPEDO;

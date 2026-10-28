@@ -86,7 +86,7 @@ void order_strike(world *w, int carrier, int target)
 
 void order_strike_types(world *w, int carrier, int target, unsigned types)
 {
-    if (target < 0 || !w->ships[target].alive || w->ships[target].cls->submerged) return;
+    if (target < 0 || !w->ships[target].alive || is_submerged(&w->ships[target])) return;
     int fighters = hangar_count(w, carrier, PLANE_FIGHTER), escorts = (fighters + 1) / 2;
     for (int k = 0; k < w->air_count; k++) {
         aircraft *a = &w->air[k];
@@ -176,7 +176,7 @@ static int nearest_enemy_ship(const world *w, const aircraft *a, float max_d)
     float bd = max_d;
     for (int i = 0; i < w->count; i++) {
         const ship *s = &w->ships[i];
-        if (!s->alive || s->side == a->side || s->cls->submerged || !visible_to(w, a->side, i)) continue;
+        if (!s->alive || s->side == a->side || is_submerged(s) || !visible_to(w, a->side, i)) continue;
         float d = hypotf(s->x - a->x, s->z - a->z);
         if (d < bd) { bd = d; best = i; }
     }
@@ -346,7 +346,7 @@ static void return_step(world *w, aircraft *a)
 static void aa_step(world *w, int i)
 {
     ship *s = &w->ships[i];
-    if (!s->alive || s->cls->submerged || s->cls->aa_damage <= 0 || s->hold_fire) return;
+    if (!s->alive || is_submerged(s) || s->cls->aa_damage <= 0 || s->hold_fire) return;
     s->aa_reload -= SIM_DT;
     if (s->aa_reload > 0) return;
     int blast = s->special_left > 0 && special_of(s->cls) == SP_AA_BLAST;
