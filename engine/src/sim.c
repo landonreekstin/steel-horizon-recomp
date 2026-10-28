@@ -126,15 +126,16 @@ static void steer(world *w, int i)
         break;
     }
     if (s->evade > 0) {
-        /* Evasive: comb torpedoes coming her way, otherwise zig-zag 35 degrees either
-         * side of her course, changing every 12 s; full speed throughout. */
+        /* Evasive: comb torpedoes coming her way, otherwise zig-zag 25 degrees either
+         * side of her course, changing every 25 s (slow enough for her turrets to
+         * follow); full speed throughout. */
         s->evade -= SIM_DT;
         float comb;
         if (torpedo_threat(w, i, &comb)) s->evade_heading = comb;
         else {
             float base = s->wp_count ? atan2f(s->wp[0].x - s->x, s->wp[0].z - s->z) : s->evade_base;
-            int leg = (int)(w->tick / (12 * SIM_HZ)) & 1;
-            s->evade_heading = wrap_angle(base + (leg ? 0.6f : -0.6f));
+            int leg = (int)(w->tick / (25 * SIM_HZ)) & 1;
+            s->evade_heading = wrap_angle(base + (leg ? 0.44f : -0.44f));
         }
         rudder_target = clampf(wrap_angle(s->evade_heading - s->heading) / RUDDER_GAIN, -1, 1);
         target_speed = vmax;

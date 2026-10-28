@@ -70,7 +70,8 @@ with its own state, and shells/bombs/torpedoes resolved against that layout:
 
 ### 7b. Command and crew *(requested)* — first pass done (above), hover accuracy readout
 done; per-turret aim done (right-click a gun on the cross-section, then click an enemy;
-a battery order or Fire at will puts it back); still open: withdraw/evade tuning. Original list:
+a battery order or Fire at will puts it back); evasion tuned (notes/battle-logic.md:
+helps most at range, costs some of her own fire). Original list:
 - **Accuracy metric** per firing ship and target: gun, crew quality, range, the speed
   difference between the two ships (and own turning), fire-control damage; shown when
   targeting, since you don't aim shells yourself.

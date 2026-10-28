@@ -147,7 +147,12 @@ each kill planes (fighters more); Japan won all 4 after the fighter fix.
 - **Hangar lifts:** two per carrier; with them out, landed planes stay on deck unrearmed.
 - **Evasive (Z):** for 60 s, comb any torpedo whose closest approach is within her
   length + 60 in the next 45 s (turn parallel to the track, smaller turn), else
-  zig-zag ±35° every 12 s; costs 30% accuracy.
+  zig-zag ±25° every 25 s (slow enough for her turrets to follow: ±35° every 12 s
+  kept them training and cost her a third of her hits). Enemy guns' lead error ×2.5
+  against her (no settled course to plot; grows with time of flight, so with range);
+  her own spread ×1.15 plus the cost of turning. BB duel, 20 seeds, 120 s: at 3,000 she
+  takes 38% less damage and deals 29% less; at 1,500, −23% / −20% (before: at 1,500 no
+  protection for −33% of her own; at 3,000 −42% / −44%).
 - **Captain's reports** (`captain.c`): fire by a dry magazine → flood it; torpedoes
   inbound → evade; list > 6° → counter-flood; water > 40% of reserve → pumps first;
   2+ fires → fight fires; condition < 30% with an enemy within 3,500 → withdraw;

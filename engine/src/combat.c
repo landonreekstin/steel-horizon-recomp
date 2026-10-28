@@ -16,6 +16,8 @@
 #define LEAD_ERROR 0.15f       /* fraction of target speed misjudged when leading */
 #define TORP_SPREAD (3.0f * DEG)
 #define TORP_ARM_S 3.0f        /* a torpedo can't hit its own side before this */
+#define EVADE_OWN_SPREAD 1.15f /* evading: her own guns' spread */
+#define EVADE_LEAD 2.5f        /* evading: the enemy's lead error */
 #define DC_SINK_S 2.0f         /* depth charge: seconds from splash to detonation */
 
 /* ---- random numbers (xorshift64*, per world: deterministic) ---------------------- */
@@ -185,10 +187,12 @@ static void gun_solution(const world *w, int i, int m, int j, float *ax, float *
     float d = hypotf(px - mx, pz - mz), v = shell_speed(wp), T = intercept(mx, mz, px, pz, tvx, tvz, v);
     float sigma = d * DISPERSION * 85.0f / hit_chance(s->cls->hull_type, t->cls->hull_type, d);
     sigma *= fire_control_factor(s) * (1 + 0.6f * (1 - crew_factor(s))) * (s->aim[mt->bat] >= 0 ? 1.25f : 1)
-           * (s->evade > 0 ? 1.3f : 1) * (1 + 0.5f * fabsf(s->rudder) * s->speed / fmaxf(s->max_speed, 1));
+           * (s->evade > 0 ? EVADE_OWN_SPREAD : 1) * (1 + 0.5f * fabsf(s->rudder) * s->speed / fmaxf(s->max_speed, 1));
     sigma *= command_accuracy(w, i) / (1 + 0.15f * officer_level(s, OFF_FIRE_CONTROL)) * special_spread(w, i, j);
     float rel = hypotf(tvx - fvx, tvz - fvz);
-    float lead = T * LEAD_ERROR * fmaxf(rel, t->speed * 0.5f);
+    /* A zig-zagging target never holds a course long enough for the plot to settle:
+     * the lead error grows, and with it the time of flight, so it tells at long range. */
+    float lead = T * LEAD_ERROR * fmaxf(rel, t->speed * 0.5f) * (t->evade > 0 ? EVADE_LEAD : 1);
     float turn = 0.25f * fabsf(t->rudder) * t->max_yaw * t->speed * T * T;
     *ax = px + tvx * T;
     *az = pz + tvz * T;
