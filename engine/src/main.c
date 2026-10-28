@@ -124,7 +124,14 @@ static int tutorial_setup(game *g, int lesson)
         err |= spawn(g, "AmericanBattleship", 0, 0, 0, 0) < 0;
         passive(g, id = spawn(g, "JapaneseDestroyer", 1, 1500, 2600, PI_F / 2));
         err |= id < 0;
-        if (id >= 0) order_move(&g->w, &id, 1, 30000, 2600, 0);
+        if (id >= 0) {                           /* circles slowly in main-gun range, 1,500-3,100 off */
+            const float cx = 700, cz = 2200, r = 800;
+            for (int k = 0; k < MAX_WAYPOINTS; k++) {   /* two laps, eight points each, clockwise */
+                float t = atan2f(1500 - cx, 2600 - cz) + (float)(k + 1) * PI_F / 4;
+                order_move(&g->w, &id, 1, cx + sinf(t) * r, cz + cosf(t) * r, 1);
+            }
+            g->w.ships[id].cruise = g->w.ships[id].max_speed * 0.4f;
+        }
         g->cam.target = v3(700, 0, 1300);
         break;
     case 2: {                                    /* damage control: a cruiser on fire, flooding, listing */

@@ -22,6 +22,7 @@ typedef struct {
     int len;
     uint32_t pos, step;         /* 16.16 fixed point: the bank's rate over the output's */
     float gl, gr;
+    int cut, fade;              /* from sample `cut` fade out over `fade` samples (cut = len: none) */
 } voice;
 
 struct audio {
@@ -55,6 +56,7 @@ static void mix(void *ud, Uint8 *stream, int bytes)
             int i = (int)(vc->pos >> 16);
             float fr = (float)(vc->pos & 0xffff) / 65536.0f;
             float s = vc->pcm[i] + (i + 1 < vc->len ? (vc->pcm[i + 1] - vc->pcm[i]) * fr : 0);   /* linear */
+            if (i >= vc->cut) s *= 1 - (float)(i - vc->cut) / (float)vc->fade;
             l += s * vc->gl;
             r += s * vc->gr;
             vc->pos += vc->step;
@@ -229,7 +231,8 @@ void audio_close(audio *a)
     free(a);
 }
 
-static void play_index(audio *a, int i, float gain, float pan)
+/* keep > 0: play only that many seconds, then fade out over a third of it. */
+static void play_cut(audio *a, int i, float gain, float pan, float keep)
 {
     if (!a || i < 0 || gain < 0.01f) return;
     SDL_LockAudioDevice(a->dev);
@@ -248,7 +251,19 @@ static void play_index(audio *a, int i, float gain, float pan)
     pan = clampf(pan, -1, 1);
     vc->gl = gain * sqrtf(0.5f * (1 - pan));
     vc->gr = gain * sqrtf(0.5f * (1 + pan));
+    vc->cut = vc->len;
+    vc->fade = 1;
+    if (keep > 0 && keep * 4 / 3 * a->bank.rate < vc->len) {
+        vc->cut = (int)(keep * a->bank.rate);
+        vc->fade = (int)(keep / 3 * a->bank.rate);
+        vc->len = vc->cut + vc->fade;
+    }
     SDL_UnlockAudioDevice(a->dev);
+}
+
+static void play_index(audio *a, int i, float gain, float pan)
+{
+    play_cut(a, i, gain, pan, 0);
 }
 
 void audio_play(audio *a, const char *name, float gain, float pan)
@@ -291,11 +306,14 @@ void audio_events(audio *a, const world *w, vec3 eye, vec3 fwd)
         float pan = dist > 1 ? v3dot(d, right) / dist : 0;
         char base[40];
         int i = -1;
+        float keep = 0;
+        /* The bank's gun, hit and splash sounds carry 4-7 s rumbling tails: whole, one
+         * shot and its splash sound like a gun still firing for ~9 s. Cut them short. */
         switch (e->kind) {
-        case FX_MUZZLE: snprintf(base, sizeof base, "%sSHT%%d_WAV", calibre(e->mag)); i = variant(a, base, 3); gain *= 0.8f; break;
-        case FX_HIT: snprintf(base, sizeof base, "%sHT%%d_WAV", calibre(e->mag)); i = variant(a, base, 3); break;
+        case FX_MUZZLE: snprintf(base, sizeof base, "%sSHT%%d_WAV", calibre(e->mag)); i = variant(a, base, 3); gain *= 0.8f; keep = 1.2f; break;
+        case FX_HIT: snprintf(base, sizeof base, "%sHT%%d_WAV", calibre(e->mag)); i = variant(a, base, 3); keep = 1.8f; break;
         case FX_SPLASH: case FX_NEAR_MISS:
-            snprintf(base, sizeof base, "%sMISS%%d_WAV", calibre(e->mag)); i = variant(a, base, 3); gain *= 0.7f; break;
+            snprintf(base, sizeof base, "%sMISS%%d_WAV", calibre(e->mag)); i = variant(a, base, 3); gain *= 0.7f; keep = 1.5f; break;
         case FX_RICOCHET: i = variant(a, "SMLCANNHT%d_WAV", 3); gain *= 0.5f; break;
         case FX_TORP_LAUNCH: i = variant(a, "TORPSHT%d_WAV", 3); break;
         case FX_TORP_HIT: i = variant(a, "TORPHT%d_WAV", 2); gain *= 1.3f; break;
@@ -310,7 +328,7 @@ void audio_events(audio *a, const world *w, vec3 eye, vec3 fwd)
         case FX_LANDING: i = bnk_find(&a->bank, "LANDALS_WAV"); gain *= 0.5f; break;
         default: break;
         }
-        if (dist < 9000) play_index(a, i, gain, pan);
+        if (dist < 9000) play_cut(a, i, gain, pan, keep);
         if (e->kind == FX_MAGAZINE) play_index(a, bnk_find(&a->bank, "SINKINGLRG2_WAV"), gain, pan);
     }
     a->last_tick = newest;

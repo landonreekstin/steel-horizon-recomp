@@ -171,3 +171,44 @@ airfield strike, beat the raid.
 - An in-game tutorial campaign that teaches the controls toolbar, fleet movement,
   focus and macro targeting, the accuracy readout, damage control and the Captain's
   Command bar, carrier strikes, and the shipyard modes, step by step.
+
+### 10. Icon-first HUD *(requested)*
+
+Read the state at a glance: icons wherever text is used now, with a number beside
+them where the value matters.
+- **Ship readout** (`hud.c`, the selected-ship lines near `condition %.0f%%`): an icon
+  each for condition, water/flooding, list, crew and DC mode, each with its number and
+  a colour (green, amber, red) for how bad it is. This replaces the `condition 80%  water 3%/40%  crew …`
+  string.
+- **Battery line**: the target as a class silhouette, hit chance with a crosshair icon,
+  bearing guns as pips (filled = on bearing), ammo with a shell icon.
+- **Aim**: an icon per aim point (ship, engines, magazines, steering, bridge, guns),
+  not the `aim: magazines [T]` text, here and on the controls toolbar button.
+- **Fire state**: show whether a ship is on hold fire, fire at will, focus fire or
+  secondaries only (Ctrl): an icon by the ship in the world (above her, like
+  the selection marker), on her fleet-bar (F2) card and in the readout. The same for
+  evasive, flagship and submarine depth.
+- Cross-section panel: icons for the compartment `structure / water P S / fire / teams`
+  line.
+- Keep a tooltip with the full text on hover, so the meaning can still be read.
+- Icons go into `icon_atlas.h` alongside the toolbar ones, in the same style.
+
+### 10b. Enemy damage, as observed *(requested)*
+
+Show what the lookouts could see of an enemy, never her exact numbers (those stay for
+own ships). Today the hover tooltip (`hud.c` `hover_tooltip`) prints her exact
+condition %: replace that.
+- **Condition band**: undamaged / light / heavy / critical as a coloured bar, from
+  her hp with the band edges blurred (no exact %).
+- **Visible damage icons** (the section 10 icon set): on fire, listing / low in the
+  water, slowed (engines), guns silenced, steering jammed (circling), magazine fire.
+  Each one shows only once it is outwardly visible (a fire's smoke, a list past a few
+  degrees, speed well under her class top speed, turrets that stopped firing). These
+  line up with the aim points, so the player can see whether "aim: engines" is working.
+- **Where**: the hover tooltip; a small card for the selection's focus target; a thin
+  band bar over enemy ships while own ships are firing at them (optional, toggle).
+- **Better information as a reward**: close range (well inside main-gun range) or a
+  spotter / recon plane overhead narrows the band to a closer estimate (e.g. tens of
+  percent); a ship in fog shows her last-seen state, greyed, with its age.
+- Same rules for the AI and online play: computed from what that side has spotted (the
+  vision system), so the readout doesn't leak hidden information.
