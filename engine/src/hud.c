@@ -698,9 +698,10 @@ int hud_minimap_point(const hud *h, float sx, float sy, float *x, float *z)
     return 1;
 }
 
-static void minimap(hud *h, const world *w, int sh)
+static void minimap(hud *h, const world *w, int sh, float top)
 {
-    float size = 220, x0 = 10, y0 = (float)sh - size - 10;
+    /* Bottom left, shrunk to fit under the panels above it (no smaller than 120). */
+    float size = fmaxf(120, fminf(220, (float)sh - 10 - top - 8)), x0 = 10, y0 = (float)sh - size - 10;
     /* Fit everything afloat (and the camera) with a margin, square. */
     float lo_x = h->cam_x, hi_x = h->cam_x, lo_z = h->cam_z, hi_z = h->cam_z;
     for (int i = 0; i < w->count; i++) {
@@ -825,10 +826,10 @@ int hud_draw(hud *h, renderer *r, world *w, command_queue *q, int player, unsign
     h->player = player;
     mode_banner(w, sw);
     int key = controls_bar(h, w, selected);
-    shipyard_panel(h, w, q, h->controls_bottom + 8);
+    float left_bottom = shipyard_panel(h, w, q, h->controls_bottom + 8);
     captain_bar(h, r, w, q, sw, t);
     fleet_bar(h, r, w, q, selected, sw, sh, t);
-    minimap(h, w, sh);
+    minimap(h, w, sh, left_bottom);
     hover_tooltip(h, w, selected);
     ship_readout(h, r, w, q, selected, sw, sh);
     int result = world_winner(w);
