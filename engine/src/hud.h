@@ -7,13 +7,15 @@
 #include "sim.h"
 
 #define HUD_MAX_RECTS 64
+#define ICON_SMALL_PX 16.0f      /* ui_icon_small's size */
 
 /* Icons in engine/src/icon_atlas.h, in tools/bakeicons.py order. */
 enum {
     ICON_HOLD_FIRE, ICON_FIRE_AT_WILL, ICON_AIM, ICON_EVASIVE, ICON_STOP, ICON_CREW_PRIORITY, ICON_COUNTER_FLOOD,
     ICON_FLOOD_MAGAZINES, ICON_STRIKE, ICON_PATROL, ICON_RECALL, ICON_FIRE, ICON_TORPEDO, ICON_WATER, ICON_WITHDRAW,
     ICON_BRIDGE_LOST, ICON_DIVE, ICON_SURFACE, ICON_BATTERY, ICON_SPLIT_FIRE, ICON_QUEUE, ICON_FLAGSHIP, ICON_SPECIAL,
-    ICON_RECON, ICON_TORPEDO_STRIKE, ICON_DIVE_STRIKE
+    ICON_RECON, ICON_TORPEDO_STRIKE, ICON_DIVE_STRIKE, ICON_CONDITION, ICON_CREW, ICON_LIST, ICON_AMMO, ICON_FOCUS,
+    ICON_AIM_SHIP, ICON_AIM_ENGINES, ICON_AIM_MAGAZINES, ICON_AIM_STEERING, ICON_AIM_BRIDGE, ICON_AIM_GUNS
 };
 
 /* What a HUD button can return besides an SDL keycode: actions with no single key. */
@@ -52,6 +54,7 @@ typedef struct hud_s {
     struct tutorial_s *tut;    /* a running tutorial lesson, or NULL */
     int tut_action;            /* tut_action the tutorial panel asked for this frame */
     float right_top;           /* where the Captain's bar starts (below the tutorial panel) */
+    char tip[160];             /* the readout icon under the cursor explains itself */
     int rect_count;            /* last frame's UI boxes, for hud_over */
     float rects[HUD_MAX_RECTS][4];
 } hud;
@@ -69,6 +72,9 @@ void hud_issue(command_queue *q, const world *w, const command *c);
 int hud_minimap_point(const hud *h, float sx, float sy, float *x, float *z);
 /* 1 if (x, y) is over a HUD box (so a click there isn't a world click). */
 int hud_over(const hud *h, float x, float y);
+/* Ship i's fire orders as an icon (hold fire, focus, secondaries ordered, fire at will),
+ * its colour and a one-line name. */
+int hud_fire_state(const world *w, int i, const float **col, const char **name);
 /* Carries out the most urgent report (Enter key). */
 void hud_act_top(hud *h, command_queue *q, const world *w);
 /* "Battleship 3": the class without its nation, and the ship's number. */

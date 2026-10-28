@@ -78,6 +78,8 @@ python3 -I tools/preview.py assets/files MODEL.pingu out.png [GUN.pingu]
   (F2) with damage thumbnails, real-profile cross-section, dive/torpedo bombers.
 - Tutorial (9): eight lessons from the main menu (`tutorial.c`, scenarios in main.c),
   steps complete when the player does them; `test_tutorial` walks them without a window.
+- Icon HUD (10): readout, fleet cards and compartment box as icons + numbers in
+  severity colours with tooltips; fire-state icon over each own ship.
 - Submarines: surface / periscope / deep with a battery, deck guns; depth charges only
   on destroyers and escorts, short throw (notes/battle-logic.md, last section).
 

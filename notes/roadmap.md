@@ -172,7 +172,15 @@ airfield strike, beat the raid.
   focus and macro targeting, the accuracy readout, damage control and the Captain's
   Command bar, carrier strikes, and the shipyard modes, step by step.
 
-### 10. Icon-first HUD *(requested)*
+### 10. Icon-first HUD *(requested)* — done
+Built: 11 new icons (condition, crew, list, ammo, focus, six aim points), every icon
+also baked at 16 px for inline use (`ui_icon_small`); `stat()` in hud.c draws icon +
+value in green/amber/red and leaves a hover tooltip. Readout rows, fleet cards and the
+compartment box use them; fire state (`hud_fire_state`) shows over each own ship
+(main.c `ship_markers`), on her card and in the readout; the toolbar lights H or F and
+Z for the selection and draws Aim as the current aim point. Not done: the battery
+target as a class silhouette (the name is shown).
+
 
 Read the state at a glance: icons wherever text is used now, with a number beside
 them where the value matters.

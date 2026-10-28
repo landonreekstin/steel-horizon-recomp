@@ -47,6 +47,7 @@ float ui_text(float x, float y, const char *str, float r, float g, float b, floa
 float ui_text_width(const char *str);
 /* A 32x32 HUD icon (tools/bakeicons.py; ids are the ICON_* names in hud.c) in one colour. */
 void ui_icon(int id, float x, float y, float r, float g, float b, float a);
+void ui_icon_small(int id, float x, float y, float r, float g, float b, float a);   /* 16 px, inline with text */
 int ui_mark(void);                          /* vertex index of the next ui_rect */
 void ui_set_bottom(int mark, float y1);     /* resize that rect once its contents are laid out */
 float ui_line_height(void);

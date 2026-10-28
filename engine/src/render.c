@@ -787,6 +787,18 @@ void ui_icon(int id, float x, float y, float r, float g, float b, float a)
             (float)(cx + ICON_CELL) / UI_ATLAS_W - hu, (float)(cy + ICON_CELL) / UI_ATLAS_H - hv, c);
 }
 
+void ui_icon_small(int id, float x, float y, float r, float g, float b, float a)
+{
+    if (id < 0 || id >= ICON_COUNT) return;
+    const float c[4] = {r, g, b, a};
+    x = floorf(x + 0.5f);
+    y = floorf(y + 0.5f);
+    float hu = 0.5f / UI_ATLAS_W, hv = 0.5f / UI_ATLAS_H;
+    int cx = id % ICON_SMALL_COLS * ICON_SMALL, cy = FONT_ATLAS_H + ICON_SMALL_Y + id / ICON_SMALL_COLS * ICON_SMALL;
+    ui_quad(x, y, x + ICON_SMALL, y + ICON_SMALL, (float)cx / UI_ATLAS_W + hu, (float)cy / UI_ATLAS_H + hv,
+            (float)(cx + ICON_SMALL) / UI_ATLAS_W - hu, (float)(cy + ICON_SMALL) / UI_ATLAS_H - hv, c);
+}
+
 int ui_mark(void) { return g_ui_count; }
 
 /* Move the bottom edge of the quad that ui_rect emitted at vertex mark. */

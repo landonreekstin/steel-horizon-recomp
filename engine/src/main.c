@@ -427,6 +427,26 @@ static void select_at(game *g, int w, int h, int add)
     if (click && best >= 0) g->selected[best] = 1;
 }
 
+/* Over each of the player's ships, her fire orders as an icon (hold fire, focus, fire at
+ * will) and evasive beside it: the fleet's state at a glance. Drawn under the HUD. */
+static void ship_markers(const game *g, int w, int h)
+{
+    mat4 vp = camera_viewproj(&g->cam, w, h, NULL);
+    for (int i = 0; i < g->w.count; i++) {
+        const ship *s = &g->w.ships[i];
+        float sx, sy;
+        if (s->owner != g->player || !s->alive || is_shore(s) ||
+            !project(vp, v3(s->x, 30, s->z), w, h, &sx, &sy)) continue;
+        const float *c;
+        const char *name;
+        int icon = hud_fire_state(&g->w, i, &c, &name);
+        float a = g->selected[i] ? 1.0f : 0.7f, x = sx - ICON_SMALL_PX / 2 - (s->evade > 0 ? 9 : 0), y = sy - 34;
+        ui_rect(x - 2, y - 2, x + ICON_SMALL_PX + 2 + (s->evade > 0 ? 18 : 0), y + ICON_SMALL_PX + 2, 0, 0, 0, 0.45f * a);
+        ui_icon_small(icon, x, y, c[0], c[1], c[2], a);
+        if (s->evade > 0) ui_icon_small(ICON_EVASIVE, x + 18, y, 0.98f, 0.8f, 0.25f, a);
+    }
+}
+
 static void save_ppm(const char *path, int w, int h)
 {
     unsigned char *px = malloc((size_t)w * h * 3);
@@ -1435,6 +1455,7 @@ int main(int argc, char **argv)
             for (int i = 0; i < g.w.count; i++)
                 if (g.groups[gi][i] && g.w.ships[i].alive) { hd.groups |= 1u << gi; break; }
         hd.aim_mount = -1;
+        if (!record) ship_markers(&g, w, h);
         int key = hud_draw(&hd, r, &g.w, &g.q, g.player, g.selected, w, h, (float)sim_time);
         if (hd.aim_mount >= 0) {                         /* a turret right-clicked on the panel */
             g.click = CLICK_TURRET;

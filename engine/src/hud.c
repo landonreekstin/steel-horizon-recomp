@@ -219,11 +219,69 @@ static void captain_bar(hud *h, renderer *r, world *w, command_queue *q, int sw,
  * (NULL: the key's letter). */
 typedef struct { int key; int icon; const char *name, *tip, *hint; } control;
 
+/* ---- icon readouts ------------------------------------------------------------------- */
+
+static const float OK_C[3] = {0.4f, 0.9f, 0.45f}, WARN_C[3] = {0.98f, 0.8f, 0.25f}, BAD_C[3] = {0.98f, 0.32f, 0.25f};
+
+/* Green, amber or red for how bad a value is: 0 fine .. 1 desperate. */
+static const float *severity(float bad)
+{
+    return bad < 0.34f ? OK_C : bad < 0.67f ? WARN_C : BAD_C;
+}
+
+static int aim_icon(int kind)
+{
+    switch (kind) {
+    case MOD_ENGINE: return ICON_AIM_ENGINES;
+    case MOD_MAGAZINE: return ICON_AIM_MAGAZINES;
+    case MOD_STEERING: return ICON_AIM_STEERING;
+    case MOD_BRIDGE: return ICON_AIM_BRIDGE;
+    case MOD_TURRET: return ICON_AIM_GUNS;
+    default: return ICON_AIM_SHIP;
+    }
+}
+
+int hud_fire_state(const world *w, int i, const float **col, const char **name)
+{
+    const ship *s = &w->ships[i];
+    int main_t = s->order_target[BAT_MAIN], any_t = -1;
+    for (int b = 0; b < BATTERIES; b++)
+        if (s->order_target[b] >= 0 && s->order_target[b] < w->count && w->ships[s->order_target[b]].alive) any_t = b;
+    static const float HOLD[3] = {0.98f, 0.35f, 0.3f}, FOCUS[3] = {1, 0.65f, 0.2f}, FREE[3] = {0.45f, 0.9f, 0.5f};
+    if (s->hold_fire) { *col = HOLD; *name = "Holding fire [H]"; return ICON_HOLD_FIRE; }
+    if (main_t >= 0 && main_t < w->count && w->ships[main_t].alive) { *col = FOCUS; *name = "Focus fire on her target"; return ICON_FOCUS; }
+    if (any_t >= 0) { *col = FOCUS; *name = "Secondaries on an ordered target, mains free"; return ICON_SPLIT_FIRE; }
+    *col = FREE;
+    *name = "Fire at will [F]";
+    return ICON_FIRE_AT_WILL;
+}
+
+/* A 16 px icon and its value, in colour c; hovering it leaves `tip` for the tooltip.
+ * Returns the width taken, with a gap after it. */
+static float stat(hud *h, float x, float y, int icon, const char *val, const float *c, const char *tip)
+{
+    ui_icon_small(icon, x, y, c[0], c[1], c[2], 1);
+    float w = ICON_SMALL_PX + (val && *val ? 3 + ui_text_width(val) : 0);
+    if (val && *val) ui_text(x + ICON_SMALL_PX + 3, y, val, c[0], c[1], c[2], 1);
+    if (tip && h->mouse_x >= x && h->mouse_x <= x + w && h->mouse_y >= y - 2 && h->mouse_y <= y + ICON_SMALL_PX + 2)
+        snprintf(h->tip, sizeof h->tip, "%s", tip);
+    return w + 12;
+}
+
+static void draw_tip(hud *h, int sw)
+{
+    if (!h->tip[0]) return;
+    float tw = ui_text_width(h->tip), x = fminf(h->mouse_x + 14, (float)sw - tw - 12), y = h->mouse_y - ui_line_height() - 10;
+    ui_rect(x - 5, y - 3, x + tw + 5, y + ui_line_height() + 3, 0.03f, 0.04f, 0.05f, 0.95f);
+    ui_text(x, y, h->tip, TEXT[0], TEXT[1], TEXT[2], 1);
+    h->tip[0] = 0;
+}
+
 #define ICON_BTN 40.0f   /* icon button: a 32 px icon and its key letter under it */
 
 /* One row of icon buttons; returns the key of the one clicked, and leaves the one under
- * the mouse in *hover for the tooltip. The button whose key is `lit` is drawn as on. */
-static int icon_row_lit(hud *h, float x, float y, const control *c, int n, const float *col, const control **hover, int lit, int lit2)
+ * the mouse in *hover for the tooltip. Buttons whose keys are in lit[4] are drawn as on. */
+static int icon_row_lit(hud *h, float x, float y, const control *c, int n, const float *col, const control **hover, const int lit[4])
 {
     int key = 0;
     float lh = ui_line_height();
@@ -232,7 +290,9 @@ static int icon_row_lit(hud *h, float x, float y, const control *c, int n, const
         int over = h->mouse_x >= x && h->mouse_x <= x1 && h->mouse_y >= y && h->mouse_y <= y1;
         float k = over ? 1.35f : 1;
         const float on[4] = {0.75f, 0.55f, 0.15f, 0.95f}, bg[4] = {col[0] * k, col[1] * k, col[2] * k, 0.92f};
-        box(h, x, y, x1, y1, c[i].key == lit || c[i].key == lit2 ? on : bg);
+        int is_on = 0;
+        for (int l = 0; l < 4; l++) is_on |= c[i].key == lit[l];
+        box(h, x, y, x1, y1, is_on ? on : bg);
         ui_icon(c[i].icon, x + (ICON_BTN - 32) / 2, y + 3, 1, 1, 1, 1);
         char letter[2] = {(char)(c[i].key >= 'a' && c[i].key <= 'z' ? c[i].key - 32 : '?'), 0};
         const char *hint = c[i].hint ? c[i].hint : letter;
@@ -245,7 +305,7 @@ static int icon_row_lit(hud *h, float x, float y, const control *c, int n, const
 
 static int icon_row(hud *h, float x, float y, const control *c, int n, const float *col, const control **hover)
 {
-    return icon_row_lit(h, x, y, c, n, col, hover, -1, -1);
+    return icon_row_lit(h, x, y, c, n, col, hover, (const int[4]){-1, -1, -1, -1});
 }
 
 static int controls_bar(hud *h, const world *w, const unsigned char *selected)
@@ -263,7 +323,7 @@ static int controls_bar(hud *h, const world *w, const unsigned char *selected)
         h->controls_bottom = y + lh + 6;
         return 0;
     }
-    static const control orders[] = {
+    control orders[] = {
         {SDLK_h, ICON_HOLD_FIRE, "Hold fire", "Guns stop firing until ordered", NULL},
         {SDLK_f, ICON_FIRE_AT_WILL, "Fire at will", "Engage the best target in range", NULL},
         {SDLK_t, ICON_AIM, "Aim", "Cycle the part aimed at: ship, engines, magazines, steering, bridge, guns", NULL},
@@ -351,14 +411,26 @@ static int controls_bar(hud *h, const world *w, const unsigned char *selected)
     float row = ICON_BTN + lh + 4;
     int k;
     /* Orders and damage control share a row when they fit; aircraft get their own. */
-    if ((k = icon_row_lit(h, x0 + PAD, y, orders, 8, ORDERS, &hover, h->click_mode == CLICK_SPLIT ? HUD_SPLIT : -1,
-                          h->queue_on ? HUD_QUEUE : -1))) key = k;
+    /* The orders row shows the selection's state: hold fire or fire at will lit, the
+     * aim button drawn as the part aimed at, evasive lit while she zig-zags. */
+    int holding = 0, evading = 0, first = -1;
+    for (int i = 0; i < w->count; i++)
+        if (selected[i] && w->ships[i].alive) {
+            if (first < 0) first = i;
+            holding |= w->ships[i].hold_fire;
+            evading |= w->ships[i].evade > 0;
+        }
+    orders[2].icon = aim_icon(w->ships[first].aim[BAT_MAIN]);
+    const int lit[4] = {h->click_mode == CLICK_SPLIT ? HUD_SPLIT : -1, h->queue_on ? HUD_QUEUE : -1,
+                        holding ? SDLK_h : SDLK_f, evading ? SDLK_z : -1};
+    if ((k = icon_row_lit(h, x0 + PAD, y, orders, 8, ORDERS, &hover, lit))) key = k;
     y += row;
     if ((k = icon_row(h, x0 + PAD, y, dc, 3, DC, &hover))) key = k;
     if (carrier && (k = icon_row(h, x0 + PAD + 3 * (ICON_BTN + 6) + 12, y, air, 5, AIR, &hover))) key = k;
     else if (!carrier && subs && (k = icon_row(h, x0 + PAD + 3 * (ICON_BTN + 6) + 12, y, depth, 2, DEPTH, &hover))) key = k;
     y += row;
-    if ((k = icon_row_lit(h, x0 + PAD, y, command, 2, ORDERS, &hover, h->click_mode == CLICK_RECON ? HUD_RECON : -1, -1))) key = k;
+    if ((k = icon_row_lit(h, x0 + PAD, y, command, 2, ORDERS, &hover, (const int[4]){h->click_mode == CLICK_RECON ? HUD_RECON : -1, -1, -1, -1})))
+        key = k;
     y += row;
     ui_set_bottom(mark, y + 4);
     h->rects[rect][3] = y + 4;
@@ -419,8 +491,8 @@ static void compartment_tip(hud *h, renderer *r, const world *w, command_queue *
     if (gun >= 0 && s->owner == h->player)
         snprintf(lines[nl++], 96, "  right-click: aim %s at a ship of your choice",
                  c->mounts[gun].name[0] ? c->mounts[gun].name : "this mount");
-    snprintf(lines[nl++], 96, "structure %.0f%%  water P %.0f%% S %.0f%%%s  fire %.0f%%  teams %d", 100 * cp->structure,
-             100 * cp->flood[0], 100 * cp->flood[1], cp->leak[0] + cp->leak[1] > 0 ? " (leaking)" : "", 100 * cp->fire, cp->crews);
+    int statl = nl;                                 /* drawn as icons below; spaces hold its width */
+    snprintf(lines[nl++], 96, "%46s", "");
     for (int m = 0; m < c->module_count && nl < 7; m++) {
         const module_def *d = &c->modules[m];
         if (d->comp != k) continue;
@@ -446,6 +518,19 @@ static void compartment_tip(hud *h, renderer *r, const world *w, command_queue *
     float lh = ui_line_height(), tx = fminf(h->mouse_x + 14, (float)sw - tw - 14), ty = y0 - (float)nl * (lh + 2) - 60;
     ui_rect(tx - 6, ty - 4, tx + tw + 6, ty + (float)nl * (lh + 2) + 4, 0.03f, 0.04f, 0.05f, 0.92f);
     for (int l = 0; l < nl; l++) ui_text(tx, ty + (float)l * (lh + 2), lines[l], l ? 0.85f : 1, l ? 0.9f : 0.85f, l ? 0.95f : 0.5f, 1);
+    {
+        static const float FIRE_C[3] = {1, 0.5f, 0.15f}, WATER_C[3] = {0.4f, 0.65f, 1};
+        char v[32];
+        float sx = tx, sy = ty + (float)statl * (lh + 2);
+        snprintf(v, sizeof v, "%.0f%%", 100 * cp->structure);
+        sx += stat(h, sx, sy, ICON_CONDITION, v, severity(1 - cp->structure), NULL);
+        snprintf(v, sizeof v, "P%.0f%% S%.0f%%%s", 100 * cp->flood[0], 100 * cp->flood[1], cp->leak[0] + cp->leak[1] > 0 ? " leak" : "");
+        sx += stat(h, sx, sy, ICON_WATER, v, cp->flood[0] + cp->flood[1] > 0 ? WATER_C : DIM, NULL);
+        snprintf(v, sizeof v, "%.0f%%", 100 * cp->fire);
+        sx += stat(h, sx, sy, ICON_FIRE, v, cp->fire > 0 ? FIRE_C : DIM, NULL);
+        snprintf(v, sizeof v, "%d", cp->crews);
+        stat(h, sx, sy, ICON_CREW_PRIORITY, v, cp->crews ? TEXT : DIM, NULL);
+    }
     if (h->click && s->owner == h->player) {
         command cmd;
         memset(&cmd, 0, sizeof cmd);
@@ -471,26 +556,67 @@ static void ship_readout(hud *h, renderer *r, const world *w, command_queue *q, 
     if (i < 0) return;
     const ship *s = &w->ships[i];
     static const char *policy[] = {"auto", "fires", "flooding", "weapons"};
-    char who[64], l1[192], l2[192];
+    char who[64], v[48], tip[160];
     ship_label(w, i, who, sizeof who);
-    if (is_shore(s))
-        snprintf(l1, sizeof l1, "%s   condition %.0f%%  crew %.0f/%.0f  DC: %s%s", who, 100 * s->hp / s->cls->max_health,
-                 s->crew, s->cls->complement, policy[s->policy], module_health(s, MOD_BRIDGE, -1) <= 0 ? "  HQ OUT" : "");
-    else
-        snprintf(l1, sizeof l1, "%s   condition %.0f%%  water %.0f%%/%.0f%%  list %.0f deg  crew %.0f/%.0f  DC: %s%s",
-                 who, 100 * s->hp / s->cls->max_health, 100 * s->water, 100 * s->cls->reserve_buoyancy,
-                 s->list * 180 / PI_F, s->crew, s->cls->complement, policy[s->policy],
-                 module_health(s, MOD_BRIDGE, -1) <= 0 && !s->cls->submerged ? "  BRIDGE OUT" : "");
-    /* Accuracy readout: the main battery against its focus target, else what it's on. */
+    float lh = ui_line_height(), pw = fminf(760, (float)sw - 40), x0 = ((float)sw - pw) / 2, y0 = (float)sh - 170;
+    float row1 = y0 - 2 * lh - 17, row2 = y0 - lh - 11;
+    box(h, x0 - 10, y0 - 2 * lh - 22, x0 + pw + 10, y0 - 8, PANEL);
+    /* Row 1: who she is, her fire orders, then her state as icons and numbers. */
+    float x = x0;
+    x += ui_text(x, row1, who, TEXT[0], TEXT[1], TEXT[2], 1) + 10;
+    const float *fc;
+    const char *fname;
+    int fi = hud_fire_state(w, i, &fc, &fname);
+    x += stat(h, x, row1, fi, NULL, fc, fname);
+    if (s->evade > 0) x += stat(h, x, row1, ICON_EVASIVE, NULL, WARN_C, "Evasive manoeuvres [Z]");
+    if (s->flagship) x += stat(h, x, row1, ICON_FLAGSHIP, NULL, WARN_C, "Fleet flagship");
+    x += 6;
+    float cond = s->hp / s->cls->max_health;
+    snprintf(v, sizeof v, "%.0f%%", 100 * cond);
+    x += stat(h, x, row1, ICON_CONDITION, v, severity(1 - cond), "Condition: hull structure left");
+    if (!is_shore(s)) {
+        float flood = s->water / fmaxf(s->cls->reserve_buoyancy, 1e-3f);
+        snprintf(v, sizeof v, "%.0f%%", 100 * flood);
+        snprintf(tip, sizeof tip, "Water aboard: %.0f%% of her reserve buoyancy (%.0f%% of %.0f%%); at 100%% she sinks",
+                 100 * flood, 100 * s->water, 100 * s->cls->reserve_buoyancy);
+        x += stat(h, x, row1, ICON_WATER, v, severity(flood * 1.4f), tip);
+        float list = fabsf(s->list) * 180 / PI_F;
+        snprintf(v, sizeof v, "%.0f deg", list);
+        x += stat(h, x, row1, ICON_LIST, v, severity(list / 20), "List: past about 20 degrees she capsizes; counter-flood [X]");
+    }
+    float crew = s->crew / fmaxf(s->cls->complement, 1);
+    snprintf(v, sizeof v, "%.0f/%.0f", s->crew, s->cls->complement);
+    x += stat(h, x, row1, ICON_CREW, v, severity((1 - crew) * 1.5f), "Crew: fewer hands load, steer and fight damage slower");
+    snprintf(tip, sizeof tip, "Damage-control priority: %s [P]", policy[s->policy]);
+    x += stat(h, x, row1, ICON_CREW_PRIORITY, policy[s->policy], TEXT, tip);
+    if (module_health(s, MOD_BRIDGE, -1) <= 0 && !s->cls->submerged)
+        x += stat(h, x, row1, ICON_BRIDGE_LOST, NULL, BAD_C, is_shore(s) ? "HQ out" : "Bridge out: the helm answers slowly");
+    if (s->cls->submerged) {
+        static const char *dn[] = {"surfaced", "periscope", "deep"};
+        snprintf(v, sizeof v, "%.0f%%", 100 * s->battery);
+        snprintf(tip, sizeof tip, "Battery %.0f%%, %s: it charges on the surface", 100 * s->battery, dn[s->depth]);
+        x += stat(h, x, row1, s->depth == DEPTH_SURFACE ? ICON_SURFACE : ICON_DIVE, NULL, TEXT, tip);
+        x += stat(h, x, row1, ICON_BATTERY, v, severity(1 - s->battery), tip);
+    }
+    /* Row 2: the main battery against its focus target, else what it's on. */
     int target = s->order_target[BAT_MAIN];
     if (target < 0 || !w->ships[target].alive) {
         target = -1;
         for (int m = 0; m < s->cls->mount_count && target < 0; m++)
             if (s->cls->mounts[m].bat == BAT_MAIN && s->turrets[m].target >= 0) target = s->turrets[m].target;
     }
-    int mains = 0, main_ammo = 0;
+    int mains = 0, main_ammo = 0, main_cap = 0;
     for (int m = 0; m < s->cls->mount_count; m++)
-        if (s->cls->mounts[m].bat == BAT_MAIN) { mains++; main_ammo += s->turrets[m].ammo; }
+        if (s->cls->mounts[m].bat == BAT_MAIN) { mains++; main_ammo += s->turrets[m].ammo; main_cap += ammo_capacity(s->cls, m); }
+    const float GOLD[3] = {0.95f, 0.85f, 0.55f};
+    x = x0;
+    snprintf(tip, sizeof tip, "Aim: %s [T]", aim_name(s->aim[BAT_MAIN]));
+    x += stat(h, x, row2, aim_icon(s->aim[BAT_MAIN]), aim_name(s->aim[BAT_MAIN]), GOLD, tip);
+    if (mains) {
+        snprintf(v, sizeof v, "%d", main_ammo);
+        snprintf(tip, sizeof tip, "Main battery shells left: %d of %d", main_ammo, main_cap);
+        x += stat(h, x, row2, ICON_AMMO, v, severity(main_cap ? 1 - (float)main_ammo / (float)main_cap : 0), tip);
+    }
     if (target >= 0) {
         float p = 0;
         int n = 0;
@@ -498,32 +624,40 @@ static void ship_readout(hud *h, renderer *r, const world *w, command_queue *q, 
             if (s->cls->mounts[m].bat == BAT_MAIN && can_engage(w, i, m, target)) { p += hit_probability(w, i, m, target); n++; }
         char tname[64];
         ship_label(w, target, tname, sizeof tname);
-        if (n)
-            snprintf(l2, sizeof l2, "Main battery on %s%s: %.0f%% per shell, %d/%d bearing, ammo %d   aim: %s [T]",
-                     tname, s->order_target[BAT_MAIN] == target ? " (focus)" : "", 100 * p / (float)n, n,
-                     mains, main_ammo, aim_name(s->aim[BAT_MAIN]));
-        else
-            snprintf(l2, sizeof l2, "Main battery: %s out of arc or range   aim: %s [T]", tname, aim_name(s->aim[BAT_MAIN]));
+        int focus = s->order_target[BAT_MAIN] == target;
+        snprintf(tip, sizeof tip, "Main battery %s %s", focus ? "ordered onto" : "engaging", tname);
+        x += stat(h, x, row2, focus ? ICON_FOCUS : ICON_FIRE_AT_WILL, tname, GOLD, tip);
+        if (n) {
+            snprintf(v, sizeof v, "%.0f%%", 100 * p / (float)n);
+            snprintf(tip, sizeof tip, "Chance per shell, from range, both ships' speeds, crew and fire control");
+            x += stat(h, x, row2, ICON_AIM, v, GOLD, tip);
+            /* Guns on bearing: a pip per main mount, filled when it bears. */
+            snprintf(tip, sizeof tip, "Main turrets bearing: %d of %d", n, mains);
+            float px = x;
+            for (int k = 0; k < mains; k++, px += 9)
+                ui_rect(px, row2 + 4, px + 6, row2 + 12, k < n ? GOLD[0] : 0.25f, k < n ? GOLD[1] : 0.27f, k < n ? GOLD[2] : 0.3f, 1);
+            if (h->mouse_x >= x && h->mouse_x <= px && h->mouse_y >= row2 && h->mouse_y <= row2 + 16) snprintf(h->tip, sizeof h->tip, "%s", tip);
+            x = px + 12;
+        } else {
+            x += stat(h, x, row2, ICON_AIM, "no bearing", DIM, "Out of arc or range of her main battery");
+        }
     } else {
-        snprintf(l2, sizeof l2, "Main battery: no target%s   aim: %s [T]", s->hold_fire ? " (holding fire)" : "",
-                 aim_name(s->aim[BAT_MAIN]));
+        x += stat(h, x, row2, ICON_AIM, s->hold_fire ? "holding" : "no target", DIM,
+                  s->hold_fire ? "Holding fire: F to fire at will" : "No enemy in range or arc");
     }
     special_kind sk = special_of(s->cls);
     if (sk != SP_NONE) {
-        char sp[80];
-        if (s->special_left > 0) snprintf(sp, sizeof sp, "   %s ACTIVE %.0fs", special_name(sk), s->special_left);
-        else if (s->special_cool > 0) snprintf(sp, sizeof sp, "   %s in %.0fs", special_name(sk), s->special_cool);
-        else snprintf(sp, sizeof sp, "   %s READY [U]", special_name(sk));
-        strncat(l2, sp, sizeof l2 - strlen(l2) - 1);
+        const float *sc = s->special_left > 0 ? OK_C : s->special_cool > 0 ? DIM : WARN_C;
+        if (s->special_left > 0) snprintf(v, sizeof v, "%.0fs", s->special_left);
+        else if (s->special_cool > 0) snprintf(v, sizeof v, "%.0fs", s->special_cool);
+        else snprintf(v, sizeof v, "ready");
+        snprintf(tip, sizeof tip, "%s: %s [U]", special_name(sk),
+                 s->special_left > 0 ? "active" : s->special_cool > 0 ? "recharging" : "ready");
+        x += stat(h, x, row2, ICON_SPECIAL, v, sc, tip);
     }
-    float lh = ui_line_height(), pw = fminf(760, (float)sw - 40), x0 = ((float)sw - pw) / 2, y0 = (float)sh - 170;
-    float wtext = fmaxf(ui_text_width(l1), ui_text_width(l2)) + 2 * PAD;
-    box(h, x0 - 10, y0 - 2 * lh - 22, x0 - 10 + fmaxf(wtext, pw + 20), y0 - 10, PANEL);
-    ui_text(x0, y0 - 2 * lh - 17, l1, TEXT[0], TEXT[1], TEXT[2], 1);
-    ui_text(x0, y0 - lh - 13, l2, 0.95f, 0.85f, 0.55f, 1);
     /* Legend along the bottom of the damage panel. */
     float ly = y0 + 122;
-    float x = x0 + 20;
+    x = x0 + 20;
     x += ui_text(x, ly, "turret ", 0.3f, 0.9f, 0.35f, 1);
     x += ui_text(x, ly, "magazine ", 1, 0.6f, 0.2f, 1);
     x += ui_text(x, ly, "water ", 0.3f, 0.55f, 1, 1);
@@ -652,9 +786,12 @@ static void fleet_bar(hud *h, renderer *r, world *w, command_queue *q, unsigned 
         ui_ship_profile(r, s, x0 + 4, y + 4, 110, ch - 8, 0, t);
         char name[32], who[64];
         ship_label(w, i, who, sizeof who);
-        snprintf(name, sizeof name, "%.13s", who);
+        snprintf(name, sizeof name, "%.10s", who);
         ui_text(x0 + 120, y + 3, name, s->flagship ? 1.0f : TEXT[0], s->flagship ? 0.85f : TEXT[1], s->flagship ? 0.4f : TEXT[2], 1);
-        if (s->flagship) ui_text(x0 + cw - 14, y + 3, "*", 1, 0.85f, 0.3f, 1);
+        const float *fc;
+        const char *fname;
+        int fi = hud_fire_state(w, i, &fc, &fname);
+        stat(h, x0 + cw - 4 - ICON_SMALL_PX, y + 2, fi, NULL, fc, fname);
         float cf = s->hp / s->cls->max_health;
         ui_rect(x0 + 120, y + lh + 6, x0 + cw - 6, y + lh + 10, 0.08f, 0.08f, 0.1f, 1);
         ui_rect(x0 + 120, y + lh + 6, x0 + 120 + (cw - 126) * cf, y + lh + 10,
@@ -662,13 +799,25 @@ static void fleet_bar(hud *h, renderer *r, world *w, command_queue *q, unsigned 
         /* Afflictions: fires, water, list; officers aboard. */
         int fires = 0;
         for (int k = 0; k < s->cls->comp_count; k++) fires += s->comp[k].fire > 0;
-        char st[48];
-        float sx = x0 + 120;
-        if (fires) { snprintf(st, sizeof st, "^%d ", fires); sx += ui_text(sx, y + lh + 12, st, 1, 0.5f, 0.15f, 1); }
-        if (s->water > 0.02f) { snprintf(st, sizeof st, "~%.0f%% ", 100 * s->water / s->cls->reserve_buoyancy); sx += ui_text(sx, y + lh + 12, st, 0.4f, 0.65f, 1, 1); }
-        if (fabsf(s->list) > 0.03f) { snprintf(st, sizeof st, "/%.0f ", fabsf(s->list) * 180 / PI_F); sx += ui_text(sx, y + lh + 12, st, 0.9f, 0.9f, 0.6f, 1); }
+        char st[48], tip[96];
+        float sx = x0 + 120, sy = y + lh + 11;
+        static const float FIRE_C[3] = {1, 0.5f, 0.15f}, WATER_C[3] = {0.4f, 0.65f, 1}, LIST_C[3] = {0.9f, 0.9f, 0.6f};
+        if (s->flagship) sx += stat(h, sx, sy, ICON_FLAGSHIP, NULL, WARN_C, "Fleet flagship") - 6;
+        if (fires) {
+            snprintf(st, sizeof st, "%d", fires);
+            snprintf(tip, sizeof tip, "%d compartment%s on fire", fires, fires > 1 ? "s" : "");
+            sx += stat(h, sx, sy, ICON_FIRE, st, FIRE_C, tip) - 6;
+        }
+        if (s->water > 0.02f) {
+            snprintf(st, sizeof st, "%.0f%%", 100 * s->water / s->cls->reserve_buoyancy);
+            sx += stat(h, sx, sy, ICON_WATER, st, WATER_C, "Water aboard, of her reserve buoyancy") - 6;
+        }
+        if (fabsf(s->list) > 0.03f) {
+            snprintf(st, sizeof st, "%.0f", fabsf(s->list) * 180 / PI_F);
+            sx += stat(h, sx, sy, ICON_LIST, st, LIST_C, "List, degrees") - 6;
+        }
         for (int k = 0; k < OFFICER_KINDS; k++)
-            if (s->officers[k]) { snprintf(st, sizeof st, "%c", OFFICER_LETTER[k]); sx += ui_text(sx, y + lh + 12, st, 0.95f, 0.8f, 0.4f, 1); }
+            if (s->officers[k]) { snprintf(st, sizeof st, "%c", OFFICER_LETTER[k]); sx += ui_text(sx, sy, st, 0.95f, 0.8f, 0.4f, 1); }
         if (clicked(h, x0, y, x0 + cw, y + ch)) {
             if (h->pending_officer >= 0) {                   /* post the picked officer here */
                 command oc;
@@ -847,6 +996,7 @@ int hud_draw(hud *h, renderer *r, world *w, command_queue *q, int player, unsign
     minimap(h, w, sh, left_bottom);
     hover_tooltip(h, w, selected);
     ship_readout(h, r, w, q, selected, sw, sh);
+    draw_tip(h, sw);
     int result = world_winner(w);
     if (result >= 0) {
         const char *msg = result == 2 ? "DRAW" : result == 0 ? "VICTORY" : "DEFEAT";
