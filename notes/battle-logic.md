@@ -273,6 +273,9 @@ each kill planes (fighters more); Japan won all 4 after the fighter fix.
   side 0 +0.36 -> +0.46, side 1 -0.36 -> -0.26; carriers side 0 -0.16 -> -0.06, side 1
   +0.16 -> +0.17 (before holding at strike distance it was -0.02: carriers closed into
   gun range). `--no-commander P` turns fleet P's commander off.
+  Yard modes: an attack wave that has sailed (or the yard-less attacker's ships) is
+  commanded too, making for the enemy yard; the scenarios start inside engage range, so
+  A/B over 6 seeds shows no difference there (it matters for waves sailing out of contact).
 
 ## Fog of war and recon (phase 8, `engine/src/vision.c`) — design
 - Each side sees enemy ships within 4,500 of one of its ships (6,500 with working

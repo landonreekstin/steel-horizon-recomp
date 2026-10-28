@@ -14,7 +14,8 @@
  *             90 s after the first one was.
  *
  * Back to APPROACH after 40 s with no enemy surface ship in sight. Submarines and ships
- * heading home for repairs are left to their own logic. Everything here is in the
+ * heading home for repairs are left to their own logic. In the yard modes only an
+ * attack wave that has sailed is commanded, and it makes for the enemy's yard. Everything here is in the
  * world, so lockstep peers agree on it. */
 #include <math.h>
 
@@ -45,9 +46,16 @@ static int has_torpedoes(const ship *s)
     return 0;
 }
 
-/* Where the enemy is: the latest sighting, else the centre of their fleet. */
+/* Where to go: in the yard modes the enemy's yard; else the latest sighting, else the
+ * centre of their fleet. */
 static int enemy_estimate(const world *w, int side, float *x, float *z)
 {
+    int ey = w->sides[1 - (side & 1)].yard;
+    if (w->mode != MODE_SKIRMISH && ey >= 0 && w->ships[ey].alive) {
+        *x = w->ships[ey].x;
+        *z = w->ships[ey].z;
+        return 1;
+    }
     long latest = -1;
     for (int j = 0; j < w->count; j++)
         if (w->ships[j].side != side && w->ships[j].alive && w->last_seen[side & 1][j] > latest) {
@@ -128,7 +136,6 @@ static float target_value(const world *w, float cx, float cz, int j)
 
 void ai_commander(world *w)
 {
-    if (w->mode != MODE_SKIRMISH) return;
     for (int p = 0; p < FLEET_PLAYERS; p++) {
         commander *c = &w->cmdr[p];
         int ids[MAX_SHIPS], n = 0, side = -1, carriers = 0;
@@ -137,6 +144,8 @@ void ai_commander(world *w)
             ship *s = &w->ships[i];
             s->in_formation = s->owner == p ? 0 : s->in_formation;
             if (s->owner != p || !s->alive || !s->ai || is_shore(s)) continue;
+            int own_yard = w->sides[s->side & 1].yard >= 0 && w->ships[w->sides[s->side & 1].yard].alive;
+            if (w->mode != MODE_SKIRMISH && own_yard && !s->committed) continue;   /* yard modes: only a wave at sea */
             s->cruise = 0;
             s->ai_target = -1;
             ids[n++] = i;

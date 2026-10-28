@@ -133,7 +133,7 @@ helps most at range, costs some of her own fire). Original list:
 - Scenario setup, fleet picker, maps *(done: front end, custom battles, islands /
   archipelago; reinforcement waves; victory on yards, time or points)*.
 - Fleet-level AI commander (targeting, formations, strike timing): done for skirmish
-  (`commander.c`; A/B in notes/battle-logic.md). Assault/defend still use their waves.
+  (`commander.c`; A/B in notes/battle-logic.md); in the yard modes it commands waves at sea.
 - UI: ship cards, damage panels, minimap.
 - Audio: sound banks done; `.at3` music done (title track in the menu, battle playlist
   in battle, ducked under the effects; `tools/at3wav.py`). Still: battle vs map lists unconfirmed.
