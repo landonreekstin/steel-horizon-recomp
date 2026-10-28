@@ -969,6 +969,23 @@ static void test_bases(class_table *ct)
     CHECK(w.ships[y].alive && w.ships[y].water == 0 && w.ships[y].list == 0 && w.ships[y].x == 0 && w.ships[y].z == 0,
           "yard dry and in place (water %.2f)", w.ships[y].water);
 
+    /* The harbour boom: a destroyer moored at the enemy yard is safe from a PT boat's
+     * torpedoes while the yard stands, and not once it is gone. */
+    const ship_class *pt = class_find(ct, "AmericanTorpedoBoat");
+    for (int gone = 0; gone < 2 && pt; gone++) {
+        world_init(&w);
+        int yy = shipyard_spawn(&w, yard, 1, 0, 0, 0);
+        int moored = world_spawn(&w, jdd, 1, 0, yard->half_length + 300, PI_F / 2);
+        int boat = world_spawn(&w, pt, 0, 1200, yard->half_length + 300, 0);   /* abeam: her tubes train to the side */
+        w.ships[yy].hold_fire = w.ships[moored].hold_fire = 1;
+        for (int m = 0; m < pt->mount_count; m++)            /* torpedoes only */
+            if (pt->mounts[m].bat != BAT_TORPEDO) w.ships[boat].turrets[m].ammo = 0;
+        if (gone) w.ships[yy].alive = 0;
+        run(&w, 120);
+        CHECK(w.torps > 0 && (gone ? w.torp_hits > 0 : w.torp_hits == 0), "boom %s: %d torpedoes, %d hit",
+              gone ? "gone" : "rigged", w.torps, w.torp_hits);
+    }
+
     /* Repairs alongside: a battered BB moored by the drydock comes back; one far off doesn't. */
     world_init(&w);
     shipyard_spawn(&w, uyard, 0, 0, 0, 0);

@@ -185,6 +185,9 @@ each kill planes (fighters more); Japan won all 4 after the fighter fix.
 - Measured, both sides AI: assault 40–63 min, 2 of 3 decided within 80 min; attack and
   defend split 2–2 over four seeds each (decided in 14–20 min or on time).
 
+- Harbour boom: while a yard stands, enemy torpedoes entering its anchorage (repair
+  radius, half length + 900) are caught; ships alongside are safe from them.
+
 ## Fleet command and carrier attack types (8b) — design
 - **Commands** (`command.c`): every player order is a fixed-size record (kind, player,
   ship mask, args) applied at a tick boundary; a player can only order ships he owns.

@@ -453,6 +453,19 @@ static void projectiles_step(world *w)
                 p->active = 0;
                 continue;
             }
+            /* The harbour boom: an enemy yard's anchorage is netted while the yard stands
+             * (ships alongside her are safe from torpedoes; the yard herself is shore). */
+            int netted = 0;
+            for (int sd = 0; sd < 2 && !netted; sd++) {
+                int y = w->sides[sd].yard;
+                if (sd == (p->side & 1) || y < 0 || !w->ships[y].alive) continue;
+                netted = hypotf(x - w->ships[y].x, z - w->ships[y].z) < repair_radius(&w->ships[y]);
+            }
+            if (netted) {
+                fx(w, FX_SPLASH, x, 0, z);
+                p->active = 0;
+                continue;
+            }
             for (int j = 0; j < w->count; j++) {
                 const ship *s = &w->ships[j];
                 if (j == p->owner || !s->alive || is_submerged(s)) continue;
