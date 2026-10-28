@@ -1,6 +1,7 @@
 /* Steel Horizon RTS prototype: real-time naval battle using the original PSP assets.
  *
- *   shrts [--assets DIR] [--screenshot OUT.ppm --frames N] [--cam SHIP YAW PITCH DIST]
+ *   shrts [--assets DIR] [--screenshot OUT.ppm --frames N] [--record OUT.mp4 --frames N]
+ *         [--cam SHIP YAW PITCH DIST]
  *         [--cam-plane AIRCRAFT YAW PITCH DIST]
  *         [--headless SECONDS [--pace N]] [--scenario m01|fleet|carriers|assault|attack|defend] [--seed N] [--ai-both]
  *
@@ -317,6 +318,140 @@ static void save_ppm(const char *path, int w, int h)
     free(px);
 }
 
+/* Recording: a camera that follows the fighting. Looks at where shots land (recent
+ * hits, splashes and torpedoes weigh more than muzzle flashes), framed to their spread,
+ * circling slowly; every 30 s it closes in on the ship nearest the action for 10 s. */
+static void director(camera *c, const world *w, float t, float dt)
+{
+    double sx = 0, sz = 0, sw = 0, sxx = 0;
+    for (int k = 0; k < MAX_FX; k++) {
+        const fx_event *e = &w->fx[k];
+        if (e->kind == FX_NONE || e->kind == FX_TAKEOFF || e->kind == FX_LANDING || w->tick - e->tick > 80) continue;
+        float wt = e->kind == FX_MUZZLE || e->kind == FX_AIR_GUN ? 1 : e->kind == FX_FLAK ? 0.5f : 3;
+        sx += wt * e->x; sz += wt * e->z; sw += wt; sxx += wt * ((double)e->x * e->x + (double)e->z * e->z);
+    }
+    for (int side = 0; sw < 1 && side < 2; side++) {   /* quiet: follow a fleet (the first with ships left) */
+        for (int i = 0; i < w->count; i++)
+            if (w->ships[i].alive && w->ships[i].side == side) { sx += w->ships[i].x; sz += w->ships[i].z; sw += 1;
+                                     sxx += (double)w->ships[i].x * w->ships[i].x + (double)w->ships[i].z * w->ships[i].z; }
+    }
+    if (sw < 1) return;
+    float mx = (float)(sx / sw), mz = (float)(sz / sw);
+    float spread = sqrtf(fmaxf((float)(sxx / sw) - mx * mx - mz * mz, 0));
+    float want_dist = clampf(spread * 2.0f + 900, 1400, 4500), want_pitch = 0.55f;
+    if (fmodf(t, 30) > 20) {                        /* close-up */
+        int best = -1;
+        float bd = INFINITY;
+        for (int i = 0; i < w->count; i++) {
+            const ship *s = &w->ships[i];
+            float d = hypotf(s->x - mx, s->z - mz);
+            if (s->alive && !s->cls->submerged && d < bd) { bd = d; best = i; }
+        }
+        if (best >= 0) { mx = w->ships[best].x; mz = w->ships[best].z; want_dist = 650; want_pitch = 0.28f; }
+    }
+    float k = 1 - expf(-dt / 1.8f);
+    c->target.x += (mx - c->target.x) * k;
+    c->target.z += (mz - c->target.z) * k;
+    c->target.y = 0;
+    c->dist += (want_dist - c->dist) * k;
+    c->pitch += (want_pitch - c->pitch) * k;
+    c->yaw += 0.035f * dt;
+}
+
+/* Frames go to ffmpeg on a pipe (video only); the sound is mixed offline, frame by
+ * frame, into a WAV, and the two are muxed when the recording ends. */
+typedef struct {
+    FILE *video, *wav;
+    char out[512];
+    int w, h, frames;
+    long samples;
+    unsigned fbo, resolve, color[2], depth;
+} recorder;
+
+#define REC_W 1280
+#define REC_H 720
+#define REC_FPS 30
+
+static void wav_header(FILE *f, long samples)
+{
+    unsigned data = (unsigned)samples * 4, v;
+    fwrite("RIFF", 1, 4, f); v = 36 + data; fwrite(&v, 4, 1, f);
+    fwrite("WAVEfmt ", 1, 8, f);
+    unsigned short fmt[] = {1, 2};
+    v = 16; fwrite(&v, 4, 1, f); fwrite(fmt, 2, 2, f);
+    v = BANK_RATE; fwrite(&v, 4, 1, f); v = BANK_RATE * 4; fwrite(&v, 4, 1, f);
+    unsigned short align[] = {4, 16};
+    fwrite(align, 2, 2, f);
+    fwrite("data", 1, 4, f); fwrite(&data, 4, 1, f);
+}
+
+static int rec_open(recorder *rc, const char *out)
+{
+    snprintf(rc->out, sizeof rc->out, "%s", out);
+    rc->w = REC_W;
+    rc->h = REC_H;
+    glGenFramebuffers(1, &rc->fbo);                 /* 4x MSAA target, resolved for reading */
+    glGenRenderbuffers(2, rc->color);
+    glGenRenderbuffers(1, &rc->depth);
+    glBindRenderbuffer(GL_RENDERBUFFER, rc->color[0]);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_RGBA8, rc->w, rc->h);
+    glBindRenderbuffer(GL_RENDERBUFFER, rc->depth);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_DEPTH24_STENCIL8, rc->w, rc->h);
+    glBindFramebuffer(GL_FRAMEBUFFER, rc->fbo);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rc->color[0]);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rc->depth);
+    int ok = glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    glGenFramebuffers(1, &rc->resolve);
+    glBindRenderbuffer(GL_RENDERBUFFER, rc->color[1]);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, 0, GL_RGBA8, rc->w, rc->h);
+    glBindFramebuffer(GL_FRAMEBUFFER, rc->resolve);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rc->color[1]);
+    ok = ok && glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    if (!ok) { fprintf(stderr, "record: framebuffer incomplete\n"); return -1; }
+    char cmd[1400];
+    snprintf(cmd, sizeof cmd, "ffmpeg -loglevel error -y -f rawvideo -pix_fmt rgb24 -s %dx%d -r %d -i - "
+             "-vf vflip -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p '%s.video.mp4'", rc->w, rc->h, REC_FPS, out);
+    rc->video = popen(cmd, "w");
+    snprintf(cmd, sizeof cmd, "%s.wav", out);
+    rc->wav = fopen(cmd, "wb");
+    if (!rc->video || !rc->wav) { fprintf(stderr, "record: needs ffmpeg on PATH and a writable %s\n", out); return -1; }
+    wav_header(rc->wav, 0);
+    return 0;
+}
+
+static void rec_frame(recorder *rc, audio *snd)
+{
+    static unsigned char px[REC_W * REC_H * 3];
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, rc->fbo);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, rc->resolve);
+    glBlitFramebuffer(0, 0, rc->w, rc->h, 0, 0, rc->w, rc->h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, rc->resolve);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, rc->w, rc->h, GL_RGB, GL_UNSIGNED_BYTE, px);
+    fwrite(px, 1, sizeof px, rc->video);
+    rc->frames++;
+    long want = (long)rc->frames * BANK_RATE / REC_FPS, n = want - rc->samples;   /* 1470 per frame */
+    int16_t pcm[2 * 2048];
+    audio_render(snd, pcm, (int)n);
+    fwrite(pcm, 4, (size_t)n, rc->wav);
+    rc->samples = want;
+}
+
+static void rec_close(recorder *rc)
+{
+    pclose(rc->video);
+    fseek(rc->wav, 0, SEEK_SET);
+    wav_header(rc->wav, rc->samples);
+    fclose(rc->wav);
+    char cmd[3000];
+    snprintf(cmd, sizeof cmd, "ffmpeg -loglevel error -y -i '%s.video.mp4' -i '%s.wav' -c:v copy -c:a aac -b:a 192k "
+             "-shortest '%s' && rm -f '%s.video.mp4' '%s.wav'", rc->out, rc->out, rc->out, rc->out, rc->out);
+    int rcode = system(cmd);
+    printf("record: %d frames (%.0f s) -> %s%s\n", rc->frames, (double)rc->frames / REC_FPS, rc->out,
+           rcode ? " (mux failed; video and wav left beside it)" : "");
+}
+
 static void print_state(const world *w)
 {
     for (int i = 0; i < w->count; i++) {
@@ -573,11 +708,13 @@ int main(int argc, char **argv)
     const char *join_addr = NULL, *player_name = "Admiral";
     float trace = 0, pace = 0;
     int frames = 60;
+    const char *record = NULL;
     float headless = -1, cam_yaw = 0, cam_pitch = 0, cam_dist = 0;
     int cam_ship = -1, cam_plane = -1;
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--assets") && i + 1 < argc) assets = argv[++i];
         else if (!strcmp(argv[i], "--screenshot") && i + 1 < argc) shot = argv[++i];
+        else if (!strcmp(argv[i], "--record") && i + 1 < argc) record = argv[++i];   /* OUT.mp4, --frames at 30 fps */
         else if (!strcmp(argv[i], "--frames") && i + 1 < argc) frames = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--scenario") && i + 1 < argc) { scenario = argv[++i]; scenario_given = 1; }
         else if (!strcmp(argv[i], "--ai-both")) ai_both = 1;
@@ -648,7 +785,7 @@ int main(int argc, char **argv)
     menu_config mc;
     menu_defaults(&mc);
     g.custom = mc.custom;
-    int menu_mode = !scenario_given && headless < 0 && !shot && host_port < 0 && !join_addr;
+    int menu_mode = !scenario_given && headless < 0 && !shot && !record && host_port < 0 && !join_addr;
     snprintf(path, sizeof path, "%s/files", assets);
     if (menu_mode) {
         if (video_init(&win, &ctx)) return 1;
@@ -795,7 +932,12 @@ int main(int argc, char **argv)
 
     char bank_path[600];
     snprintf(bank_path, sizeof bank_path, "%s/sound/banks/game.bnk", path);
-    g.snd = (shot && !sound) || mute ? NULL : audio_open(bank_path);
+    g.snd = record ? audio_open_offline(bank_path) : (shot && !sound) || mute ? NULL : audio_open(bank_path);
+    static recorder rc;
+    if (record) {
+        if (rec_open(&rc, record)) return 1;
+        SDL_GL_SetSwapInterval(0);
+    }
     renderer_set_generated(r, generated);
     renderer_set_view_side(r, g.w.fog && !shot ? g.side : -1);
     for (int i = 0; i < g.w.count; i++)
@@ -832,10 +974,19 @@ int main(int argc, char **argv)
                 order_strike(&g.w, ids[q], t);
             }
     }
+    if (record) {
+        hd.show_controls = 0;                       /* the viewer has no keyboard */
+        hd.show_fleet = 0;
+        g.cam.dist = 3000;
+    }
+    float ended = 0;
     while (running) {
         SDL_Event e;
-        int w, h;
-        SDL_GL_GetDrawableSize(win, &w, &h);
+        int w, h, win_w, win_h;
+        SDL_GL_GetDrawableSize(win, &win_w, &win_h);
+        w = record ? REC_W : win_w;
+        h = record ? REC_H : win_h;
+        if (record) glBindFramebuffer(GL_FRAMEBUFFER, rc.fbo);
         const Uint8 *keys = SDL_GetKeyboardState(NULL);
         while (SDL_PollEvent(&e)) {
             if (e.type == SDL_QUIT) running = 0;
@@ -948,7 +1099,7 @@ int main(int argc, char **argv)
         Uint64 now = SDL_GetPerformanceCounter();
         double dt = (double)(now - last) / (double)freq;
         last = now;
-        if (shot) dt = 1.0 / 30;                     /* fixed steps for repeatable shots */
+        if (shot || record) dt = 1.0 / REC_FPS;      /* fixed steps for repeatable shots */
         if (dt > 0.25) dt = 0.25;
 
         /* Camera: pan along the ground relative to its yaw, speed scales with height. */
@@ -986,6 +1137,7 @@ int main(int argc, char **argv)
             g.cam.pitch = cam_pitch;
             g.cam.dist = cam_dist;
         }
+        if (record) director(&g.cam, &g.w, (float)sim_time, (float)dt);
         {
             vec3 eye;
             camera_viewproj(&g.cam, w, h, &eye);
@@ -1041,6 +1193,15 @@ int main(int argc, char **argv)
             hd.focus = -1;
         }
         if (key) order_key(&g, key, 0, &hd);
+        if (record) {
+            rec_frame(&rc, g.snd);
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, rc.fbo);  /* show what is being recorded */
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+            glBlitFramebuffer(0, 0, w, h, 0, 0, win_w, win_h, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            if (world_winner(&g.w) >= 0) ended += (float)dt;
+            if (rc.frames >= frames || ended > 8) running = 0;   /* a few seconds after the end */
+        }
         if (shot && ++frame >= frames) {
             save_ppm(shot, w, h);
             running = 0;
@@ -1067,6 +1228,7 @@ int main(int argc, char **argv)
                  win_side == 0 ? "  |  VICTORY" : win_side == 1 ? "  |  DEFEAT" : "");
         SDL_SetWindowTitle(win, title);
     }
+    if (record) rec_close(&rc);
     audio_close(g.snd);
     renderer_destroy(r);
     SDL_GL_DeleteContext(ctx);

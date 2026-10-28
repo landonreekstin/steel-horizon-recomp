@@ -49,14 +49,22 @@ static void mix(void *ud, Uint8 *stream, int bytes)
     }
 }
 
-audio *audio_open(const char *bank_path)
+static audio *open_bank(const char *bank_path)
 {
-    if (SDL_InitSubSystem(SDL_INIT_AUDIO)) { fprintf(stderr, "audio: %s (silent)\n", SDL_GetError()); return NULL; }
     audio *a = calloc(1, sizeof *a);
     if (bnk_load(bank_path, &a->bank)) {
         printf("audio: no sound bank at %s, using synthesised effects\n", bank_path);
         synth_bank(&a->bank);
     }
+    a->rng = 12345;
+    a->last_tick = -1;
+    return a;
+}
+
+audio *audio_open(const char *bank_path)
+{
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO)) { fprintf(stderr, "audio: %s (silent)\n", SDL_GetError()); return NULL; }
+    audio *a = open_bank(bank_path);
     SDL_AudioSpec want = {0}, have;
     want.freq = BANK_RATE;
     want.format = AUDIO_S16SYS;
@@ -71,18 +79,29 @@ audio *audio_open(const char *bank_path)
         free(a);
         return NULL;
     }
-    a->rng = 12345;
-    a->last_tick = -1;
     SDL_PauseAudioDevice(a->dev, 0);
     printf("audio: %d sounds\n", a->bank.count);
     return a;
+}
+
+audio *audio_open_offline(const char *bank_path)
+{
+    audio *a = open_bank(bank_path);
+    printf("audio: %d sounds (offline)\n", a->bank.count);
+    return a;
+}
+
+void audio_render(audio *a, int16_t *out, int frames)
+{
+    if (a) mix(a, (Uint8 *)out, frames * 4);
+    else memset(out, 0, (size_t)frames * 4);
 }
 
 void audio_close(audio *a)
 {
     if (!a) return;
     printf("audio: %d sounds played\n", a->played);
-    SDL_CloseAudioDevice(a->dev);
+    if (a->dev) SDL_CloseAudioDevice(a->dev);
     bnk_free(&a->bank);
     free(a);
 }

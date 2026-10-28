@@ -10,6 +10,10 @@
 typedef struct audio audio;
 
 audio *audio_open(const char *bank_path);   /* NULL without a device or bank: silent */
+/* No device: the caller pulls the mix with audio_render (recording to a file). */
+audio *audio_open_offline(const char *bank_path);
+/* Mixes the next `frames` stereo S16 frames at BANK_RATE into out. */
+void audio_render(audio *a, int16_t *out, int frames);
 void audio_close(audio *a);
 void audio_play(audio *a, const char *name, float gain, float pan);
 /* Plays sounds for the world's new events, heard from eye looking along fwd. */

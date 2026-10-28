@@ -46,3 +46,11 @@
 #define glTexImage2D p_glTexImage2D
 #define glTexParameteri p_glTexParameteri
 #define glGenerateMipmap p_glGenerateMipmap
+#define glGenFramebuffers p_glGenFramebuffers
+#define glBindFramebuffer p_glBindFramebuffer
+#define glCheckFramebufferStatus p_glCheckFramebufferStatus
+#define glFramebufferRenderbuffer p_glFramebufferRenderbuffer
+#define glGenRenderbuffers p_glGenRenderbuffers
+#define glBindRenderbuffer p_glBindRenderbuffer
+#define glRenderbufferStorageMultisample p_glRenderbufferStorageMultisample
+#define glBlitFramebuffer p_glBlitFramebuffer

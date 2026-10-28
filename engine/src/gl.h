@@ -52,7 +52,15 @@
     X(void, glActiveTexture, (GLenum)) \
     X(void, glTexImage2D, (GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void *)) \
     X(void, glTexParameteri, (GLenum, GLenum, GLint)) \
-    X(void, glGenerateMipmap, (GLenum))
+    X(void, glGenerateMipmap, (GLenum)) \
+    X(void, glGenFramebuffers, (GLsizei, GLuint *)) \
+    X(void, glBindFramebuffer, (GLenum, GLuint)) \
+    X(GLenum, glCheckFramebufferStatus, (GLenum)) \
+    X(void, glFramebufferRenderbuffer, (GLenum, GLenum, GLenum, GLuint)) \
+    X(void, glGenRenderbuffers, (GLsizei, GLuint *)) \
+    X(void, glBindRenderbuffer, (GLenum, GLuint)) \
+    X(void, glRenderbufferStorageMultisample, (GLenum, GLsizei, GLenum, GLsizei, GLsizei)) \
+    X(void, glBlitFramebuffer, (GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum))
 
 #define DECLARE_GL_FN(ret, name, params) \
     typedef ret(APIENTRY *name##_fn) params; \
