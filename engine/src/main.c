@@ -47,6 +47,7 @@ typedef struct {
     int typing;
     click_mode click;          /* recon / split fire / one turret: the next left click picks the point or ship */
     int pick_ship, pick_mount; /* CLICK_TURRET: whose mount */
+    unsigned pick_types;       /* CLICK_STRIKE: plane types (0: all bombers) */
     int queue_moves;           /* the toolbar's Queue toggle: moves append like Shift */
     char chat_in[80];
     char chat_log[6][96];
@@ -169,6 +170,7 @@ static int setup_scenario(game *g, const char *name)
     } else if (!strcmp(name, "custom")) {
         /* Fleets from the picker: capital ships in the first line, the rest behind. */
         const custom_spec *cs = &g->custom;
+        for (int sd = 0; sd < 2; sd++) g->w.air_mix[sd] = cs->air_mix[sd] < AIR_MIXES ? cs->air_mix[sd] : 0;
         for (int sd = 0; sd < 2; sd++) {
             int n = 0;
             for (int h = 0; h < CUSTOM_HULLS; h++) n += cs->count[sd][h];
@@ -635,12 +637,24 @@ static void start_chat(game *g)
     SDL_StartTextInput();
 }
 
+static unsigned strike_types;   /* toolbar torpedo / dive strike: the plane types for the next B */
+static int strike_target = -1;  /* B on an enemy, or a strike pick: her, not the focus target */
+static void order_key(game *g, SDL_Keycode k, int ctrl, hud *hd);
+
 /* A left click while a toolbar pick is pending. */
 static void pick(game *g, int x, int y, int w, int h)
 {
     float px, pz;
     if (g->click == CLICK_RECON && mouse_to_sea(g, x, y, w, h, &px, &pz)) recon_order(g, px, pz);
-    else if (g->click == CLICK_TURRET) {
+    else if (g->click == CLICK_STRIKE) {
+        int enemy = enemy_at(g, x, y, w, h);
+        if (enemy < 0) return;                      /* keep waiting for a target */
+        strike_types = g->pick_types;
+        strike_target = enemy;
+        order_key(g, SDLK_b, 0, NULL);
+        strike_types = 0;
+        strike_target = -1;
+    } else if (g->click == CLICK_TURRET) {
         int enemy = enemy_at(g, x, y, w, h);
         command c = sel_cmd(g, CMD_TURRET_TARGET);
         memset(c.ships, 0, sizeof c.ships);
@@ -659,7 +673,6 @@ static void pick(game *g, int x, int y, int w, int h)
     g->click = CLICK_NONE;
 }
 
-static unsigned strike_types;   /* toolbar torpedo / dive strike: the plane types for the next B */
 
 /* Orders from a key (or the controls toolbar, which sends the same keys). */
 static void order_key(game *g, SDL_Keycode k, int ctrl, hud *hd)
@@ -703,7 +716,7 @@ static void order_key(game *g, SDL_Keycode k, int ctrl, hud *hd)
             memset(one.ships, 0, sizeof one.ships);
             cmd_set_ship(&one, ids[q]);
             one.kind = k == SDLK_b ? CMD_STRIKE : k == SDLK_g ? CMD_CAP : CMD_RECALL;
-            int t = cv->order_target[BAT_MAIN];
+            int t = strike_target >= 0 ? strike_target : cv->order_target[BAT_MAIN];
             if (k == SDLK_b && (t < 0 || !g->w.ships[t].alive)) {
                 float bd = INFINITY;
                 t = -1;
@@ -759,10 +772,9 @@ static void hud_key(game *g, int key, hud *hd)
     case HUD_SPLIT: g->click = g->click == CLICK_SPLIT ? CLICK_NONE : CLICK_SPLIT; break;
     case HUD_RECON: g->click = g->click == CLICK_RECON ? CLICK_NONE : CLICK_RECON; break;
     case HUD_SPECIAL: special_order(g, -1); break;
-    case HUD_TORP_STRIKE: case HUD_DIVE_STRIKE:
-        strike_types = key == HUD_TORP_STRIKE ? 1u << PLANE_TORPEDO : 1u << PLANE_BOMBER;
-        order_key(g, SDLK_b, 0, hd);
-        strike_types = 0;
+    case SDLK_b: case HUD_TORP_STRIKE: case HUD_DIVE_STRIKE:   /* strike buttons: then click the target */
+        g->pick_types = key == HUD_TORP_STRIKE ? 1u << PLANE_TORPEDO : key == HUD_DIVE_STRIKE ? 1u << PLANE_BOMBER : 0;
+        g->click = g->click == CLICK_STRIKE ? CLICK_NONE : CLICK_STRIKE;
         break;
     case HUD_CHAT: if (g->net) start_chat(g); break;
     case HUD_GROUP_SAVE:                         /* into the first empty group */
@@ -1154,7 +1166,15 @@ int main(int argc, char **argv)
                 else if ((k == SDLK_EQUALS || k == SDLK_PLUS || k == SDLK_KP_PLUS) && !g.net) g.time_scale = g.time_scale < 4 ? g.time_scale * 2 : 4;
                 else if (k == SDLK_MINUS || k == SDLK_KP_MINUS) g.time_scale = g.time_scale > 1 ? g.time_scale / 2 : 1;
                 else if (k == SDLK_F12) save_ppm("shrts_screenshot.ppm", w, h);
-                else order_key(&g, k, ctrl, &hd);
+                else {
+                    if (k == SDLK_b) {                   /* B over an enemy: strike her */
+                        int mx, my;
+                        SDL_GetMouseState(&mx, &my);
+                        strike_target = enemy_at(&g, mx, my, w, h);
+                    }
+                    order_key(&g, k, ctrl, &hd);
+                    strike_target = -1;
+                }
             } else if (e.type == SDL_MOUSEBUTTONDOWN) {
                 if (e.button.button == SDL_BUTTON_LEFT && hud_over(&hd, (float)e.button.x, (float)e.button.y)) {
                     hd.click = 1;
@@ -1299,6 +1319,7 @@ int main(int argc, char **argv)
             SDL_GetMouseState(&mx, &my);
             const char *what = g.click == CLICK_RECON ? "Click the sea for the recon plane"
                              : g.click == CLICK_TURRET ? "Click an enemy for this turret (own ship: back to its battery)"
+                             : g.click == CLICK_STRIKE ? "Click the enemy ship to strike"
                              : "Click an enemy for the secondaries";
             ui_rect((float)mx + 14, (float)my + 14, (float)mx + 22 + ui_text_width(what), (float)my + 18 + 2 * ui_line_height(),
                     0.03f, 0.04f, 0.05f, 0.9f);

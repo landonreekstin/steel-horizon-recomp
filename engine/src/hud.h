@@ -15,7 +15,7 @@ enum {
     HUD_GROUP = 0x7100           /* + n: select control group n (1..9) */
 };
 /* Click modes: the next left click on the world picks the point or ship for an order. */
-typedef enum { CLICK_NONE, CLICK_RECON, CLICK_SPLIT, CLICK_TURRET } click_mode;
+typedef enum { CLICK_NONE, CLICK_RECON, CLICK_SPLIT, CLICK_TURRET, CLICK_STRIKE } click_mode;
 
 typedef struct {
     int show_captain, show_controls, show_fleet;

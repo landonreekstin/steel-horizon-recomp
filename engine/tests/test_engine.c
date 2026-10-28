@@ -1491,6 +1491,22 @@ static void test_specials(const class_table *ct)
 /* The AI fleet commander: in formation on the approach (the battle line abreast, the
  * screen ahead, carriers astern) at the slowest ship's pace, then engaged with the
  * screen's torpedo craft sent at the enemy's biggest ship. */
+static void test_air_mix(const class_table *ct)
+{
+    const ship_class *cv = class_find(ct, "AmericanAircraftCarrier");
+    if (!cv) return;
+    static world w;
+    for (int mix = 0; mix < AIR_MIXES; mix++) {
+        world_init(&w);
+        w.air_mix[0] = (unsigned char)mix;
+        world_spawn(&w, cv, 0, 0, 0, 0);
+        int n[3] = {0};
+        for (int k = 0; k < w.air_count; k++) n[w.air[k].type == PLANE_FIGHTER ? 0 : w.air[k].type == PLANE_BOMBER ? 1 : 2]++;
+        CHECK(n[0] == AIR_MIX[mix][0] && n[1] == AIR_MIX[mix][1] && n[2] == AIR_MIX[mix][2],
+              "%s air group: %d fighters, %d dive, %d torpedo", AIR_MIX_NAME[mix], n[0], n[1], n[2]);
+    }
+}
+
 static void test_commander(const class_table *ct)
 {
     const ship_class *bb = class_find(ct, "AmericanBattleship"), *dd = class_find(ct, "AmericanDestroyer");
@@ -1573,6 +1589,7 @@ int main(int argc, char **argv)
     test_damage(&ct);
     test_command(&ct);
     test_commander(&ct);
+    test_air_mix(&ct);
     test_bases(&ct);
     test_fleet(&ct);
     test_genship(&ct);

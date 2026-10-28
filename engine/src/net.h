@@ -26,6 +26,7 @@ typedef struct {
     uint8_t count[2][CUSTOM_HULLS];
     uint8_t yards;             /* 1: each side gets a shipyard (assault rules) */
     uint8_t islands;           /* 1: an archipelago between the fleets */
+    uint8_t air_mix[2];        /* each side's carrier air groups: air_mix (sim.h) */
 } custom_spec;
 
 typedef struct {

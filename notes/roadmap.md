@@ -111,6 +111,9 @@ helps most at range, costs some of her own fire). Original list:
   accurate, bomb hits deck and magazines) and **torpedo bombers** (low, slow run-in,
   drop torpedoes that flood below the waterline, vulnerable to AA), alongside
   fighters; per-carrier air group mix, squadron selection and direct orders.
+  Done: dive and torpedo bombers; air group mix per side in custom battles (balanced
+  6/4/4, fighters 10/2/2, strike 2/6/6); strike buttons (all / torpedo / dive) then click
+  the target, or B over an enemy.
 - **Bases / shipyards** *(requested)*: a shore base or shipyard on the map that can
   be shelled, bombed and destroyed (its own compartments and defences: coastal guns,
   AA, a harbour boom). Ships inside its radius repair and rearm; it builds new units

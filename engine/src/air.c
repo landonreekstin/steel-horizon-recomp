@@ -31,6 +31,9 @@
 #define INTERCEPT_RADIUS 2500.0f
 #define CAP_RADIUS 600.0f
 
+const int AIR_MIX[AIR_MIXES][3] = {{AIR_GROUP_FIGHTERS, AIR_GROUP_DIVE, AIR_GROUP_TORPEDO}, {10, 2, 2}, {2, 6, 6}};
+const char *const AIR_MIX_NAME[AIR_MIXES] = {"balanced", "fighters", "strike"};
+
 int is_strike_plane(plane_type t)
 {
     return t == PLANE_BOMBER || t == PLANE_TORPEDO;
@@ -49,10 +52,11 @@ static int airborne(const aircraft *a)
 void air_spawn_group(world *w, int carrier)
 {
     const ship *c = &w->ships[carrier];
-    for (int k = 0; k < AIR_GROUP_FIGHTERS + AIR_GROUP_BOMBERS && w->air_count < MAX_AIRCRAFT; k++) {
+    const int *mix = AIR_MIX[w->air_mix[c->side & 1] < AIR_MIXES ? w->air_mix[c->side & 1] : 0];
+    for (int k = 0; k < mix[0] + mix[1] + mix[2] && w->air_count < MAX_AIRCRAFT; k++) {
         aircraft *a = &w->air[w->air_count++];
         memset(a, 0, sizeof *a);
-        a->type = k < AIR_GROUP_FIGHTERS ? PLANE_FIGHTER : k < AIR_GROUP_FIGHTERS + AIR_GROUP_DIVE ? PLANE_BOMBER : PLANE_TORPEDO;
+        a->type = k < mix[0] ? PLANE_FIGHTER : k < mix[0] + mix[1] ? PLANE_BOMBER : PLANE_TORPEDO;
         a->state = AIR_HANGAR;
         a->carrier = carrier;
         a->side = c->side;

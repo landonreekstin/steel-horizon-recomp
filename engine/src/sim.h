@@ -43,6 +43,10 @@ typedef enum { OFF_GUNNERY, OFF_FIRE_CONTROL, OFF_DAMAGE_CONTROL, OFF_ENGINEERIN
 #define AIR_GROUP_DIVE 4       /* dive bombers */
 #define AIR_GROUP_TORPEDO 4    /* torpedo bombers */
 #define AIR_GROUP_BOMBERS (AIR_GROUP_DIVE + AIR_GROUP_TORPEDO)
+/* Carrier air group mixes (14 planes): fighters / dive / torpedo bombers. */
+typedef enum { MIX_BALANCED, MIX_FIGHTERS, MIX_STRIKE, AIR_MIXES } air_mix;
+extern const int AIR_MIX[AIR_MIXES][3];
+extern const char *const AIR_MIX_NAME[AIR_MIXES];
 #define CRUISE_ALT 250.0f
 #define AA_RANGE 1200.0f
 #define REARM_S 40.0f
@@ -257,6 +261,7 @@ typedef struct {
     float shaken[FLEET_PLAYERS];         /* seconds the fleet is rattled after losing her */
     commander cmdr[FLEET_PLAYERS];
     unsigned no_commander;     /* bit p: fleet p's ships fend for themselves (A/B tests) */
+    unsigned char air_mix[2];  /* each side's carrier air groups (air_mix), set before spawning */
     int defender;              /* MODE_DEFEND: the side holding the shipyard */
     float time_limit;          /* MODE_DEFEND: seconds the defender must hold; MODE_ASSAULT:
                                 * after this, the side with more points wins (0: no limit) */

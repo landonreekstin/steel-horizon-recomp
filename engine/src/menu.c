@@ -198,7 +198,7 @@ menu_result menu_run(SDL_Window *win, renderer *r, const class_table *ct, menu_c
         case CUSTOM: {
             title((float)sw, "CUSTOM BATTLE", "choose each side's navy and ships");
             float colw = 380, x0 = cx - colw - 20;
-            ui_rect(x0 - 20, 120, cx + colw + 40, 640, BG[0], BG[1], BG[2], BG[3]);
+            ui_rect(x0 - 20, 120, cx + colw + 40, 690, BG[0], BG[1], BG[2], BG[3]);
             for (int sd = 0; sd < 2; sd++) {
                 float x = sd ? cx + 20 : x0, y = 135;
                 ui_text(x, y + 6, sd ? "Enemy" : "Your fleet", 1, 0.85f, 0.5f, 1);
@@ -227,6 +227,12 @@ menu_result menu_run(SDL_Window *win, renderer *r, const class_table *ct, menu_c
             if (btn(&in, x0, 545, 300, yl, 1)) cfg->custom.yards = !cfg->custom.yards;
             snprintf(yl, sizeof yl, "Islands: %s", cfg->custom.islands ? "yes" : "no");
             if (btn(&in, x0, 590, 300, yl, 1)) cfg->custom.islands = !cfg->custom.islands;
+            for (int sd = 0; sd < 2; sd++) {          /* carrier air groups: fighters / dive / torpedo */
+                const int *m = AIR_MIX[cfg->custom.air_mix[sd] % AIR_MIXES];
+                snprintf(yl, sizeof yl, "%s air: %s %d/%d/%d", sd ? "Enemy" : "Your", AIR_MIX_NAME[cfg->custom.air_mix[sd] % AIR_MIXES],
+                         m[0], m[1], m[2]);
+                if (btn(&in, sd ? cx + 20 : x0, 635, 340, yl, 1)) cfg->custom.air_mix[sd] = (uint8_t)((cfg->custom.air_mix[sd] + 1) % AIR_MIXES);
+            }
             if (btn(&in, cx + 20, 545, 180, "Start", total[0] && total[1] && total[0] + total[1] < 120)) {
                 snprintf(cfg->scenario, sizeof cfg->scenario, "custom");
                 return MENU_PLAY;

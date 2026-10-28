@@ -269,9 +269,9 @@ static int controls_bar(hud *h, const world *w, const unsigned char *selected)
         {SDLK_x, ICON_COUNTER_FLOOD, "Counter-flood", "Flood the opposite side to correct the list", NULL},
         {SDLK_m, ICON_FLOOD_MAGAZINES, "Flood magazines", "Saves the ship from a magazine fire; those guns go silent", NULL}};
     static const control air[] = {
-        {SDLK_b, ICON_STRIKE, "Air strike", "All bombers, on the focus target or the nearest enemy", NULL},
-        {HUD_TORP_STRIKE, ICON_TORPEDO_STRIKE, "Torpedo strike", "Torpedo bombers only: low run-in, flood below the waterline", "Sh+B"},
-        {HUD_DIVE_STRIKE, ICON_DIVE_STRIKE, "Dive strike", "Dive bombers only: accurate, hit decks and magazines", "^B"},
+        {SDLK_b, ICON_STRIKE, "Air strike", "All bombers: then click the ship to strike (key B: the enemy under the cursor)", NULL},
+        {HUD_TORP_STRIKE, ICON_TORPEDO_STRIKE, "Torpedo strike", "Torpedo bombers only, then click the target: low run-in, flood below the waterline", "Sh+B"},
+        {HUD_DIVE_STRIKE, ICON_DIVE_STRIKE, "Dive strike", "Dive bombers only, then click the target: accurate, hit decks and magazines", "^B"},
         {SDLK_g, ICON_PATROL, "Fighter patrol", "Fighters circle the carrier against incoming strikes", NULL},
         {SDLK_r, ICON_RECALL, "Recall", "All aircraft return to land and rearm", NULL}};
     static const control depth[] = {
