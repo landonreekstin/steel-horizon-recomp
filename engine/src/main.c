@@ -455,12 +455,34 @@ static void ship_markers(const game *g, int w, int h)
         for (int b = 0; b < BATTERIES; b++)
             if (s->order_target[b] >= 0 && s->order_target[b] < g->w.count) under_fire[s->order_target[b]] = 1;
     }
+    /* Enemies lost in the fog: where and how she was last seen, greyed, with its age
+     * (two minutes, then forgotten). A new battle (tick back at 0) clears the memory. */
+    static enemy_view last[MAX_SHIPS];
+    static float last_x[MAX_SHIPS], last_z[MAX_SHIPS];
+    static long last_tick[MAX_SHIPS], prev_tick = -1;
+    if (g->w.tick < prev_tick) memset(last_tick, 0, sizeof last_tick);
+    prev_tick = g->w.tick;
     for (int j = 0; j < g->w.count; j++) {
+        const ship *e = &g->w.ships[j];
         enemy_view v;
         float sx, sy;
-        if (!under_fire[j] || g->w.ships[j].side == g->side || !hud_observe(&g->w, g->side, j, &v) ||
-            !project(vp, v3(g->w.ships[j].x, 30, g->w.ships[j].z), w, h, &sx, &sy)) continue;
-        hud_band_bar(&v, sx - 20, sy - 26, 40);
+        if (e->side == g->side) continue;
+        if (hud_observe(&g->w, g->side, j, &v)) {
+            last[j] = v;
+            last_x[j] = e->x;
+            last_z[j] = e->z;
+            last_tick[j] = g->w.tick + 1;
+            if (under_fire[j] && project(vp, v3(e->x, 30, e->z), w, h, &sx, &sy)) hud_band_bar(&v, sx - 20, sy - 26, 40);
+            continue;
+        }
+        float age = (float)(g->w.tick + 1 - last_tick[j]) * SIM_DT;
+        if (!last_tick[j] || !e->alive || age > 120 || !project(vp, v3(last_x[j], 10, last_z[j]), w, h, &sx, &sy)) continue;
+        char t[24];
+        snprintf(t, sizeof t, "? %.0fs", age);
+        ui_rect(sx - 4, sy - 4, sx + 4, sy + 4, 0.6f, 0.6f, 0.65f, 0.5f);
+        hud_band_bar(&last[j], sx - 20, sy - 16, 40);
+        ui_rect(sx - 21, sy - 17, sx + 21, sy - 10, 0.3f, 0.3f, 0.35f, 0.45f);   /* greyed: old news */
+        ui_text(sx + 24, sy - 22, t, 0.65f, 0.68f, 0.72f, 0.9f);
     }
 }
 

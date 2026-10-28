@@ -178,8 +178,9 @@ also baked at 16 px for inline use (`ui_icon_small`); `stat()` in hud.c draws ic
 value in green/amber/red and leaves a hover tooltip. Readout rows, fleet cards and the
 compartment box use them; fire state (`hud_fire_state`) shows over each own ship
 (main.c `ship_markers`), on her card and in the readout; the toolbar lights H or F and
-Z for the selection and draws Aim as the current aim point. Not done: the battery
-target as a class silhouette (the name is shown).
+Z for the selection and draws Aim as the current aim point. Left out: the battery
+target as a profile thumbnail; `ui_ship_profile` colours compartments by damage,
+which would show an enemy's exact state (10b); the name is shown instead.
 
 
 Read the state at a glance: icons wherever text is used now, with a number beside
@@ -205,8 +206,9 @@ them where the value matters.
 Built: `hud_observe` (hud.c) gives a band (>90 / 60 / 30 % edges), a ~10 % estimate when
 an own ship or airborne plane is within 1,500, and the visible-damage flags below;
 shown in the hover tooltip, after the focus target in the readout, and as a bar over
-every enemy own guns are on (main.c `ship_markers`). Not done: last-seen state for
-ships in fog (they simply aren't shown), and the AI doesn't use it.
+every enemy own guns are on (main.c `ship_markers`). Ships lost in fog leave a greyed
+last-seen bar and its age at their last position for two minutes. Not done: the AI
+doesn't use it.
 
 
 Show what the lookouts could see of an enemy, never her exact numbers (those stay for
