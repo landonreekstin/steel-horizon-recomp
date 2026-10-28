@@ -201,7 +201,13 @@ them where the value matters.
 - Keep a tooltip with the full text on hover, so the meaning can still be read.
 - Icons go into `icon_atlas.h` alongside the toolbar ones, in the same style.
 
-### 10b. Enemy damage, as observed *(requested)*
+### 10b. Enemy damage, as observed *(requested)* — first pass done
+Built: `hud_observe` (hud.c) gives a band (>90 / 60 / 30 % edges), a ~10 % estimate when
+an own ship or airborne plane is within 1,500, and the visible-damage flags below;
+shown in the hover tooltip, after the focus target in the readout, and as a bar over
+every enemy own guns are on (main.c `ship_markers`). Not done: last-seen state for
+ships in fog (they simply aren't shown), and the AI doesn't use it.
+
 
 Show what the lookouts could see of an enemy, never her exact numbers (those stay for
 own ships). Today the hover tooltip (`hud.c` `hover_tooltip`) prints her exact

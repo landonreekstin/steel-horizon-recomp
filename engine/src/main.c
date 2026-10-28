@@ -445,6 +445,23 @@ static void ship_markers(const game *g, int w, int h)
         ui_icon_small(icon, x, y, c[0], c[1], c[2], a);
         if (s->evade > 0) ui_icon_small(ICON_EVASIVE, x + 18, y, 0.98f, 0.8f, 0.25f, a);
     }
+    /* Enemies under the player's guns: her condition band, as seen. */
+    unsigned char under_fire[MAX_SHIPS] = {0};
+    for (int i = 0; i < g->w.count; i++) {
+        const ship *s = &g->w.ships[i];
+        if (s->owner != g->player || !s->alive) continue;
+        for (int m = 0; m < s->cls->mount_count; m++)
+            if (s->turrets[m].target >= 0 && s->turrets[m].target < g->w.count) under_fire[s->turrets[m].target] = 1;
+        for (int b = 0; b < BATTERIES; b++)
+            if (s->order_target[b] >= 0 && s->order_target[b] < g->w.count) under_fire[s->order_target[b]] = 1;
+    }
+    for (int j = 0; j < g->w.count; j++) {
+        enemy_view v;
+        float sx, sy;
+        if (!under_fire[j] || g->w.ships[j].side == g->side || !hud_observe(&g->w, g->side, j, &v) ||
+            !project(vp, v3(g->w.ships[j].x, 30, g->w.ships[j].z), w, h, &sx, &sy)) continue;
+        hud_band_bar(&v, sx - 20, sy - 26, 40);
+    }
 }
 
 static void save_ppm(const char *path, int w, int h)

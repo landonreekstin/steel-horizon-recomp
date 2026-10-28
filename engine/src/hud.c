@@ -277,6 +277,82 @@ static void draw_tip(hud *h, int sw)
     h->tip[0] = 0;
 }
 
+/* ---- enemies as observed ------------------------------------------------------------- */
+
+#define OBSERVE_CLOSE 1500.0f   /* an own ship or plane this near reads her condition closely */
+
+int hud_observe(const world *w, int side, int j, enemy_view *v)
+{
+    memset(v, 0, sizeof *v);
+    const ship *t = &w->ships[j];
+    if (!t->alive || !visible_to(w, side, j)) return 0;
+    float f = t->hp / t->cls->max_health;
+    v->band = f > 0.9f ? 0 : f > 0.6f ? 1 : f > 0.3f ? 2 : 3;
+    for (int i = 0; i < w->count && !v->close; i++) {
+        const ship *s = &w->ships[i];
+        v->close = s->alive && s->side == side && hypotf(s->x - t->x, s->z - t->z) < OBSERVE_CLOSE;
+    }
+    for (int k = 0; k < w->air_count && !v->close; k++) {
+        const aircraft *a = &w->air[k];
+        v->close = a->side == side && a->state != AIR_HANGAR && a->state != AIR_DECK && a->state < AIR_FALLING &&
+                   hypotf(a->x - t->x, a->z - t->z) < OBSERVE_CLOSE;
+    }
+    v->est = v->close ? fmaxf(0.1f, roundf(f * 10) / 10) : 0;
+    for (int k = 0; k < t->cls->comp_count; k++)
+        if (t->comp[k].fire > 0) v->seen |= SEEN_FIRE;
+    if (fabsf(t->list) > 4 * PI_F / 180 || t->water > 0.3f * t->cls->reserve_buoyancy) v->seen |= SEEN_LIST;
+    if (module_health(t, MOD_ENGINE, -1) < 0.5f) v->seen |= SEEN_SLOW;
+    if (module_health(t, MOD_STEERING, -1) <= 0) v->seen |= SEEN_STEERING;
+    for (int m = 0; m < t->cls->module_count; m++) {
+        const module_def *d = &t->cls->modules[m];
+        if (d->kind == MOD_TURRET && t->module_hp[m] <= 0) v->guns_out++;
+        if (d->kind == MOD_MAGAZINE && t->comp[d->comp].fire > 0 && !t->comp[d->comp].mag_flooded) v->seen |= SEEN_MAGAZINE;
+    }
+    if (v->guns_out) v->seen |= SEEN_GUNS;
+    return 1;
+}
+
+static const char *BAND_NAME[4] = {"undamaged", "light damage", "heavy damage", "critical"};
+
+static const float *band_colour(int band)
+{
+    static const float C[4][3] = {{0.4f, 0.9f, 0.45f}, {0.75f, 0.9f, 0.3f}, {0.98f, 0.65f, 0.2f}, {0.98f, 0.28f, 0.22f}};
+    return C[band];
+}
+
+void hud_band_bar(const enemy_view *v, float x, float y, float w)
+{
+    const float *c = band_colour(v->band);
+    static const float FILL[4] = {1, 0.75f, 0.45f, 0.18f};   /* a band reads as its middle */
+    float f = v->close ? v->est : FILL[v->band];
+    ui_rect(x - 1, y - 1, x + w + 1, y + 5, 0, 0, 0, 0.6f);
+    ui_rect(x, y, x + w * f, y + 4, c[0], c[1], c[2], 1);
+}
+
+/* Band bar and visible-damage icons in a row; returns the width taken. */
+static float enemy_row(hud *h, const enemy_view *v, float x, float y)
+{
+    float x0 = x;
+    char tip[96], val[16];
+    hud_band_bar(v, x, y + 6, 40);
+    if (v->close) snprintf(tip, sizeof tip, "About %.0f%% condition (seen close up)", 100 * v->est);
+    else snprintf(tip, sizeof tip, "Condition, as seen: %s (closer, or a plane overhead, reads it better)", BAND_NAME[v->band]);
+    if (h->mouse_x >= x && h->mouse_x <= x + 40 && h->mouse_y >= y && h->mouse_y <= y + 16) snprintf(h->tip, sizeof h->tip, "%s", tip);
+    x += 46;
+    if (v->close) { snprintf(val, sizeof val, "~%.0f%%", 100 * v->est); x += ui_text(x, y, val, band_colour(v->band)[0], band_colour(v->band)[1], band_colour(v->band)[2], 1) + 8; }
+    static const float FIRE_C[3] = {1, 0.5f, 0.15f};
+    if (v->seen & SEEN_FIRE) x += stat(h, x, y, ICON_FIRE, NULL, FIRE_C, "On fire") - 8;
+    if (v->seen & SEEN_MAGAZINE) x += stat(h, x, y, ICON_AIM_MAGAZINES, NULL, BAD_C, "Fire by a magazine") - 8;
+    if (v->seen & SEEN_LIST) x += stat(h, x, y, ICON_LIST, NULL, WARN_C, "Listing or low in the water") - 8;
+    if (v->seen & SEEN_SLOW) x += stat(h, x, y, ICON_AIM_ENGINES, NULL, WARN_C, "Slowed: engines hit") - 8;
+    if (v->seen & SEEN_STEERING) x += stat(h, x, y, ICON_AIM_STEERING, NULL, WARN_C, "Steering jammed") - 8;
+    if (v->seen & SEEN_GUNS) {
+        snprintf(val, sizeof val, "%d", v->guns_out);
+        x += stat(h, x, y, ICON_AIM_GUNS, val, WARN_C, "Turrets wrecked") - 8;
+    }
+    return x - x0;
+}
+
 #define ICON_BTN 40.0f   /* icon button: a 32 px icon and its key letter under it */
 
 /* One row of icon buttons; returns the key of the one clicked, and leaves the one under
@@ -627,6 +703,8 @@ static void ship_readout(hud *h, renderer *r, const world *w, command_queue *q, 
         int focus = s->order_target[BAT_MAIN] == target;
         snprintf(tip, sizeof tip, "Main battery %s %s", focus ? "ordered onto" : "engaging", tname);
         x += stat(h, x, row2, focus ? ICON_FOCUS : ICON_FIRE_AT_WILL, tname, GOLD, tip);
+        enemy_view ev;
+        if (hud_observe(w, s->side, target, &ev)) x += enemy_row(h, &ev, x, row2) + 6;
         if (n) {
             snprintf(v, sizeof v, "%.0f%%", 100 * p / (float)n);
             snprintf(tip, sizeof tip, "Chance per shell, from range, both ships' speeds, crew and fire control");
@@ -945,13 +1023,20 @@ static void hover_tooltip(hud *h, const world *w, const unsigned char *selected)
     }
     char who[64], line[128];
     ship_label(w, h->hover, who, sizeof who);
-    const ship *t = &w->ships[h->hover];
-    if (n) snprintf(line, sizeof line, "%s  %.0f%%  |  %.0f%% per shell, %d turrets on %d ships", who,
-                    100 * t->hp / t->cls->max_health, 100 * p / (float)n, n, ships);
-    else snprintf(line, sizeof line, "%s  %.0f%%  |  out of arc or range of the selection", who, 100 * t->hp / t->cls->max_health);
-    float tw = ui_text_width(line), x = h->mouse_x + 16, y = h->mouse_y + 12;
-    ui_rect(x - 4, y - 2, x + tw + 4, y + ui_line_height() + 2, 0.05f, 0.05f, 0.07f, 0.85f);
-    ui_text(x, y, line, 1, 0.85f, 0.6f, 1);
+    int side = -1;
+    for (int i = 0; i < w->count && side < 0; i++)
+        if (w->ships[i].owner == h->player) side = w->ships[i].side;
+    enemy_view v;
+    if (side < 0 || !hud_observe(w, side, h->hover, &v)) return;
+    if (n) snprintf(line, sizeof line, "%.0f%% per shell, %d turrets on %d ships", 100 * p / (float)n, n, ships);
+    else snprintf(line, sizeof line, "out of arc or range of the selection");
+    float lh = ui_line_height(), x = h->mouse_x + 16, y = h->mouse_y + 12;
+    float tw = fmaxf(ui_text_width(who) + 46 + 6 * 24 + 50, ui_text_width(line) + 22);
+    ui_rect(x - 4, y - 2, x + tw + 4, y + 2 * lh + 8, 0.05f, 0.05f, 0.07f, 0.88f);
+    float wx = ui_text(x, y, who, 1, 0.85f, 0.6f, 1) + 10;
+    enemy_row(h, &v, x + wx, y);
+    ui_icon_small(ICON_AIM, x, y + lh + 4, 0.95f, 0.85f, 0.55f, 1);
+    ui_text(x + 20, y + lh + 4, line, 0.95f, 0.85f, 0.55f, 1);
 }
 
 static void mode_banner(const world *w, int sw)

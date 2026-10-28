@@ -75,6 +75,21 @@ int hud_over(const hud *h, float x, float y);
 /* Ship i's fire orders as an icon (hold fire, focus, secondaries ordered, fire at will),
  * its colour and a one-line name. */
 int hud_fire_state(const world *w, int i, const float **col, const char **name);
+
+/* An enemy as side `side` sees her (notes/roadmap.md 10b): a condition band, not her
+ * numbers, and the damage that shows from outside. Close range (or a plane overhead)
+ * gives a rounded estimate instead of the band. */
+enum { SEEN_FIRE = 1, SEEN_LIST = 2, SEEN_SLOW = 4, SEEN_GUNS = 8, SEEN_STEERING = 16, SEEN_MAGAZINE = 32 };
+typedef struct {
+    int band;                  /* 0 undamaged, 1 light, 2 heavy, 3 critical */
+    int close;                 /* est is meaningful */
+    float est;                 /* condition rounded to 10 %, when close */
+    unsigned seen;             /* SEEN_* */
+    int guns_out;              /* turrets visibly wrecked */
+} enemy_view;
+int hud_observe(const world *w, int side, int j, enemy_view *v);   /* 0 if she isn't seen */
+/* The band bar (w x 4 px) in its colour, filled to the band or estimate. */
+void hud_band_bar(const enemy_view *v, float x, float y, float w);
 /* Carries out the most urgent report (Enter key). */
 void hud_act_top(hud *h, command_queue *q, const world *w);
 /* "Battleship 3": the class without its nation, and the ship's number. */
