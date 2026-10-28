@@ -363,7 +363,12 @@ int classes_load_standalone(const char *path, class_table *out)
     memset(out, 0, sizeof *out);
     jnode *doc = json_load_file(path);
     if (!doc) { fprintf(stderr, "standalone data not found at %s\n", path); return -1; }
-    float scale = (float)json_num(doc, "scale", 0.72);
+    /* Game size from real size: the original draws small ships big and big ships small
+     * (PT boat 56 long, Iowa 195), which keeps small targets hittable. Its models fit
+     * length_game = a * length^p; the same factor scales heights, and the beam too for
+     * ships it enlarges (a battleship keeps her real beam). */
+    jnode *size = json_get(doc, "size");
+    float size_a = (float)json_num(size, "a", 10.9), size_p = (float)json_num(size, "p", 0.5155);
     jnode *guns = json_get(doc, "guns"), *classes = json_get(doc, "classes");
     for (jnode *j = classes ? classes->child : NULL; j && out->count < MAX_CLASSES; j = j->next) {
         ship_class *c = &out->classes[out->count++];
@@ -378,8 +383,9 @@ int classes_load_standalone(const char *path, class_table *out)
         c->aa_damage = (float)json_num(j, "aa", 0);
         c->size_mod = 100;
         c->exposure_mod = 70;
-        c->half_length = (float)json_num(j, "length", 100) * scale / 2;
-        c->half_beam = (float)json_num(j, "beam", 10) * scale / 2;
+        float len = (float)json_num(j, "length", 100), scale = size_a * powf(len, size_p) / len;
+        c->half_length = len * scale / 2;
+        c->half_beam = (float)json_num(j, "beam", 10) * fmaxf(scale, 1) / 2;
         for (int k = 0; k < 3; k++) snprintf(c->model[k], sizeof c->model[k], "@gen");
         /* Weapons: the main battery fore and aft, secondaries a side, torpedoes, racks, AA. */
         const char *main_gun = json_str(j, "main");

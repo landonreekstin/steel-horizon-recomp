@@ -1328,7 +1328,7 @@ static void test_standalone(void)
     const ship_class *iowa = class_find(&st, "AmericanBattleship"), *yamato = class_find(&st, "JapaneseBattleship");
     const ship_class *fletcher = class_find(&st, "AmericanDestroyer");
     if (!iowa || !yamato || !fletcher) return;
-    CHECK(fabsf(iowa->half_length - 270 * 0.72f / 2) < 1 && iowa->mount_count >= 5 && fletcher->mount_count >= 7,
+    CHECK(fabsf(iowa->half_length - 10.9f * powf(270, 0.5155f) / 2) < 1 && iowa->mount_count >= 5 && fletcher->mount_count >= 7,
           "Iowa %.0f long, %d mounts; Fletcher %d mounts", 2 * iowa->half_length, iowa->mount_count, fletcher->mount_count);
     int torp = 0;
     for (int m = 0; m < fletcher->mount_count; m++) torp += fletcher->mounts[m].bat == BAT_TORPEDO;

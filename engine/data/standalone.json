@@ -1,6 +1,6 @@
 {
-  "about": "Standalone ship data (no game files). Each class is modelled on a real WWII ship: length and beam in metres, speed in knots and main battery layout are public historical figures; hit points, gun damage, ranges and reload times are this game's own balance values, not the original game's. \"plan\": the ship's layout read off published profile drawings, approximately: positions as fractions of the length from the bow, heights in metres above the deck (turrets bow to stern; tower [at, height, style]; funnels [[at, height]]; aft superstructure [from, to, height]; mainmast [at, height]; carrier island [from, to]). World units = metres x scale.",
-  "scale": 0.72,
+  "about": "Standalone ship data (no game files). Each class is modelled on a real WWII ship: length and beam in metres, speed in knots and main battery layout are public historical figures; hit points, gun damage, ranges and reload times are this game's own balance values, not the original game's. \"plan\": the ship's layout read off published profile drawings, approximately: positions as fractions of the length from the bow, heights in metres above the deck (turrets bow to stern; tower [at, height, style]; funnels [[at, height]]; aft superstructure [from, to, height]; mainmast [at, height]; carrier island [from, to]). World units: the original game's size curve, fitted to its models: length = a x metres^p (a PT boat 2.3x, a battleship 0.72x); heights scale by the same factor, and the beam too where it is over 1.",
+  "size": {"a": 10.9, "p": 0.5155},
   "guns": [
     {"name": "18 Inch", "damage": 108, "range": 3400, "rate": 7.5},
     {"name": "16 Inch", "damage": 96, "range": 3400, "rate": 7},
