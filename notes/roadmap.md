@@ -155,6 +155,19 @@ helps most at range, costs some of her own fire). Original list:
   team and fleet assignment, chat, reconnect.
 
 ### 9. Tutorial *(requested; last, once everything else is in place)*
+Design (2026-10-28, not started in code): lessons as scenarios `tutorial1..8` in
+main.c's setup_scenario (fog off), a `tutorial.c` step machine fed every issued command
+(hook in main.c `issue()`) plus world/HUD state; a panel top right (the Captain's bar
+moves below it via a hud y offset) showing the step text, its icon and key, Skip step /
+Next lesson (reinit the world in place: setup_scenario, renderer_load_class, reset hud).
+Lessons and completion conditions: 1 camera moved, select, move (CMD_MOVE), queued move
+(flag), stop; 2 hover an enemy 1 s (accuracy), focus fire, aim (CMD_AIM), hold/fire at
+will, sink her; 3 pre-damaged cruiser: act on a captain's report, DC priority click, crew
+policy, counter-flood, fires out; 4 PT boats' torpedoes: evade (CMD_EVADE), sink them;
+5 carrier: fighter patrol, strike pick, target sunk; 6 submarine: surface, periscope
+depth, sink a cargo ship, go deep from the escort; 7 flagship, officer, save a group,
+special, recon, win; 8 shipyard: select it, build, take a damaged ship to the drydock,
+airfield strike, beat the raid.
 - An in-game tutorial campaign that teaches the controls toolbar, fleet movement,
   focus and macro targeting, the accuracy readout, damage control and the Captain's
   Command bar, carrier strikes, and the shipyard modes, step by step.
