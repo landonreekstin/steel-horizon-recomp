@@ -8,11 +8,11 @@
  * DIR (default "assets") holds files/ (tools/imp_extract.py) and data/
  * (tools/data2json.py). Controls: LMB select / drag-box, Shift+LMB add,
  * RMB move (Shift queues waypoints), RMB on an enemy: focus fire (Ctrl: secondaries
- * only), H hold fire, F fire at will, S stop, Ctrl+1..9 set group, 1..9 select group,
+ * only), H hold fire, F fire at will, N stop, Ctrl+1..9 set group, 1..9 select group,
  * carriers: B air strike on the focus target (or nearest), G fighter patrol, R recall,
  * damage control: P crew priority (auto/fires/flooding/weapons), X counter-flood,
  * M flood magazines,
- * W/A/D + arrows pan, Q/E rotate, wheel zoom, MMB drag orbit, Space pause,
+ * WASD + arrows pan, Q/E rotate, wheel zoom, MMB drag orbit, Space pause,
  * +/- time compression (x1..x4), F12 screenshot, Esc quit. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -620,7 +620,7 @@ static void order_key(game *g, SDL_Keycode k, int ctrl, hud *hd)
     else if (k == SDLK_F1) hd->show_controls = !hd->show_controls;
     else if (k == SDLK_F2) hd->show_fleet = !hd->show_fleet;
     else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) hud_act_top(hd, &g->q, &g->w);
-    else if (k == SDLK_s && !ctrl) c.kind = CMD_STOP;
+    else if (k == SDLK_n) c.kind = CMD_STOP;          /* N: all stop (S is the camera) */
     else if ((k == SDLK_j || k == SDLK_k) && n) {    /* submarines: J dive, K surface, a level at a time */
         for (int q = 0; q < n; q++) {
             const ship *s = &g->w.ships[ids[q]];
@@ -1126,14 +1126,14 @@ int main(int argc, char **argv)
         if (dt > 0.25) dt = 0.25;
 
         /* Camera: pan along the ground relative to its yaw, speed scales with height. */
-        float pan = g.cam.dist * 0.9f * (float)dt;
+        float pan = g.typing ? 0 : g.cam.dist * 0.9f * (float)dt;   /* not while typing a chat line */
         float fx = -sinf(g.cam.yaw), fz = -cosf(g.cam.yaw), rx = -fz, rz = fx;
         if (keys[SDL_SCANCODE_W] || keys[SDL_SCANCODE_UP]) { g.cam.target.x += fx * pan; g.cam.target.z += fz * pan; }
-        if (keys[SDL_SCANCODE_DOWN]) { g.cam.target.x -= fx * pan; g.cam.target.z -= fz * pan; }
+        if (keys[SDL_SCANCODE_S] || keys[SDL_SCANCODE_DOWN]) { g.cam.target.x -= fx * pan; g.cam.target.z -= fz * pan; }
         if (keys[SDL_SCANCODE_A] || keys[SDL_SCANCODE_LEFT]) { g.cam.target.x -= rx * pan; g.cam.target.z -= rz * pan; }
         if (keys[SDL_SCANCODE_D] || keys[SDL_SCANCODE_RIGHT]) { g.cam.target.x += rx * pan; g.cam.target.z += rz * pan; }
-        if (keys[SDL_SCANCODE_Q]) g.cam.yaw += 1.2f * (float)dt;
-        if (keys[SDL_SCANCODE_E]) g.cam.yaw -= 1.2f * (float)dt;
+        if (keys[SDL_SCANCODE_Q] && !g.typing) g.cam.yaw += 1.2f * (float)dt;
+        if (keys[SDL_SCANCODE_E] && !g.typing) g.cam.yaw -= 1.2f * (float)dt;
 
         if (!g.paused) {
             acc += dt * g.time_scale;

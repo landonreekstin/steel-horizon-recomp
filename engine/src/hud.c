@@ -251,7 +251,7 @@ static int controls_bar(hud *h, const world *w, const unsigned char *selected)
         {SDLK_f, ICON_FIRE_AT_WILL, "Fire at will", "Engage the best target in range"},
         {SDLK_t, ICON_AIM, "Aim", "Cycle the part aimed at: ship, engines, magazines, steering, bridge, guns"},
         {SDLK_z, ICON_EVASIVE, "Evasive", "Zig-zag or comb torpedoes; costs own accuracy"},
-        {SDLK_s, ICON_STOP, "Stop", "All stop, clear queued moves"}};
+        {SDLK_n, ICON_STOP, "Stop", "All stop, clear queued moves"}};
     static const control dc[] = {
         {SDLK_p, ICON_CREW_PRIORITY, "Crew priority", "Damage-control teams: cycle fires / flooding / modules first"},
         {SDLK_x, ICON_COUNTER_FLOOD, "Counter-flood", "Flood the opposite side to correct the list"},

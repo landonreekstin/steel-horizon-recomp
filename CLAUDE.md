@@ -87,7 +87,7 @@ engine/build/shrts --assets assets      # front end: skirmish, custom battle, ho
 engine/build/shrts --standalone         # no game files needed: own ship data, generated models
 engine/build/shrts --assets assets [--scenario m01|fleet|carriers|assault|attack|defend|custom]
 #   LMB select, RMB move (Shift queues), RMB enemy focus fire (Ctrl: secondaries only),
-#   H hold fire, F fire at will, S stop, WASD/QE/wheel camera, Space pause, +/- speed
+#   H hold fire, F fire at will, N stop, WASD/QE/wheel camera, Space pause, +/- speed
 #   carrier selected: B air strike (focus target or nearest), G fighter patrol, R recall
 #   damage control: P crew priority, X counter-flood, M flood magazines
 #   T aim (ship/engines/magazines/steering/bridge/guns), Z evasive, Enter top report,
