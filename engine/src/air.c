@@ -39,9 +39,10 @@ int is_strike_plane(plane_type t)
     return t == PLANE_BOMBER || t == PLANE_TORPEDO;
 }
 
+/* Carriers, and shipyards (their airfield flies a fighter-heavy group). */
 int is_carrier(const ship *s)
 {
-    return s->cls->hull_type == 1;
+    return s->cls->hull_type == 1 || s->cls->hull_type == HULL_SHIPYARD;
 }
 
 static int airborne(const aircraft *a)
@@ -52,7 +53,8 @@ static int airborne(const aircraft *a)
 void air_spawn_group(world *w, int carrier)
 {
     const ship *c = &w->ships[carrier];
-    const int *mix = AIR_MIX[w->air_mix[c->side & 1] < AIR_MIXES ? w->air_mix[c->side & 1] : 0];
+    const int *mix = AIR_MIX[c->cls->hull_type == HULL_SHIPYARD ? MIX_FIGHTERS
+                             : w->air_mix[c->side & 1] < AIR_MIXES ? w->air_mix[c->side & 1] : 0];
     for (int k = 0; k < mix[0] + mix[1] + mix[2] && w->air_count < MAX_AIRCRAFT; k++) {
         aircraft *a = &w->air[w->air_count++];
         memset(a, 0, sizeof *a);

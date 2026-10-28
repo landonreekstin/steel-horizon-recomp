@@ -986,6 +986,20 @@ static void test_bases(class_table *ct)
               gone ? "gone" : "rigged", w.torps, w.torp_hits);
     }
 
+    /* The airfield: a fighter-heavy group, and an AI yard strikes a ship that comes close. */
+    world_init(&w);
+    int ay = shipyard_spawn(&w, yard, 1, 0, 0, 0);
+    w.ships[ay].ai = 1;
+    w.ships[ay].hold_fire = 1;
+    int yf = 0, yb = 0;
+    for (int k = 0; k < w.air_count; k++) { yf += w.air[k].type == PLANE_FIGHTER; yb += is_strike_plane(w.air[k].type); }
+    CHECK(is_carrier(&w.ships[ay]) && yf == AIR_MIX[MIX_FIGHTERS][0] && yb == AIR_MIX[MIX_FIGHTERS][1] + AIR_MIX[MIX_FIGHTERS][2],
+          "yard airfield: %d fighters, %d bombers", yf, yb);
+    world_spawn(&w, dd, 0, 0, 5000, PI_F);
+    w.ships[1].hold_fire = 1;
+    run(&w, 120);
+    CHECK(w.bombs + w.air_torps > 0, "the yard's bombers struck the destroyer (%d bombs, %d torpedoes)", w.bombs, w.air_torps);
+
     /* Repairs alongside: a battered BB moored by the drydock comes back; one far off doesn't. */
     world_init(&w);
     shipyard_spawn(&w, uyard, 0, 0, 0, 0);

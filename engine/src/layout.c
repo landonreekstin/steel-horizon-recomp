@@ -152,6 +152,8 @@ static void build_damage_layout(ship_class *c)
         add_module(c, MOD_RADAR, 0.05f * L, -1);
         add_module(c, MOD_AA, 0.6f * L, -1);
         add_module(c, MOD_AA, -0.7f * L, -1);
+        add_module(c, MOD_FLIGHT_DECK, 0.45f * L, -1);   /* the airfield's runway */
+        add_module(c, MOD_HANGAR_LIFT, 0.45f * L, -1);   /* its hangars */
         c->belt = 2.6f;                                   /* concrete and earth */
         c->deck = 2.0f;
         c->reserve_buoyancy = 1;

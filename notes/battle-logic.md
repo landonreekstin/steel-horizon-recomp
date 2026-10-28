@@ -185,6 +185,11 @@ each kill planes (fighters more); Japan won all 4 after the fighter fix.
 - Measured, both sides AI: assault 40–63 min, 2 of 3 decided within 80 min; attack and
   defend split 2–2 over four seeds each (decided in 14–20 min or on time).
 
+- Airfield: every yard flies a fighter-heavy group (10 fighters, 2 dive, 2 torpedo
+  bombers) from a runway (flight-deck module) with hangars (lift module); it counts as
+  a carrier for orders. AI yards put fighters up when enemy planes come within 6,000 and
+  strike the nearest ship within 7,200 once two bombers are ready. AI vs AI, 6 seeds,
+  60 min: defend went from the attacker 6/6 to 3/3; attack 3/3; assault 3/2 + a draw.
 - Harbour boom: while a yard stands, enemy torpedoes entering its anchorage (repair
   radius, half length + 900) are caught; ships alongside are safe from them.
 

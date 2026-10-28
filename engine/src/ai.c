@@ -195,6 +195,27 @@ static void ai_depth(world *w, int i)
     if (want != s->depth_goal) order_depth(w, &i, 1, want);
 }
 
+/* An AI yard's airfield: fighters up when enemy planes come near, a strike on the
+ * nearest enemy ship in reach when its bombers are ready. */
+static void ai_airfield(world *w, int i)
+{
+    const ship *s = &w->ships[i];
+    for (int k = 0; k < w->air_count; k++) {
+        const aircraft *a = &w->air[k];
+        if (a->side != s->side && (a->state == AIR_OUT || a->state == AIR_ATTACK) &&
+            hypotf(a->x - s->x, a->z - s->z) < 6000) { order_cap(w, i); break; }
+    }
+    int best = -1;
+    float bd = STRIKE_RANGE * 0.6f;                 /* close in: the yard's fighters are few to escort */
+    for (int j = 0; j < w->count; j++) {
+        const ship *t = &w->ships[j];
+        if (!t->alive || t->side == s->side || is_shore(t) || is_submerged(t) || !visible_to(w, s->side, j)) continue;
+        float d = hypotf(t->x - s->x, t->z - s->z);
+        if (d < bd) { bd = d; best = j; }
+    }
+    if (best >= 0 && strike_ready(w, i) >= 2) order_strike(w, i, best);
+}
+
 void ai_step(world *w)
 {
     ai_build(w);
@@ -204,6 +225,7 @@ void ai_step(world *w)
     ai_commander(w);
     for (int i = 0; i < w->count; i++) {
         ship *s = &w->ships[i];
+        if (s->ai && s->alive && is_shore(s) && is_carrier(s)) ai_airfield(w, i);
         if (!s->ai || !s->alive || is_shore(s)) continue;
         if (s->cls->submerged) ai_depth(w, i);
         float comb;

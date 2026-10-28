@@ -119,6 +119,8 @@ helps most at range, costs some of her own fire). Original list:
   AA, a harbour boom). Ships inside its radius repair and rearm; it builds new units
   mid-battle from a budget (production queue, build times per class), and launches
   its own aircraft if it has an airfield.
+  Done: coastal batteries, AA, drydock, slipway, harbour boom (torpedoes netted in the
+  anchorage), airfield (fighter-heavy group; AI flies it).
 - **Game modes** *(requested)*:
   - *Shipyard assault*: each side has a shipyard; first to destroy the other's wins.
     Shipyards are where you build reinforcements and repair, so losing ships early
