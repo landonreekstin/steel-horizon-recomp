@@ -182,7 +182,7 @@ menu_result menu_run(SDL_Window *win, renderer *r, const class_table *ct, menu_c
             if (btn(&in, cx - bw / 2, 395, bw, "Join an online game", 1)) screen = JOIN;
             if (btn(&in, cx - bw / 2, 440, bw, cfg->generated ? "Ship models: generated" : "Ship models: original", 1))
                 cfg->generated = !cfg->generated;
-            if (btn(&in, cx - bw / 2, 470, bw, "Quit", 1)) return MENU_QUIT;
+            if (btn(&in, cx - bw / 2, 485, bw, "Quit", 1)) return MENU_QUIT;
             break;
         }
         case TUTORIAL: {
