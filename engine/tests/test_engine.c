@@ -1330,6 +1330,17 @@ static void test_standalone(void)
     if (!iowa || !yamato || !fletcher) return;
     CHECK(fabsf(iowa->half_length - 10.9f * powf(270, 0.5155f) / 2) < 1 && iowa->mount_count >= 5 && fletcher->mount_count >= 7,
           "Iowa %.0f long, %d mounts; Fletcher %d mounts", 2 * iowa->half_length, iowa->mount_count, fletcher->mount_count);
+    /* Damage layout from the plan: engine rooms under the funnels, bridge in the tower. */
+    for (int m = 0; m < iowa->module_count; m++) {
+        const module_def *d = &iowa->modules[m];
+        float lo = iowa->comp_z[d->comp], hi = iowa->comp_z[d->comp + 1];
+        if (d->kind == MOD_BRIDGE) CHECK(iowa->plan.tower_z >= lo && iowa->plan.tower_z <= hi, "Iowa's bridge is in her tower");
+        if (d->kind == MOD_ENGINE) {
+            int under = 0;
+            for (int f = 0; f < iowa->plan.funnels; f++) under |= iowa->plan.funnel_z[f] >= lo && iowa->plan.funnel_z[f] <= hi;
+            CHECK(under, "Iowa's engine room (compartment %d) is under a funnel", d->comp);
+        }
+    }
     int torp = 0;
     for (int m = 0; m < fletcher->mount_count; m++) torp += fletcher->mounts[m].bat == BAT_TORPEDO;
     CHECK(torp == 2 && iowa->comp_count == 10 && count_modules(iowa, MOD_MAGAZINE) >= 2, "Fletcher tubes %d, Iowa layout", torp);

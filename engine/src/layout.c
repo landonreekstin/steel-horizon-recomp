@@ -175,13 +175,24 @@ static void build_damage_layout(ship_class *c)
             if (!has_mag[k]) { has_mag[k] = 1; add_module(c, MOD_MAGAZINE, c->mounts[m].pos[2], -1); }
         }
     }
-    /* Machinery amidships, steering gear aft, bridge and radar forward of amidships. */
-    add_module(c, MOD_ENGINE, -0.12f * L, -1);
-    add_module(c, MOD_ENGINE, 0.08f * L, -1);
+    /* Machinery amidships, steering gear aft, bridge and radar forward of amidships;
+     * a standalone class's plan puts the boiler and engine rooms under her first and
+     * last funnels and the bridge and radar in her tower (a carrier's in her island). */
+    const ship_plan *pl = &c->plan;
+    float eng0 = -0.12f * L, eng1 = 0.08f * L, bridge = 0.22f * L;
+    if (pl->has && pl->funnels > 0) {
+        /* One funnel: the boiler room under it, the engine room abaft (separate compartments). */
+        eng1 = pl->funnels > 1 ? pl->funnel_z[0] : pl->funnel_z[0] + 0.06f * L;
+        eng0 = pl->funnels > 1 ? pl->funnel_z[pl->funnels - 1] : pl->funnel_z[0] - 0.14f * L;
+    }
+    if (pl->has && pl->island_z1 > pl->island_z0) bridge = (pl->island_z0 + pl->island_z1) / 2;
+    else if (pl->has && pl->tower_h > 0) bridge = pl->tower_z;
+    add_module(c, MOD_ENGINE, eng0, -1);
+    add_module(c, MOD_ENGINE, eng1, -1);
     add_module(c, MOD_STEERING, -0.92f * L, -1);
     if (!c->submerged) {
-        add_module(c, MOD_BRIDGE, 0.22f * L, -1);
-        add_module(c, MOD_RADAR, 0.22f * L, -1);
+        add_module(c, MOD_BRIDGE, bridge, -1);
+        add_module(c, MOD_RADAR, pl->has && pl->mast_h > 0 && pl->tower_h <= 0 ? pl->mast_z : bridge, -1);
     }
     if (c->aa_damage > 0) {
         add_module(c, MOD_AA, 0.3f * L, -1);
