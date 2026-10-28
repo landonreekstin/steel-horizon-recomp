@@ -98,7 +98,8 @@ engine/build/shrts --assets assets --host 47800 --players 3 --teams 0,1,0 --scen
 engine/build/shrts --assets assets --join HOSTADDR:47800 --name Friend
 python3 -I tests/test_multiplayer.py     # lockstep check: host + 2 clients, same checksum
 engine/build/shrts --assets assets --scenario fleet --ai-both --headless 900   # balance run
-# record a battle to video with sound (auto camera; needs ffmpeg, e.g. `nix shell nixpkgs#ffmpeg-headless -c ...`)
+# record a battle to video with sound (auto camera; needs ffmpeg, e.g. `nix shell nixpkgs#ffmpeg-headless -c ...`;
+# with no display, prefix SDL_VIDEODRIVER=offscreen)
 engine/build/shrts --assets assets --scenario fleet --ai-both --no-fog --record out.mp4 --frames 32400
 ```
 
