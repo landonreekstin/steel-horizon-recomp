@@ -112,6 +112,15 @@ engine/build/shrts --assets assets --scenario fleet --ai-both --headless 900   #
 engine/build/shrts --assets assets --scenario fleet --ai-both --no-fog --record out.mp4 --frames 32400
 ```
 
+## Packaging
+
+Public repo `github.com/landonreekstin/steel-horizon-recomp` (`origin`); packaged in
+nixos-config as `pkgs/steel-horizon` + `customConfig.programs.steel-horizon` (enabled on
+blaney-pc). Its launcher fetches the ISO from the NAS drop
+(`/mnt/nas/public/steel-horizon/steel-horizon.iso`) and builds the assets with
+`tools/{imp_extract,data2json,at3wav}.py`, so keep those working from the package layout.
+Push here, then bump the pin (docs/companion-repos.md in nixos-config).
+
 ## Game-dev skills
 
 `.claude/skills/` holds 14 engine-agnostic discipline skills vendored from
