@@ -228,3 +228,81 @@ condition %: replace that.
   percent); a ship in fog shows her last-seen state, greyed, with its age.
 - Same rules for the AI and online play: computed from what that side has spotted (the
   vision system), so the readout doesn't leak hidden information.
+
+### 11. Visual fidelity: assets and effects *(requested)*
+Make ships, torpedoes, gunfire, impacts, splashes and fires look much more realistic
+and detailed. Today every effect is drawn as GL lines (render.c: fires ~l.1135, tracers
+and torpedo wakes ~l.1223, the fx ring after it), and ships use the original's PSP-era
+models and textures as they are.
+- **Particle system first**: GPU-instanced, camera-facing billboards with soft
+  particles (fade against the depth buffer), additive vs alpha blending, texture atlases
+  for flipbook smoke, flame and spray, lit by the sun so smoke has a shaded side.
+  Render only: driven off the sim's fx ring and ship state, never fed back, so the sim
+  stays deterministic and lockstep-safe.
+- **Ships**: higher-detail look on the original models: normal/roughness maps, better
+  lighting (PBR-ish shading, shadows, ambient occlusion), weathering and rust streaks,
+  a waterline with foam where the hull meets the water, bow wave and a stern wake that
+  scale with speed, funnel smoke, visible hull damage (scorch decals, holes, wrecked
+  superstructure) that follows the damage model, sinking with spray, air bubbles and
+  an oil slick. Standalone generated models get more detail (railings, boats, AA
+  mounts, deck planking texture).
+- **Gun shots**: muzzle flash and a blast ring of smoke and pressure ripple on the
+  water at the turret, recoil on the barrels, a smoke cloud that lingers and drifts
+  downwind, tracers with a glowing head for secondaries and AA.
+- **Shells and torpedoes**: torpedo model running just under the surface, a bubble
+  trail and wake that persists and spreads, a launch splash from the tube; bombs
+  modelled while falling.
+- **Splashes**: tall white columns that rise, hang and collapse into spray and foam
+  rings, sized by calibre; near-miss columns beside the hull; dye-coloured splashes
+  per ship (as the navies did); depth charges throw a domed upheaval and a slow column.
+- **Impacts**: penetrating hits vs ricochets/bounces read differently (flash and sparks
+  vs a deflected streak), debris thrown out, a puff of smoke and a scorch decal left
+  behind; magazine detonation as a huge fireball, mushroom column and raining debris.
+- **Fires**: volumetric-looking flames that flicker per compartment, thick black smoke
+  columns that rise and bend with the wind, glow lighting the hull and water at night,
+  steam from flooded compartments, fires going out leaving smoke.
+- **Ocean and sky**: foam on wave crests, reflections and refraction, a skybox with
+  clouds and time-of-day, distance haze/fog.
+- Keep a quality setting (low / medium / high) and the `--standalone` path working;
+  check frame time with the performance-optimization skill before and after.
+
+### 12. UI art: War Thunder-style toolboxes *(requested)*
+Make the toolboxes and the whole HUD much more detailed and stylised, like War Thunder's
+panels, instead of flat rectangles with text and baked line icons.
+- **Panel style**: dark translucent panels with a subtle gradient and blur behind,
+  thin bevelled/metallic borders, header strips with a title and collapse button,
+  consistent corner radii and spacing; one style sheet in hud.c for every panel
+  (controls toolbar F1, Captain's Command bar, fleet bar F2, cross-section, readout,
+  minimap, menus, tutorial panel).
+- **Icons**: redraw the 27 icons as detailed, shaded ones (higher resolution, filled
+  silhouettes with highlights) rather than 1-colour line art; a key-letter badge in
+  the corner of each button; pressed / hover / active / cooldown states (a radial
+  sweep for reload, strike readiness, special cooldowns).
+- **Ship cards and thumbnails**: rendered side-profile thumbnails with damage tinting,
+  nation flag, class and name plates, health/crew/ammo bars with segment ticks.
+- **Readouts**: War Thunder-style module damage diagram (the cross-section drawn as a
+  shaded ship schematic with module icons that turn yellow/red/black), crew icons per
+  station, ammo per mount, reload bars per turret.
+- **Typography**: a proper UI font (condensed sans, several sizes, outline/shadow for
+  legibility over the ocean) alongside the monospace one; numbers right-aligned.
+- **Feedback**: hit markers and a kill/damage feed ("penetration", "fire started",
+  "ammo rack"), animated alerts on the Captain's bar, sounds on clicks.
+- Scales with resolution (the game-ui-ux skill: anchors, UI scale setting).
+
+### 13. Settings menu *(requested)*
+A Settings screen reachable from the main menu and the in-battle pause/quit menu (Esc).
+None exists today: key bindings are hard-coded in main.c's event loop and the
+music/effects mix in audio.c is fixed.
+- **Audio**: master, music, effects, voices (crew lines) and UI volume sliders; mute
+  when the window loses focus; the music ducking amount; output device. Applied live.
+- **Controls**: every action listed with its key(s) and mouse button, rebindable
+  (press a key to bind, conflict warning, reset to defaults), shown the same in the
+  controls toolbar tooltips and the tutorial text; camera pan/rotate/zoom speed, edge
+  scrolling on/off, invert zoom; mouse sensitivity. Bindings go through one action
+  table instead of raw `SDL_SCANCODE_*` checks (the input-systems skill).
+- **Video** (pairs with section 11): resolution, fullscreen/windowed, vsync, effects
+  quality, UI scale (section 12).
+- **Gameplay**: default game speed, pause on Captain's report, tooltips delay.
+- Saved to `~/.config/shrts/settings.ini` (atomic write, versioned; the save-systems
+  skill); `--standalone` and the packaged build read it too. Not part of the lockstep
+  state, so players can differ.
